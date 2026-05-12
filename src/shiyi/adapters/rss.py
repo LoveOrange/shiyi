@@ -2,37 +2,41 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
-from typing import cast
+from collections.abc import AsyncIterator
 
-import feedparser  # type: ignore[import-untyped]
-import httpx
-
-from shiyi.domain.models import CaptureEvent, HtmlPayload, Provenance, SourceIdentity, TextPayload
+from shiyi.domain.models import (
+    CaptureEvent,
+    CaptureWindow,
+    HtmlPayload,
+    Provenance,
+    SourceIdentity,
+    TextPayload,
+)
+from shiyi.fetchers.http import HttpRssFetcher, HttpWebFetcher
+from shiyi.ports.fetcher import RssFetcher
 
 
 class RssFeedAdapter:
     """Reads RSS/Atom feeds and emits capture events for feed entries."""
 
-    version = "0.1.0"
+    version = "0.2.0"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         name: str,
         feed_url: str,
         source_kind: str,
-        client: httpx.AsyncClient | None = None,
+        rss_fetcher: RssFetcher | None = None,
         limit: int | None = None,
+        window: CaptureWindow | None = None,
     ) -> None:
         """Create an RSS adapter for one feed URL."""
         self._name = name
         self._feed_url = feed_url
         self._source_kind = source_kind
-        self._client = client
-        self._limit = limit
+        self._rss_fetcher = rss_fetcher or HttpRssFetcher(HttpWebFetcher())
+        self._window = window or CaptureWindow(max_items=limit)
 
     @property
     def name(self) -> str:
@@ -41,92 +45,48 @@ class RssFeedAdapter:
 
     async def discover(self) -> AsyncIterator[CaptureEvent]:
         """Fetch and parse the feed into capture events."""
-        fetched_at = datetime.now(UTC)
-        feed_xml = await self._fetch_feed()
-        parsed = feedparser.parse(feed_xml)
-        entries = parsed.entries[: self._limit] if self._limit is not None else parsed.entries
-        for raw_entry in entries:
-            entry = cast(Mapping[str, object], raw_entry)
-            entry_id = _entry_id(entry)
-            link = str(entry.get("link", "")) or None
-            title = str(entry.get("title", "")).strip()
-            html = _entry_html(entry)
+        feed = await self._rss_fetcher.fetch(self._feed_url)
+        emitted = 0
+        for entry in feed.entries:
+            occurred_at = entry.published_at or feed.fetched_at
+            if not self._window.includes(occurred_at):
+                continue
             payload = (
-                HtmlPayload(html=html, url=link) if html else TextPayload(text=title or entry_id)
+                HtmlPayload(html=entry.html, url=entry.link)
+                if entry.html
+                else TextPayload(text=entry.title or entry.entry_id)
             )
             yield CaptureEvent(
-                id=f"{self._source_kind}:{entry_id}",
+                id=f"{self._source_kind}:{entry.entry_id}",
                 source=SourceIdentity(kind=self._source_kind, uri=self._feed_url),
-                occurred_at=_entry_datetime(entry) or fetched_at,
+                occurred_at=occurred_at,
                 payload=payload,
                 provenance=Provenance(
                     adapter_name=self.name,
                     adapter_version=self.version,
-                    fetched_at=fetched_at,
-                    source_item_id=entry_id,
+                    fetched_at=feed.fetched_at,
+                    source_item_id=entry.entry_id,
                 ),
-                idempotency_key=f"{self._source_kind}:{entry_id}",
-                metadata={"title": title, "link": link},
+                idempotency_key=f"{self._source_kind}:{entry.entry_id}",
+                metadata={"title": entry.title, "link": entry.link},
             )
-
-    async def _fetch_feed(self) -> str:
-        if self._client is not None:
-            response = await self._client.get(self._feed_url)
-            response.raise_for_status()
-            return response.text
-
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(self._feed_url)
-            response.raise_for_status()
-            return response.text
+            emitted += 1
+            if self._window.max_items is not None and emitted >= self._window.max_items:
+                break
 
 
 def openai_news_adapter(
-    client: httpx.AsyncClient | None = None,
     *,
     limit: int | None = None,
+    window: CaptureWindow | None = None,
+    rss_fetcher: RssFetcher | None = None,
 ) -> RssFeedAdapter:
     """Create the default OpenAI news RSS adapter."""
     return RssFeedAdapter(
         name="openai-news-rss",
         feed_url="https://openai.com/news/rss.xml",
         source_kind="openai-news",
-        client=client,
         limit=limit,
+        window=window,
+        rss_fetcher=rss_fetcher,
     )
-
-
-def _entry_id(entry: Mapping[str, object]) -> str:
-    for key in ("id", "guid", "link"):
-        value = str(entry.get(key, "")).strip()
-        if value:
-            return value
-    title = str(entry.get("title", "")).strip()
-    if title:
-        return title
-    msg = "RSS entry has no stable id, guid, link, or title"
-    raise ValueError(msg)
-
-
-def _entry_html(entry: Mapping[str, object]) -> str:
-    content = entry.get("content")
-    if isinstance(content, list) and content:
-        value = content[0].get("value", "")
-        if isinstance(value, str) and value.strip():
-            return value
-
-    summary = entry.get("summary")
-    if isinstance(summary, str) and summary.strip():
-        return summary
-    return ""
-
-
-def _entry_datetime(entry: Mapping[str, object]) -> datetime | None:
-    for key in ("published", "updated"):
-        value = entry.get(key)
-        if isinstance(value, str) and value.strip():
-            parsed = parsedate_to_datetime(value)
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=UTC)
-            return parsed.astimezone(UTC)
-    return None

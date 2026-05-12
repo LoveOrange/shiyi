@@ -60,6 +60,22 @@ class BinaryPayload(StrictModel):
 CapturePayload = Annotated[TextPayload | HtmlPayload | BinaryPayload, Field(discriminator="type")]
 
 
+class CaptureWindow(StrictModel):
+    """Optional time and count window for source discovery."""
+
+    since: datetime | None = None
+    until: datetime | None = None
+    max_items: int | None = Field(default=None, gt=0)
+
+    def includes(self, occurred_at: datetime | None) -> bool:
+        """Return whether an item date is inside the half-open capture window."""
+        if occurred_at is None:
+            return self.since is None and self.until is None
+        if (since := self.since) and occurred_at < since:
+            return False
+        return not ((until := self.until) and occurred_at >= until)
+
+
 class CaptureEvent(StrictModel):
     """Normalized boundary object emitted by adapters and consumed by core."""
 

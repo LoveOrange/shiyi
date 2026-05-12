@@ -9,6 +9,7 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -16,6 +17,7 @@ from shiyi.adapters.anthropic import anthropic_news_adapter
 from shiyi.adapters.rss import openai_news_adapter
 from shiyi.domain.models import (
     CaptureEvent,
+    CaptureWindow,
     ClassifyTask,
     EnrichmentResult,
     EnrichmentTask,
@@ -28,6 +30,7 @@ from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteMetadataStore
 
 SourceName = Literal["openai", "anthropic"]
+DATE_ONLY_LENGTH = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +90,14 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if args.command == "capture":
         summary = asyncio.run(
-            run_capture(source=args.source, workspace=args.workspace, limit=args.limit)
+            run_capture(
+                source=args.source,
+                workspace=args.workspace,
+                limit=args.limit,
+                max_items=args.max_items,
+                since=args.since,
+                until=args.until,
+            )
         )
         sys.stdout.write(_format_summary(summary))
     elif args.command == "list":
@@ -101,7 +111,22 @@ def _build_parser() -> argparse.ArgumentParser:
     capture = subcommands.add_parser("capture", help="Run a local capture once")
     capture.add_argument("--source", choices=["openai", "anthropic"], required=True)
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
-    capture.add_argument("--limit", type=int, default=5)
+    capture.add_argument("--limit", type=int, default=None, help="Deprecated debug item cap")
+    capture.add_argument(
+        "--max-items", type=int, default=None, help="Maximum items after date filtering"
+    )
+    capture.add_argument(
+        "--since",
+        type=_parse_datetime_arg,
+        default=None,
+        help="Inclusive UTC date/time, e.g. 2026-05-12",
+    )
+    capture.add_argument(
+        "--until",
+        type=_parse_datetime_arg,
+        default=None,
+        help="Exclusive UTC date/time, e.g. 2026-05-13",
+    )
 
     list_events = subcommands.add_parser("list", help="List captured event metadata")
     list_events.add_argument("--workspace", type=Path, default=Path(".shiyi"))
@@ -109,14 +134,24 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_capture(*, source: SourceName, workspace: Path, limit: int) -> CaptureSummary:
+async def run_capture(  # noqa: PLR0913
+    *,
+    source: SourceName,
+    workspace: Path,
+    limit: int | None,
+    max_items: int | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> CaptureSummary:
     """Run one local capture for a source and return a summary."""
     workspace.mkdir(parents=True, exist_ok=True)
     metadata_path = workspace / "metadata.sqlite"
+    item_cap = max_items if max_items is not None else limit
+    window = CaptureWindow(since=since, until=until, max_items=item_cap or 5)
     adapter = (
-        openai_news_adapter(limit=limit)
+        openai_news_adapter(window=window)
         if source == "openai"
-        else anthropic_news_adapter(limit=limit)
+        else anthropic_news_adapter(window=window)
     )
     pipeline = CapturePipeline(
         adapter=adapter,
@@ -212,6 +247,18 @@ def _jsonable(value: object) -> object:
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(cast(Any, value))
     return value
+
+
+def _parse_datetime_arg(value: str) -> datetime:
+    normalized = value.strip()
+    if len(normalized) == DATE_ONLY_LENGTH:
+        normalized = f"{normalized}T00:00:00+00:00"
+    else:
+        normalized = normalized.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _infer_tags(title: str) -> list[str]:

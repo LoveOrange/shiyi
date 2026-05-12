@@ -4,7 +4,8 @@ Shiyi is an open-source information capture pipeline for turning messy external 
 
 The project is intentionally designed around three extension points:
 
-- **Adapters** — connect to source systems and normalize raw input into capture events.
+- **Fetchers** — retrieve web, RSS, and sitemap source material with shared HTTP policy.
+- **Adapters** — parse source-specific data and normalize raw input into capture events.
 - **AI Providers** — enrich, classify, extract, summarize, and evaluate content with interchangeable model backends.
 - **Artifact and Metadata Stores** — store raw captures, normalized records, generated artifacts, idempotency state, and audit metadata in user-selected backends.
 
@@ -22,7 +23,8 @@ The project is intentionally designed around three extension points:
 
 ```mermaid
 flowchart LR
-  Source[External Source] --> Adapter[Adapter]
+  Source[External Source] --> Fetcher[Fetcher]
+  Fetcher --> Adapter[Adapter]
   Adapter --> CaptureEvent[Capture Event]
   CaptureEvent --> Pipeline[Capture Pipeline]
   Pipeline --> AI[AI Provider]
@@ -61,8 +63,8 @@ Run a local capture into filesystem artifacts plus SQLite metadata:
 
 ```bash
 uv sync
-uv run shiyi capture --source openai --workspace .shiyi/openai --limit 2
-uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --limit 2
+uv run shiyi capture --source openai --workspace .shiyi/openai --max-items 2
+uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --max-items 2
 ```
 
 The CLI prints a JSON summary:
@@ -72,6 +74,14 @@ The CLI prints a JSON summary:
 ```
 
 A second run over the same source should return `"processed": 0` for already-enriched records. This is the MVP idempotency behavior.
+
+For daily capture, prefer a date window plus a small overlap instead of an arbitrary item limit:
+
+```bash
+uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
+```
+
+Date windows are half-open: `--since` is inclusive and `--until` is exclusive. For scheduled jobs, use a 2-3 day overlap and let idempotency skip already-enriched records. `--limit` remains as a deprecated debug alias for the item cap.
 
 List captured events with the CLI:
 

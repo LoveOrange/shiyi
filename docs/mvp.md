@@ -45,8 +45,8 @@ The MVP is ready when these commands work on a clean checkout:
 
 ```bash
 uv sync
-uv run shiyi capture --source openai --workspace .shiyi/openai --limit 2
-uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --limit 2
+uv run shiyi capture --source openai --workspace .shiyi/openai --max-items 2
+uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --max-items 2
 uv run shiyi list --workspace .shiyi/openai
 uv run ruff format --check .
 uv run ruff check .
@@ -65,3 +65,16 @@ SHIYI_RUN_LIVE_TESTS=1 uv run pytest tests/live/test_public_sources.py
 ```
 
 These tests verify that the current Anthropic news index still exposes article links and that the OpenAI RSS feed is reachable.
+
+
+## Post-MVP v0.2 hardening
+
+Shiyi now supports explicit capture windows for daily/backfill workflows:
+
+```bash
+uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
+```
+
+`--since` is inclusive and `--until` is exclusive. Daily jobs should use a 2-3 day overlap window and rely on idempotency to avoid duplicate processing.
+
+Fetching/crawling concerns now live behind shared fetchers (`WebFetcher`, `RssFetcher`, `SitemapFetcher`) so adapters focus on source-specific parsing and mapping.

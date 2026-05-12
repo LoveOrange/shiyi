@@ -58,34 +58,34 @@ Target: ship and evolve a usable local information-capture pipeline for Anthropi
 
 Goal: make daily and backfill capture safe without relying on arbitrary `limit`.
 
-- [ ] Add `CaptureWindow` domain model with `since`, `until`, and optional `max_items`.
-- [ ] Add CLI flags: `--since`, `--until`, `--max-items`.
-- [ ] Keep `--limit` only as a debug/smoke alias or deprecate it in favor of `--max-items`.
-- [ ] Define default daily window behavior: overlap last 2-3 days and rely on idempotency to skip already-enriched items.
-- [ ] Define initial backfill behavior: explicit `--since` plus optional `--max-items` safety cap.
-- [ ] Update OpenAI RSS adapter to filter by feed item `published` / `updated` date.
-- [ ] Update Anthropic adapter to derive dates from article page, sitemap `lastmod`, or index metadata.
-- [ ] Add tests for date-window filtering, inclusive/exclusive boundaries, and idempotent overlap reruns.
+- [x] Add `CaptureWindow` domain model with `since`, `until`, and optional `max_items`.
+- [x] Add CLI flags: `--since`, `--until`, `--max-items`.
+- [x] Keep `--limit` only as a debug/smoke alias or deprecate it in favor of `--max-items`.
+- [x] Define default daily window behavior: overlap last 2-3 days and rely on idempotency to skip already-enriched items.
+- [x] Define initial backfill behavior: explicit `--since` plus optional `--max-items` safety cap.
+- [x] Update OpenAI RSS adapter to filter by feed item `published` / `updated` date.
+- [x] Update Anthropic adapter to derive dates from article page, sitemap `lastmod`, or index metadata.
+- [x] Add tests for date-window filtering, inclusive/exclusive boundaries, and idempotent overlap reruns.
 
 ### P0 — Shared fetcher infrastructure
 
 Goal: move crawling/fetching concerns below adapters so rate limiting, retry, timeout, and user-agent policy are centralized.
 
-- [ ] Add fetcher SDD: WebFetcher, RSSFetcher, SitemapFetcher, FetchResult, rate-limit policy, retry policy.
-- [ ] Add `ports/fetcher.py` contracts.
-- [ ] Implement `HttpWebFetcher` with shared `httpx.AsyncClient`, timeout, user-agent, and minimal retry.
-- [ ] Implement `RssFetcher` on top of WebFetcher + feed parsing.
-- [ ] Implement `SitemapFetcher` for sitemap URL discovery and `lastmod` extraction.
-- [ ] Move direct `httpx` calls out of OpenAI and Anthropic adapters.
-- [ ] Refactor adapters to do only source-specific parsing, mapping, idempotency keys, and metadata construction.
-- [ ] Add fetcher contract tests and adapter tests using fake fetchers.
+- [x] Add fetcher SDD: WebFetcher, RSSFetcher, SitemapFetcher, FetchResult, rate-limit policy, retry policy.
+- [x] Add `ports/fetcher.py` contracts.
+- [x] Implement `HttpWebFetcher` with shared `httpx.AsyncClient`, timeout, user-agent, and minimal retry.
+- [x] Implement `RssFetcher` on top of WebFetcher + feed parsing.
+- [x] Implement `SitemapFetcher` for sitemap URL discovery and `lastmod` extraction.
+- [x] Move direct `httpx` calls out of OpenAI and Anthropic adapters.
+- [x] Refactor adapters to do only source-specific parsing, mapping, idempotency keys, and metadata construction.
+- [x] Add fetcher contract tests and adapter tests using fake fetchers.
 
 ### P1 — Daily capture operation
 
 Goal: prepare for scheduled capture without introducing a daemon yet.
 
-- [ ] Add documented daily command examples using `--since` / `--until`.
-- [ ] Add overlap-window recommendation to README and `docs/mvp.md`.
+- [x] Add documented daily command examples using `--since` / `--until`.
+- [x] Add overlap-window recommendation to README and `docs/mvp.md`.
 - [ ] Add CLI summary fields for skipped/duplicates if pipeline exposes them.
 - [ ] Add failure status and retry metadata for fetch or parse failures.
 - [ ] Add one local script/example for daily capture of both sources.

@@ -1,10 +1,43 @@
 import asyncio
+from datetime import UTC, datetime
 
 import httpx
 import respx
 
-from shiyi.adapters.rss import openai_news_adapter
-from shiyi.domain.models import CaptureEvent
+from shiyi.adapters.rss import RssFeedAdapter, openai_news_adapter
+from shiyi.domain.models import CaptureEvent, CaptureWindow
+from shiyi.ports.fetcher import RssEntry, RssFeed
+
+
+class FakeRssFetcher:
+    async def fetch(self, feed_url: str) -> RssFeed:
+        return RssFeed(
+            url=feed_url,
+            fetched_at=datetime(2026, 5, 14, tzinfo=UTC),
+            entries=(
+                RssEntry(
+                    entry_id="old",
+                    title="Old",
+                    link="https://openai.com/old",
+                    html="<p>old</p>",
+                    published_at=datetime(2026, 5, 11, tzinfo=UTC),
+                ),
+                RssEntry(
+                    entry_id="in-window",
+                    title="Inside",
+                    link="https://openai.com/inside",
+                    html="<p>inside</p>",
+                    published_at=datetime(2026, 5, 12, 12, tzinfo=UTC),
+                ),
+                RssEntry(
+                    entry_id="until-boundary",
+                    title="Boundary",
+                    link="https://openai.com/boundary",
+                    html="<p>boundary</p>",
+                    published_at=datetime(2026, 5, 13, tzinfo=UTC),
+                ),
+            ),
+        )
 
 
 def test_openai_news_adapter_parses_feed_entries() -> None:
@@ -32,6 +65,24 @@ def test_openai_news_adapter_parses_feed_entries() -> None:
     assert event.payload.type == "html"
 
 
+def test_openai_news_adapter_filters_by_capture_window() -> None:
+    adapter = openai_news_adapter(
+        rss_fetcher=FakeRssFetcher(),
+        window=CaptureWindow(
+            since=datetime(2026, 5, 12, tzinfo=UTC),
+            until=datetime(2026, 5, 13, tzinfo=UTC),
+        ),
+    )
+
+    events = asyncio.run(_collect_events(adapter))
+
+    assert [event.idempotency_key for event in events] == ["openai-news:in-window"]
+
+
 async def _collect_openai_events() -> list[CaptureEvent]:
     adapter = openai_news_adapter()
+    return [event async for event in adapter.discover()]
+
+
+async def _collect_events(adapter: RssFeedAdapter) -> list[CaptureEvent]:
     return [event async for event in adapter.discover()]

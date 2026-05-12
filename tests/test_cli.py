@@ -67,15 +67,21 @@ def test_main_capture_prints_summary(
 ) -> None:
     expected_artifacts = 3
 
-    async def fake_run_capture(
+    async def fake_run_capture(  # noqa: PLR0913
         *,
         source: SourceName,
         workspace: Path,
-        limit: int,
+        limit: int | None,
+        max_items: int | None = None,
+        since: object | None = None,
+        until: object | None = None,
     ) -> CaptureSummary:
         assert source == "openai"
         assert workspace == tmp_path
-        assert limit == 1
+        assert limit is None
+        assert max_items == 1
+        assert since is not None
+        assert until is not None
         return CaptureSummary(
             source="openai",
             workspace=str(workspace),
@@ -88,7 +94,21 @@ def test_main_capture_prints_summary(
 
     monkeypatch.setattr("shiyi.cli.run_capture", fake_run_capture)
 
-    main(["capture", "--source", "openai", "--workspace", str(tmp_path), "--limit", "1"])
+    main(
+        [
+            "capture",
+            "--source",
+            "openai",
+            "--workspace",
+            str(tmp_path),
+            "--max-items",
+            "1",
+            "--since",
+            "2026-05-12",
+            "--until",
+            "2026-05-13",
+        ]
+    )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["processed"] == 1
