@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import sqlite3
 import sys
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -24,6 +28,19 @@ from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteMetadataStore
 
 SourceName = Literal["openai", "anthropic"]
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureSummary:
+    """Human and machine-readable capture run summary."""
+
+    source: SourceName
+    workspace: str
+    processed: int
+    total_events: int
+    enriched_events: int
+    enrichments: int
+    artifacts: int
 
 
 class LocalHeuristicAIProvider:
@@ -51,26 +68,32 @@ class LocalHeuristicAIProvider:
         )
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     """Run the Shiyi CLI."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "capture":
+        summary = asyncio.run(
+            run_capture(source=args.source, workspace=args.workspace, limit=args.limit)
+        )
+        sys.stdout.write(_format_summary(summary))
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="shiyi")
     subcommands = parser.add_subparsers(dest="command", required=True)
     capture = subcommands.add_parser("capture", help="Run a local capture once")
     capture.add_argument("--source", choices=["openai", "anthropic"], required=True)
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     capture.add_argument("--limit", type=int, default=5)
-    args = parser.parse_args()
-
-    if args.command == "capture":
-        processed = asyncio.run(
-            run_capture(source=args.source, workspace=args.workspace, limit=args.limit)
-        )
-        sys.stdout.write(f"processed={processed}\n")
+    return parser
 
 
-async def run_capture(*, source: SourceName, workspace: Path, limit: int) -> int:
-    """Run one local capture for a source and return processed event count."""
+async def run_capture(*, source: SourceName, workspace: Path, limit: int) -> CaptureSummary:
+    """Run one local capture for a source and return a summary."""
     workspace.mkdir(parents=True, exist_ok=True)
+    metadata_path = workspace / "metadata.sqlite"
     adapter = (
         openai_news_adapter(limit=limit)
         if source == "openai"
@@ -80,14 +103,52 @@ async def run_capture(*, source: SourceName, workspace: Path, limit: int) -> int
         adapter=adapter,
         ai_provider=LocalHeuristicAIProvider(),
         artifact_store=FileSystemArtifactStore(workspace / "artifacts"),
-        metadata_store=SQLiteMetadataStore(workspace / "metadata.sqlite"),
+        metadata_store=SQLiteMetadataStore(metadata_path),
         normalizer=HtmlMarkdownNormalizer(),
         enrichment_tasks=[
             SummarizeTask(max_tokens=120),
             ClassifyTask(labels=("model", "product", "safety", "research", "company")),
         ],
     )
-    return await pipeline.run_once()
+    processed = await pipeline.run_once()
+    return _capture_summary(source=source, workspace=workspace, processed=processed)
+
+
+def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> CaptureSummary:
+    metadata_path = workspace / "metadata.sqlite"
+    total_events = 0
+    enriched_events = 0
+    enrichments = 0
+    if metadata_path.exists():
+        with sqlite3.connect(metadata_path) as connection:
+            total_events = int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+            enriched_events = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE status = 'enriched'"
+                ).fetchone()[0]
+            )
+            enrichments = int(connection.execute("SELECT COUNT(*) FROM enrichments").fetchone()[0])
+
+    artifacts_root = workspace / "artifacts"
+    artifacts = (
+        sum(1 for path in artifacts_root.rglob("*") if path.is_file())
+        if artifacts_root.exists()
+        else 0
+    )
+    return CaptureSummary(
+        source=source,
+        workspace=str(workspace),
+        processed=processed,
+        total_events=total_events,
+        enriched_events=enriched_events,
+        enrichments=enrichments,
+        artifacts=artifacts,
+    )
+
+
+def _format_summary(summary: CaptureSummary) -> str:
+    payload = json.dumps(asdict(summary), ensure_ascii=False, sort_keys=True)
+    return f"{payload}\n"
 
 
 def _infer_tags(title: str) -> list[str]:

@@ -55,6 +55,44 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`]
 └── tests/
 ```
 
+## Quickstart
+
+Run a local capture into filesystem artifacts plus SQLite metadata:
+
+```bash
+uv sync
+uv run shiyi capture --source openai --workspace .shiyi/openai --limit 2
+uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --limit 2
+```
+
+The CLI prints a JSON summary:
+
+```json
+{"artifacts": 4, "enriched_events": 1, "enrichments": 2, "processed": 1, "source": "openai", "total_events": 1, "workspace": ".shiyi/openai"}
+```
+
+A second run over the same source should return `"processed": 0` for already-enriched records. This is the MVP idempotency behavior.
+
+Inspect metadata directly with SQLite:
+
+```bash
+sqlite3 .shiyi/openai/metadata.sqlite \
+  "select event_id, idempotency_key, status from events;"
+```
+
+Artifacts are stored under:
+
+```text
+.shiyi/<source>/artifacts/raw/
+.shiyi/<source>/artifacts/normalized/
+.shiyi/<source>/artifacts/enrichment/
+```
+
+Current built-in sources:
+
+- `openai` — OpenAI news RSS feed.
+- `anthropic` — Anthropic news index parser.
+
 ## Development
 
 Shiyi uses Python-first tooling with strict contracts and fast local feedback.

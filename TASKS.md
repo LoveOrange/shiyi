@@ -41,10 +41,10 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 
 ## Milestone 5 — MVP closing work
 
-- [ ] Add README quickstart for `uv run shiyi capture`.
-- [ ] Add CLI tests for `capture --source openai|anthropic`.
-- [ ] Improve CLI output: processed/skipped/enriched counts instead of only processed count.
-- [ ] Add metadata query/list command or documented SQLite inspection snippet.
+- [x] Add README quickstart for `uv run shiyi capture`.
+- [x] Add CLI tests for `capture --source openai|anthropic`.
+- [x] Improve CLI output: JSON summary with processed/events/enrichments/artifacts counts.
+- [x] Add metadata query/list command or documented SQLite inspection snippet. (README SQLite snippet)
 - [ ] Add source configuration docs: source name, URL, adapter type, limit, workspace.
 - [ ] Add minimal real AI provider design spec before implementing provider integrations.
 - [ ] Decide whether MVP includes a real LLM provider or ships with local heuristic enrichment only.
