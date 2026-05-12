@@ -94,6 +94,7 @@ Goal: make Shiyi product scope, pipeline stage boundaries, status transitions, a
 - [ ] Define capture-only terminal status for no-preprocess runs, e.g. `captured`, so P0 does not require AI preprocessing.
 - [x] Apply Kana review: persisted means artifact persistence only; preprocessing target is canonical/normalized content; content versioning remains later spec.
 - [x] Apply Kana second review: `save_enrichment` appends refs only; `mark_enriched` runs only after all configured tasks succeed.
+- [x] Apply Kana scope-spec review: target completion states are `captured` / `preprocessed`; `already_complete` means either terminal state; architecture dedupe does not claim content fingerprinting in MVP.
 
 ### P1 — Daily capture operation
 

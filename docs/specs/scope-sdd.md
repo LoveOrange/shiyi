@@ -172,7 +172,7 @@ The pipeline should support two valid modes:
 1. **Capture-only mode**: raw + normalized artifacts are persisted and the event reaches a terminal captured/complete state without AI preprocessing.
 2. **Capture + neutral preprocess mode**: raw + normalized artifacts are persisted, optional neutral preprocess tasks run, and the event reaches a terminal state only after required preprocess tasks succeed.
 
-The current implementation still uses enrichment naming and marks completion after configured tasks. A follow-up implementation change should introduce a clearer terminal state for capture-only runs, such as `captured`, or rename the completion transition so it no longer implies AI enrichment.
+Spec target: capture-only runs finish as `captured`; capture + neutral preprocess runs finish as `preprocessed`. Current implementation still uses enrichment naming (`enriched`, `mark_enriched`) as transitional compatibility. The implementation must converge on these target completion semantics before broader preprocess naming migration.
 
 ## 8. Acceptance criteria
 

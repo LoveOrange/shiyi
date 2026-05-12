@@ -46,7 +46,7 @@ Persistence is a family of user-provided storage components. The MVP separates a
 1. **Discover** — adapter discovers candidate source items.
 2. **Normalize** — adapter emits stable `CaptureEvent` objects.
 3. **Validate** — core validates event schema, size limits, provenance, and required fields.
-4. **Deduplicate** — core checks event identity and content fingerprints.
+4. **Deduplicate** — MVP checks event idempotency keys; canonical content fingerprint/version semantics are a future spec.
 5. **Persist artifacts** — core stores raw and normalized artifacts through an artifact store.
 6. **Optional neutral preprocess** — core may invoke a preprocessor/AI provider for reusable annotations.
 7. **Policy check** — core validates preprocess output, user policy, and persistence rules.

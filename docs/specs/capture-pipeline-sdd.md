@@ -111,13 +111,18 @@ class EventRecordStore(Protocol):
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
     ) -> EventRecord: ...
-    async def save_enrichment(
+    async def save_annotation(
         self,
         event: CaptureEvent,
-        result: EnrichmentResult,
+        result: AnnotationResult,
         artifact: ArtifactRef,
     ) -> EventRecord: ...
-    async def mark_enriched(self, event: CaptureEvent) -> EventRecord: ...
+    async def mark_captured(self, event: CaptureEvent) -> EventRecord: ...
+    async def mark_preprocessed(self, event: CaptureEvent) -> EventRecord: ...
+
+# Current implementation compatibility names:
+# save_enrichment ~= save_annotation
+# mark_enriched ~= mark_preprocessed
 
 class AIProvider(Protocol):
     @property
@@ -127,13 +132,13 @@ class AIProvider(Protocol):
 
 ## 5. End-to-end flow
 
-The current pipeline flow is:
+The target pipeline flow is:
 
 ```text
 Adapter.discover()
   -> CaptureEvent
   -> find existing EventRecord by idempotency_key
-  -> count already-complete and skip if existing.status == enriched
+  -> count already-complete and skip if existing.status in {captured, preprocessed}
   -> convert CaptureEvent.payload to raw ArtifactWrite
   -> ArtifactStore.put(raw)
   -> Normalizer.normalize(event) when configured
@@ -145,9 +150,9 @@ Adapter.discover()
          serialize result as annotation ArtifactWrite
          ArtifactStore.put(annotation)
          EventRecordStore.save_enrichment(...)  # append annotation ref only
-       EventRecordStore.mark_enriched(...) after all configured tasks succeed
+       EventRecordStore.mark_preprocessed(...) after all configured tasks succeed
   -> if no neutral preprocess tasks are configured:
-       target behavior should mark the event captured/complete after raw + normalized persistence
+       EventRecordStore.mark_captured(...) after raw + normalized persistence
   -> return processed event count
 ```
 
@@ -218,11 +223,11 @@ Output: process, skip, or resume decision.
 Rules:
 
 - `EventRecordStore.find_by_idempotency_key` is the only pipeline-level idempotency lookup.
-- If an existing record is `enriched`, the event is complete and should be skipped.
+- If an existing record is `captured` or `preprocessed`, the event is complete and should be skipped.
 - If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key.
 - The pipeline must not consult fetch raw cache for processing idempotency. Fetch cache only avoids repeated full-page downloads.
 
-Current status: records with status `enriched` are skipped; other statuses are reprocessed.
+Target status rule: records with status `captured` or `preprocessed` are skipped as already complete; other statuses are candidates for resume/retry. Current implementation still treats `enriched` as the transitional complete status.
 
 ### 6.4 Raw artifact stage
 
@@ -294,7 +299,7 @@ Rules:
 - Current `save_enrichment` naming is transitional; semantically it records an annotation/preprocess artifact reference only.
 - The pipeline should mark a preprocess-complete terminal state only after every configured required preprocess task succeeds.
 - If task 1 succeeds and task 2 fails, the event must not be marked complete for that mode; otherwise replay would incorrectly skip an incomplete event.
-- If no preprocess tasks are configured, target behavior should mark the event captured/complete after raw and normalized artifacts are persisted. The current implementation still needs a follow-up completion state/name cleanup for this mode.
+- If no preprocess tasks are configured, target behavior should mark the event `captured` after raw and normalized artifacts are persisted. The current implementation still needs a follow-up completion state/name cleanup for this mode.
 
 ### 6.9 Observe stage
 
@@ -304,55 +309,60 @@ Output: CLI summary, logs, and future metrics/traces.
 
 Rules:
 
-- The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, enriched.
+- The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, captured, preprocessed.
 - Current `run_once` returns only processed count. CLI derives additional counts from the local store.
 - P1 should add explicit outcome fields when pipeline exposes them.
-- Outcome definitions: `already_complete` means an existing event record is `enriched`; `duplicate` means the same idempotency key appeared more than once in a single run; `skipped` means a policy decision intentionally skipped an event.
+- Outcome definitions: `already_complete` means an existing event record is already in a terminal completion state (`captured` or `preprocessed`; transitional implementation may still use `enriched`); `duplicate` means the same idempotency key appeared more than once in a single run; `skipped` means a policy decision intentionally skipped an event.
 
 ## 7. State model
 
-Allowed persisted `EventRecord.status` values:
+Target persisted `EventRecord.status` values:
 
 ```text
 persisted
   raw and optional normalized artifacts have been persisted;
   optional preprocessing is not guaranteed complete.
 
-enriched / preprocessed (transitional naming)
-  configured neutral preprocessing work has completed successfully for the event. The name `enriched` is transitional and should not imply business insight.
+captured
+  raw and optional normalized artifacts have been persisted, and no required neutral preprocess tasks are configured. This is a terminal completion state for capture-only runs.
 
-partially_enriched
-  some preprocessing work completed, but at least one task remains missing or failed.
+preprocessed
+  configured required neutral preprocessing work has completed successfully for the event. This is a terminal completion state for capture + neutral preprocess runs. Current implementation may still spell this as `enriched`; that name is transitional and should not imply business insight.
+
+partially_preprocessed
+  some preprocessing work completed, but at least one required task remains missing or failed. Current implementation may still use `partially_enriched` if introduced before naming migration.
 
 failed
   processing failed and should be inspected or retried according to retry metadata.
 ```
 
-MVP implemented transitions:
+Target MVP transitions:
 
 ```text
 new -> persisted
-persisted -> enriched/preprocessed only after all configured neutral preprocessing tasks succeed
-existing enriched -> already_complete run outcome without writing a new record
+persisted -> captured when no required neutral preprocess tasks are configured
+persisted -> preprocessed only after all configured required neutral preprocess tasks succeed
+existing captured or preprocessed -> already_complete run outcome without writing a new record
 ```
 
-Target near-term transitions:
+Near-term retry/partial-processing transitions:
 
 ```text
-new -> persisted -> enriched
+new -> persisted -> captured when no required neutral preprocess tasks are configured
+new -> persisted -> preprocessed when all configured required preprocess tasks succeed
 new -> failed
-persisted -> partially_enriched when at least one required task succeeds and another remains missing/failed
-partially_enriched -> enriched only after all required tasks complete
-failed -> persisted -> enriched
-existing enriched -> already_complete/skipped run summary outcome
+persisted -> partially_preprocessed when at least one required task succeeds and another remains missing/failed
+partially_preprocessed -> preprocessed only after all required tasks complete
+failed -> persisted -> captured or preprocessed according to configured mode
+existing captured or preprocessed -> already_complete/skipped run summary outcome
 ```
 
 Rules:
 
 - Status transitions belong to `EventRecordStore`; adapters do not set pipeline processing status.
-- Fetch raw cache hits do not imply `persisted` or `enriched`.
+- Fetch raw cache hits do not imply `persisted`, `captured`, or `preprocessed`.
 - Event records are the source of truth for pipeline resume behavior in MVP.
-- `enriched` currently means all configured required neutral preprocessing tasks completed successfully, not merely that one annotation artifact exists. The name is transitional.
+- `preprocessed` means all configured required neutral preprocessing tasks completed successfully, not merely that one annotation artifact exists. Transitional `enriched` status should be treated as an implementation alias until migration.
 - `skipped` is a run outcome or summary counter, not a persisted event-record status for replaying an already-complete event.
 
 ## 8. Idempotency and replay
@@ -458,7 +468,7 @@ Pipeline/run summaries should eventually include:
 - processed count;
 - skipped/already-complete count;
 - failed count;
-- complete/preprocessed event count;
+- captured/preprocessed event count;
 - annotation/preprocess row count;
 - artifact count;
 - raw-cache hit count when fetchers expose it;
@@ -470,7 +480,7 @@ Current CLI summary includes:
 - workspace;
 - processed;
 - total events;
-- enriched/preprocessed events;
+- `enriched_events` as the transitional implementation spelling for preprocessed/completed events;
 - enrichment/annotation rows;
 - artifact count.
 
@@ -484,7 +494,7 @@ The MVP must keep tests for:
 
 - domain model validation;
 - fake adapter + fake AI provider pipeline behavior;
-- duplicate enriched record skip;
+- duplicate already-complete record skip;
 - raw artifact persistence;
 - normalized artifact persistence;
 - annotation/preprocess artifact persistence;
