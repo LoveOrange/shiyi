@@ -24,6 +24,7 @@ from shiyi.domain.models import (
     ModelIdentity,
     SummarizeTask,
 )
+from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline
 from shiyi.stores.filesystem import FileSystemArtifactStore
@@ -148,10 +149,14 @@ async def run_capture(  # noqa: PLR0913
     metadata_path = workspace / "metadata.sqlite"
     item_cap = max_items if max_items is not None else limit
     window = CaptureWindow(since=since, until=until, max_items=item_cap or 5)
+    raw_cache_root = workspace / "data" / "raw"
     adapter = (
         openai_news_adapter(window=window)
         if source == "openai"
-        else anthropic_news_adapter(window=window)
+        else anthropic_news_adapter(
+            window=window,
+            web_fetcher=HttpWebFetcher(raw_cache_root=raw_cache_root),
+        )
     )
     pipeline = CapturePipeline(
         adapter=adapter,

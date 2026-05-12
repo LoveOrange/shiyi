@@ -89,6 +89,7 @@ Goal: prepare for scheduled capture without introducing a daemon yet.
 - [ ] Add CLI summary fields for skipped/duplicates if pipeline exposes them.
 - [ ] Add failure status and retry metadata for fetch or parse failures.
 - [ ] Add one local script/example for daily capture of both sources.
+- [x] Add adapter-defined raw-key cache for full-page fetches.
 
 ### P1 — Adapter robustness
 
@@ -119,3 +120,4 @@ Goal: expand capabilities after capture semantics are stable.
 - Classification: multi-label tags, not single exclusive category.
 - First sources: Anthropic and OpenAI blogs/news.
 - Fetching/crawling belongs in lower-level fetchers; adapters should focus on source-specific parsing and mapping.
+- Event-level raw cache keys are adapter-defined metadata hashes; fetchers only use `{source}/{raw_key}` to skip repeated full-page fetches.

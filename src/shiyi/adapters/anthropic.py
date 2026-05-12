@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from hashlib import sha256
 from urllib.parse import urljoin, urlparse
 
 from selectolax.parser import HTMLParser
@@ -45,7 +46,11 @@ class AnthropicNewsAdapter:
         sitemap_dates = await self._sitemap_dates()
         emitted = 0
         for url in _extract_article_urls(index_result.content, self._index_url):
-            article_result = await self._web_fetcher.fetch(url)
+            article_result = await self._web_fetcher.fetch(
+                url,
+                source="anthropic-news",
+                raw_key=_entry_metadata_hash(source="anthropic-news", url=url),
+            )
             article_date = _extract_article_date(article_result.content) or sitemap_dates.get(url)
             occurred_at = article_date or article_result.fetched_at
             if not self._window.includes(article_date):
@@ -121,6 +126,11 @@ def _extract_article_urls(html: str, base_url: str, limit: int | None = None) ->
 def _article_id(url: str) -> str:
     path = urlparse(url).path.strip("/")
     return path.removeprefix("news/") or path
+
+
+def _entry_metadata_hash(*, source: str, url: str) -> str:
+    """Adapter-defined raw cache key from entry-level metadata."""
+    return sha256(f"{source}\n{url}".encode()).hexdigest()
 
 
 def _extract_title(html: str) -> str:

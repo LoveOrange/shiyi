@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import httpx
 import respx
@@ -16,6 +17,33 @@ def test_http_web_fetcher_returns_fetch_result() -> None:
     assert str(result.url) == "https://example.com/page"
     assert result.content == "hello"
     assert result.content_type == "text/plain"
+
+
+def test_http_web_fetcher_reuses_adapter_defined_raw_cache(tmp_path: Path) -> None:
+    cache_root = tmp_path
+    route_calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal route_calls
+        route_calls += 1
+        return httpx.Response(200, text=f"remote-{route_calls}")
+
+    with respx.mock:
+        respx.get("https://example.com/article").mock(side_effect=handler)
+        fetcher = HttpWebFetcher(raw_cache_root=cache_root)
+        first = asyncio.run(
+            fetcher.fetch("https://example.com/article", source="example", raw_key="abc123")
+        )
+        second = asyncio.run(
+            fetcher.fetch("https://example.com/article", source="example", raw_key="abc123")
+        )
+
+    assert first.content == "remote-1"
+    assert first.from_cache is False
+    assert second.content == "remote-1"
+    assert second.from_cache is True
+    assert route_calls == 1
+    assert (cache_root / "example" / "abc123" / "raw.html").read_text() == "remote-1"
 
 
 def test_http_rss_fetcher_parses_entries() -> None:

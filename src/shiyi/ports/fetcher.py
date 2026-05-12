@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, HttpUrl
@@ -18,6 +19,8 @@ class FetchResult(BaseModel):
     content: str
     content_type: str | None = None
     fetched_at: datetime
+    from_cache: bool = False
+    raw_cache_path: Path | None = None
 
 
 class RssEntry(BaseModel):
@@ -64,8 +67,14 @@ class Sitemap(BaseModel):
 class WebFetcher(Protocol):
     """Fetches web resources as text."""
 
-    async def fetch(self, url: str) -> FetchResult:
-        """Fetch a URL and return text content plus metadata."""
+    async def fetch(
+        self,
+        url: str,
+        *,
+        source: str | None = None,
+        raw_key: str | None = None,
+    ) -> FetchResult:
+        """Fetch a URL and optionally cache event-level raw content by adapter-defined key."""
         ...
 
 

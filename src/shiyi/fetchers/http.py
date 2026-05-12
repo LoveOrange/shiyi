@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import cast
 
 import feedparser  # type: ignore[import-untyped]
@@ -27,24 +28,54 @@ class HttpWebFetcher:
         timeout_seconds: float = 30.0,
         user_agent: str = DEFAULT_USER_AGENT,
         retries: int = 1,
+        raw_cache_root: Path | None = None,
     ) -> None:
         """Create a web fetcher."""
         self._client = client
         self._timeout_seconds = timeout_seconds
         self._user_agent = user_agent
         self._retries = retries
+        self._raw_cache_root = raw_cache_root
 
-    async def fetch(self, url: str) -> FetchResult:
-        """Fetch a URL and return text content plus metadata."""
+    async def fetch(
+        self,
+        url: str,
+        *,
+        source: str | None = None,
+        raw_key: str | None = None,
+    ) -> FetchResult:
+        """Fetch a URL and optionally reuse event-level raw content from cache."""
         fetched_at = datetime.now(UTC)
+        raw_cache_path = self._raw_cache_path(source=source, raw_key=raw_key)
+        if raw_cache_path is not None and raw_cache_path.exists():
+            return FetchResult(
+                url=url,
+                status_code=200,
+                content=raw_cache_path.read_text(),
+                content_type=None,
+                fetched_at=fetched_at,
+                from_cache=True,
+                raw_cache_path=raw_cache_path,
+            )
+
         response = await self._get(url)
+        content = response.text
+        if raw_cache_path is not None:
+            raw_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_cache_path.write_text(content)
         return FetchResult(
             url=str(response.url),
             status_code=response.status_code,
-            content=response.text,
+            content=content,
             content_type=response.headers.get("content-type"),
             fetched_at=fetched_at,
+            raw_cache_path=raw_cache_path,
         )
+
+    def _raw_cache_path(self, *, source: str | None, raw_key: str | None) -> Path | None:
+        if self._raw_cache_root is None or source is None or raw_key is None:
+            return None
+        return self._raw_cache_root / source / raw_key / "raw.html"
 
     async def _get(self, url: str) -> httpx.Response:
         attempts = self._retries + 1

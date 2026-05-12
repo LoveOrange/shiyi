@@ -104,6 +104,14 @@ Artifacts are stored under:
 .shiyi/<source>/artifacts/enrichment/
 ```
 
+Fetcher raw-cache entries for full article pages are stored separately under:
+
+```text
+.shiyi/<source>/data/raw/{source}/{adapter-defined-raw-key}/raw.html
+```
+
+Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline metadata still controls whether an event is normalized or enriched.
+
 Current built-in sources:
 
 - `openai` — OpenAI news RSS feed.

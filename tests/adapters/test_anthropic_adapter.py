@@ -26,7 +26,14 @@ class FakeWebFetcher:
             "https://www.anthropic.com/news/boundary": _article("Boundary", "2026-05-13T00:00:00Z"),
         }
 
-    async def fetch(self, url: str) -> FetchResult:
+    async def fetch(
+        self,
+        url: str,
+        *,
+        source: str | None = None,
+        raw_key: str | None = None,
+    ) -> FetchResult:
+        _ = (source, raw_key)
         return FetchResult(
             url=url,
             status_code=200,
