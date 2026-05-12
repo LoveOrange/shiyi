@@ -12,7 +12,7 @@ The MVP local storage implementation must support deterministic local capture ru
 
 ### Responsibilities
 
-- Store raw, normalized, and enrichment artifacts under a local root directory.
+- Store raw, normalized, and optional annotation/preprocess artifacts under a local root directory.
 - Use content-addressed paths based on SHA-256.
 - Return stable `ArtifactRef` objects.
 - Prevent path traversal by never trusting user-provided names as final paths.
@@ -27,7 +27,7 @@ The MVP local storage implementation must support deterministic local capture ru
     │   └── <sha256-prefix>/<sha256>
     ├── normalized/
     │   └── <sha256-prefix>/<sha256>
-    └── enrichment/
+    └── enrichment/  # transitional name for annotation/preprocess artifacts
         └── <sha256-prefix>/<sha256>
 ```
 
@@ -38,7 +38,7 @@ The MVP local storage implementation must support deterministic local capture ru
 - Enforce idempotency by `idempotency_key`.
 - Track event status.
 - Store raw and normalized artifact references as JSON.
-- Store enrichment artifact references as JSON rows.
+- Store optional annotation/preprocess artifact references as JSON rows.
 - Support idempotent re-runs by returning existing complete records.
 
 ### Minimal schema

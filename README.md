@@ -1,20 +1,28 @@
 # Shiyi
 
-Shiyi is an open-source information capture pipeline for turning messy external sources into structured, durable, and AI-assisted knowledge.
+Shiyi is an open-source information capture and normalization pipeline for turning messy external sources into durable, canonical, replay-safe knowledge artifacts.
 
-The project is intentionally designed around three extension points:
+The project is intentionally scoped as shared capture infrastructure:
+
+```text
+Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
+Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
+```
+
+Core extension points:
 
 - **Fetchers** — retrieve web, RSS, and sitemap source material with shared HTTP policy.
 - **Adapters** — parse source-specific data and normalize raw input into capture events.
-- **AI Providers** — enrich, classify, extract, summarize, and evaluate content with interchangeable model backends.
-- **Artifact Stores and Event Record Stores** — store raw captures, normalized records, generated artifacts, idempotency state, and audit metadata in user-selected backends.
+- **Normalizers** — turn source payloads into canonical Markdown/text or structured artifacts.
+- **Preprocessors / AI Providers** — optionally produce neutral, reusable annotations such as summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
+- **Artifact Stores and Event Record Stores** — store raw captures, normalized records, optional neutral annotations, idempotency state, and audit metadata in user-selected backends.
 
 > Status: early architecture draft. APIs are not stable yet.
 
 ## Design goals
 
-1. **Composable capture pipeline** — sources, AI enrichment, and storage should evolve independently.
-2. **Open extension model** — users can bring their own Adapter, AI Provider, Artifact Store, or Event Record Store implementation without forking core.
+1. **Composable capture pipeline** — sources, normalization, optional neutral preprocessing, and storage should evolve independently.
+2. **Open extension model** — users can bring their own Adapter, Normalizer, Preprocessor/AI Provider, Artifact Store, or Event Record Store implementation without forking core.
 3. **Production-grade quality** — typed contracts, deterministic tests, observable runtime, clear error semantics, and compatibility discipline.
 4. **Trustworthy data flow** — raw input, transformations, model outputs, and persistence writes should be traceable and auditable.
 5. **Language-first documentation** — English is the primary documentation language until the design stabilizes; other languages will follow later.
@@ -27,11 +35,11 @@ flowchart LR
   Fetcher --> Adapter[Adapter]
   Adapter --> CaptureEvent[Capture Event]
   CaptureEvent --> Pipeline[Capture Pipeline]
-  Pipeline --> AI[AI Provider]
-  AI --> Enriched[Enriched Record]
+  Pipeline --> Preprocess[Optional Neutral Preprocess]
+  Preprocess --> Annotation[Annotation Artifact]
   Pipeline --> Policy[Policy & Validation]
-  Enriched --> ArtifactStore[Artifact Store]
-  Enriched --> EventRecordStore[Event Record Store]
+  Annotation --> ArtifactStore[Artifact Store]
+  Annotation --> EventRecordStore[Event Record Store]
   ArtifactStore --> FS[(Filesystem Artifacts)]
   EventRecordStore --> SQLite[(SQLite Event Records)]
   Pipeline --> Telemetry[Logs / Metrics / Traces]
@@ -39,7 +47,7 @@ flowchart LR
 
 Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
-See [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), and [`docs/mvp.md`](docs/mvp.md) for the current design and MVP boundary.
+See [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), and [`docs/mvp.md`](docs/mvp.md) for the current design and MVP boundary.
 
 ## Repository layout
 
@@ -73,7 +81,7 @@ The CLI prints a JSON summary:
 {"artifacts": 4, "enriched_events": 1, "enrichments": 2, "processed": 1, "source": "openai", "total_events": 1, "workspace": ".shiyi/openai"}
 ```
 
-A second run over the same source should return `"processed": 0` for already-enriched records. This is the MVP idempotency behavior.
+A second run over the same source should return `"processed": 0` for already-complete records. This is the MVP idempotency behavior. Current code still uses enrichment terminology for optional local heuristic annotations; that naming is transitional.
 
 For daily capture, prefer a date window plus a small overlap instead of an arbitrary item limit:
 
@@ -81,7 +89,7 @@ For daily capture, prefer a date window plus a small overlap instead of an arbit
 uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
 ```
 
-Date windows are half-open: `--since` is inclusive and `--until` is exclusive. For scheduled jobs, use a 2-3 day overlap and let idempotency skip already-enriched records. `--limit` remains as a deprecated debug alias for the item cap.
+Date windows are half-open: `--since` is inclusive and `--until` is exclusive. For scheduled jobs, use a 2-3 day overlap and let idempotency skip already-complete records. `--limit` remains as a deprecated debug alias for the item cap.
 
 List captured events with the CLI:
 
@@ -110,7 +118,7 @@ Fetcher raw-cache entries for full article pages are stored separately under:
 .shiyi/<source>/data/raw/{source}/{adapter-defined-raw-key}/raw.html
 ```
 
-Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline event records still controls whether an event is normalized or enriched.
+Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline event records still control whether an event is normalized and complete.
 
 Current built-in sources:
 

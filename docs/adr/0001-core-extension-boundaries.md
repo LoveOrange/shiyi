@@ -5,17 +5,18 @@
 
 ## Context
 
-Shiyi needs to support many information sources, model providers, and storage backends. If core directly depends on any one implementation, the project will become hard to extend and hard to trust.
+Shiyi needs to support many information sources, optional neutral preprocessors, and storage backends. If core directly depends on any one implementation, the project will become hard to extend and hard to trust.
 
 ## Decision
 
 Shiyi core will define three primary extension boundaries:
 
 1. Adapter
-2. AI Provider
-3. Artifact Store and Event Record Store
+2. Normalizer
+3. Neutral Preprocessor / transitional AI Provider
+4. Artifact Store and Event Record Store
 
-Core owns orchestration, validation, policy, idempotency, observability, and contract definitions. Implementations live outside the core boundary and communicate through typed ports.
+Core owns orchestration, validation, policy, idempotency, observability, and contract definitions. Implementations live outside the core boundary and communicate through typed ports. Product-specific insight, ranking, scoring, and editorial decisions stay outside Shiyi.
 
 ## Consequences
 

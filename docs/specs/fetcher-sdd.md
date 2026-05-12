@@ -25,7 +25,7 @@ The fetcher layer is intentionally not a crawler framework, scheduler, semantic 
 1. **Simple first** — avoid candidate/discovery frameworks until the main flow proves they are needed.
 2. **Adapter owns source semantics** — the adapter decides which entry metadata identifies a raw item.
 3. **Fetcher owns transport mechanics** — the fetcher uses `source + raw_key` only as a filesystem cache path.
-4. **Pipeline owns processing state** — normalization, artifact persistence, event record status, and enrichment remain pipeline concerns.
+4. **Pipeline owns processing state** — normalization, artifact persistence, event record status, and optional neutral preprocessing remain pipeline concerns.
 5. **Event-level raw only for now** — source-level snapshots such as full RSS XML/index HTML are not part of this design.
 
 ## 3. Main flow
@@ -66,16 +66,16 @@ For feeds where the entry already contains enough event-level raw content, the a
 - Persist raw artifacts from `CaptureEvent.payload`.
 - Normalize content.
 - Persist normalized artifacts and event records.
-- Run enrichment.
-- Persist enrichment artifacts and event records.
+- Run optional neutral preprocessing.
+- Persist annotation/preprocess artifacts and event records.
 
 ## 5. Explicit non-goals
 
 The fetcher layer must not:
 
 - Query SQLite event records.
-- Decide whether an event is normalized or enriched.
-- Know about normalized Markdown, semantic input, model versions, tags, summaries, or enrichment outputs.
+- Decide whether an event is normalized, preprocessed, or complete.
+- Know about normalized Markdown, semantic input, model versions, tags, summaries, annotations, or preprocess outputs.
 - Compute semantic fingerprints.
 - Own source-level snapshot persistence.
 - Replace pipeline idempotency.
@@ -172,7 +172,7 @@ Cache behavior:
 2. If it does not exist, fetch the remote URL, write the response body to `raw.html`, and return it with `from_cache=False`.
 3. If `source` or `raw_key` is missing, skip cache handling and fetch normally.
 
-This cache only saves network calls. It does not mean the event has been normalized, persisted, or enriched.
+This cache only saves network calls. It does not mean the event has been normalized, persisted, or marked complete.
 
 ## 9. Current source usage
 

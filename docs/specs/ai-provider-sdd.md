@@ -1,36 +1,101 @@
-# Shiyi AI Provider SDD
+# Shiyi Neutral Preprocessing Provider SDD
 
-- Status: Draft
+- Status: Review
 - Last updated: 2026-05-12
-- Scope: AI provider boundary after local MVP
+- Scope: optional neutral preprocessing provider boundary after capture/normalize core
 
-## MVP decision
+## 1. Scope decision
 
-The MVP ships with `LocalHeuristicAIProvider` only. A real LLM provider is explicitly outside the MVP boundary.
+Shiyi is not a domain insight engine. Provider-backed AI work inside Shiyi must be limited to neutral preprocessing that is reusable by multiple downstream products.
 
-This keeps the MVP focused on reliable capture, normalization, persistence, idempotency, and traceability. Real LLM providers introduce secrets, cost, schema retries, model variance, rate limits, and safety policy. Those are important, but they should not block the local capture MVP.
+Allowed boundary:
 
-## Required provider contract
+```text
+Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
+Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
+```
 
-A real provider implementation must satisfy the existing `AIProvider` port:
+## 2. MVP decision
+
+The MVP can ship without a real LLM provider. The existing `LocalHeuristicAIProvider` is a transitional local annotation helper, not a requirement for Shiyi's product scope.
+
+P0 correctness should depend on:
+
+- reliable capture;
+- raw artifact persistence;
+- normalized/canonical artifact persistence;
+- event records;
+- idempotent replay.
+
+Neutral preprocessing is optional and belongs to P1.
+
+## 3. Allowed neutral preprocessing
+
+Provider-backed work is in scope only when it is domain-neutral and reusable:
+
+- language detection;
+- translation helper fields;
+- short neutral summary for preview/indexing;
+- entity extraction: companies, products, people, papers, models, organizations;
+- coarse topic/category labels;
+- content quality/spam/near-duplicate signals;
+- chunking and embeddings for retrieval.
+
+## 4. Out of scope
+
+Provider-backed work is out of scope when it creates business opinions or product-specific decisions:
+
+- Briefly vertical insight judgment;
+- AI R&D trend analysis;
+- demand radar pain-point or opportunity scoring;
+- weekly-report inclusion decisions;
+- ranking, prioritization, or editorial selection;
+- business conclusion generation;
+- prompts that only one downstream product understands.
+
+## 5. Naming direction
+
+`EnrichmentTask` and `EnrichmentResult` are transitional implementation names from the local MVP.
+
+Preferred future names:
+
+- `PreprocessTask` for neutral transformations;
+- `AnnotationTask` for reusable metadata-like output;
+- `ExtractionTask` for structured facts extracted from canonical content;
+- `PreprocessResult` or `AnnotationResult` instead of `EnrichmentResult`.
+
+Do not expand `EnrichmentTask` with product-specific insight behavior. If a downstream product needs domain enrichment, it should run its own pipeline on Shiyi's normalized artifacts.
+
+## 6. Target provider contract
+
+The target provider should consume canonical content, not raw `CaptureEvent` as its main semantic input.
+
+Current transitional contract:
 
 ```python
 class AIProvider(Protocol):
-    @property
-    def name(self) -> str: ...
-
     async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult: ...
 ```
 
-## Design requirements before implementation
+Target contract direction:
+
+```python
+class PreprocessProvider(Protocol):
+    async def run(self, task: PreprocessTask, input: CanonicalContent) -> PreprocessResult: ...
+```
+
+`CaptureEvent` may still provide provenance and source metadata, but normalized/canonical content should be the semantic input.
+
+## 7. Design requirements before real provider implementation
 
 - Provider configuration must not hard-code secrets.
-- Model identity must be recorded in every `EnrichmentResult`.
+- Model identity must be recorded in every result.
 - Usage metadata should include input/output tokens when available.
 - Provider raw responses may be stored as artifacts only when policy allows it.
-- Output must be schema-validated before metadata is marked enriched.
+- Output must be schema-validated before an annotation is recorded as successful.
 - Rate limits and retry behavior must be explicit.
+- Every provider task must document why it is neutral and reusable.
 
-## First real provider candidate
+## 8. First real provider candidate
 
-The first real provider should be a single OpenAI-compatible chat/completions implementation or responses API implementation with structured JSON output. Anthropic can follow once the provider config and schema retry story are stable.
+The first real provider can be a single OpenAI-compatible structured-output implementation, but it should implement neutral preprocessing only. Anthropic can follow once provider config, schema retry, and artifact storage policy are stable.

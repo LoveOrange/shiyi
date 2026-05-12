@@ -4,13 +4,13 @@
 
 Information capture tools usually become tightly coupled to a small set of sources, model vendors, and storage backends. That makes them hard to adapt, hard to audit, and hard to operate once the user workflow grows beyond the original assumptions.
 
-Shiyi defines a general capture pipeline where the core system coordinates the workflow, while source-specific ingestion, AI capabilities, and storage are user-replaceable.
+Shiyi defines a general capture and normalization pipeline where the core system coordinates the workflow, while source-specific ingestion, optional neutral preprocessing, and storage are user-replaceable.
 
 ## 2. Architectural principles
 
 - **Core owns policy and orchestration, not integrations.** Integrations implement stable ports.
 - **Raw data is never silently discarded.** Every normalized record should retain provenance back to its source event.
-- **Model output is treated as untrusted.** AI results must pass schema validation and policy checks before persistence.
+- **Optional preprocessing is neutral.** AI-assisted work inside Shiyi must produce reusable facts or annotations, not business opinions.
 - **Idempotency is mandatory.** Replaying the same source event should not corrupt state or duplicate durable records.
 - **Observability is part of the contract.** Every pipeline run should expose trace IDs, structured logs, and measurable outcomes.
 - **Compatibility is explicit.** Public contracts must follow semantic versioning once stabilized.
@@ -31,11 +31,11 @@ The normalized boundary object entering Shiyi core. It contains identity, payloa
 
 ### Pipeline Run
 
-A single execution context that processes one or more capture events through validation, enrichment, persistence, and telemetry.
+A single execution context that processes one or more capture events through validation, raw persistence, normalization, optional neutral preprocessing, event-record persistence, and telemetry.
 
-### AI Provider
+### Preprocessor / AI Provider
 
-A user-provided component for enrichment tasks such as classification, extraction, summarization, deduplication assistance, and quality evaluation.
+An optional user-provided component for neutral preprocessing tasks such as language detection, neutral summaries, entity extraction, coarse topic annotation, deduplication assistance, quality signals, chunking, or embeddings. Product-specific insight generation belongs to downstream consumers, not Shiyi core.
 
 ### Persistence
 
@@ -48,9 +48,9 @@ Persistence is a family of user-provided storage components. The MVP separates a
 3. **Validate** — core validates event schema, size limits, provenance, and required fields.
 4. **Deduplicate** — core checks event identity and content fingerprints.
 5. **Persist artifacts** — core stores raw and normalized artifacts through an artifact store.
-6. **Enrich** — core invokes AI provider through task-specific contracts.
-7. **Policy check** — core validates model output, user policy, and persistence rules.
-8. **Persist event records** — core records event status, artifact references, enrichment references, and failures.
+6. **Optional neutral preprocess** — core may invoke a preprocessor/AI provider for reusable annotations.
+7. **Policy check** — core validates preprocess output, user policy, and persistence rules.
+8. **Persist event records** — core records event status, artifact references, annotation references, and failures.
 9. **Observe** — logs, metrics, traces, and run summaries are emitted.
 
 ## 5. Ports and adapters
@@ -58,7 +58,7 @@ Persistence is a family of user-provided storage components. The MVP separates a
 Shiyi core exposes these primary ports:
 
 - `AdapterPort`
-- `AIProviderPort`
+- `PreprocessorPort` / transitional `AIProviderPort`
 - `ArtifactStorePort`
 - `EventRecordStorePort`
 
@@ -68,11 +68,11 @@ All ports should be asynchronous, cancellable, typed, and testable with contract
 flowchart TB
   Core[Shiyi Core]
   Core --> AdapterPort[Adapter Port]
-  Core --> AIProviderPort[AI Provider Port]
+  Core --> AIProviderPort[Preprocessor / AI Provider Port]
   Core --> ArtifactStorePort[Artifact Store Port]
   Core --> EventRecordStorePort[Event Record Store Port]
   AdapterPort --> CustomAdapter[Custom Adapter]
-  AIProviderPort --> CustomAI[Custom AI Provider]
+  AIProviderPort --> CustomAI[Custom Neutral Preprocessor]
   ArtifactStorePort --> FileSystem[Filesystem / Object Store]
   EventRecordStorePort --> EventRecordBackend[JSONL / SQLite / Postgres / Document DB]
 ```
@@ -106,4 +106,5 @@ Shiyi should align with top-tier open-source infrastructure projects:
 - Shiyi is not a hosted SaaS product.
 - Shiyi does not require one default model provider.
 - Shiyi does not require a server database. The MVP default is filesystem-first artifacts with SQLite event records.
-- Shiyi does not make AI output authoritative without validation.
+- Shiyi does not own product-specific ranking, scoring, insight, or editorial decisions.
+- Shiyi does not make AI/preprocess output authoritative without validation.

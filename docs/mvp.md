@@ -10,9 +10,9 @@ A successful MVP run must:
 2. Capture Anthropic news content.
 3. Preserve raw source HTML or feed content as filesystem artifacts.
 4. Normalize HTML into Markdown artifacts.
-5. Store event records and enrichment references in SQLite.
+5. Store event records and optional neutral annotation references in SQLite.
 6. Produce deterministic CLI summaries.
-7. Skip already-enriched records on re-run using idempotency keys.
+7. Skip already-complete records on re-run using idempotency keys.
 8. List captured event records from the CLI.
 9. Pass local and CI quality gates.
 
@@ -24,7 +24,7 @@ A successful MVP run must:
 - HTML-to-Markdown normalizer.
 - OpenAI RSS adapter.
 - Anthropic news index adapter.
-- Local heuristic enrichment provider.
+- Transitional local heuristic annotation provider. Neutral preprocessing is optional in the product scope and should not be required for P0 capture correctness.
 - One-shot CLI capture command.
 - README quickstart.
 - Metadata listing CLI.
@@ -78,3 +78,15 @@ uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-1
 `--since` is inclusive and `--until` is exclusive. Daily jobs should use a 2-3 day overlap window and rely on idempotency to avoid duplicate processing.
 
 Fetching/crawling concerns now live behind shared fetchers (`WebFetcher`, `RssFetcher`, `SitemapFetcher`) so adapters focus on source-specific parsing and mapping.
+
+
+## Scope update: infrastructure, not insight product
+
+Shiyi's product boundary is:
+
+```text
+Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
+Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
+```
+
+For P0, Shiyi should focus on capture, raw artifacts, normalized/canonical artifacts, event records, and idempotency. Neutral preprocessing can remain optional and lightweight. Business-specific enrichment such as trend analysis, opportunity scoring, ranking, or weekly-report selection belongs to downstream products.
