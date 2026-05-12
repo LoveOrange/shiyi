@@ -8,21 +8,21 @@ Target: run Anthropic and OpenAI blog adapters by Wednesday, 2026-05-13.
 - [x] Implement `FileSystemArtifactStore`.
 - [x] Implement `SQLiteMetadataStore`.
 - [x] Add contract tests for artifact and metadata stores.
-- [ ] Update pipeline tests to use real local stores. (fake stores still used; real-store integration test next)
+- [x] Update pipeline tests to use real local stores.
 
 ## Milestone 2 — Article capture foundation
 
-- [ ] Add normalizer contract for HTML to canonical Markdown/text.
-- [ ] Add minimal HTML article normalizer.
-- [ ] Preserve raw HTML artifact before normalization.
-- [ ] Store normalized Markdown/text artifact separately.
+- [x] Add normalizer contract for HTML to canonical Markdown/text.
+- [x] Add minimal HTML article normalizer.
+- [x] Preserve raw HTML artifact before normalization.
+- [x] Store normalized Markdown/text artifact separately.
 
 ## Milestone 3 — Blog adapters
 
 - [x] Investigate Anthropic blog/news source shape: no official `https://www.anthropic.com/news/rss.xml`; news index HTML is usable, may need source-specific index parser or sitemap check.
 - [x] Investigate OpenAI blog/news source shape: RSS available at `https://openai.com/news/rss.xml`; index HTML also usable.
 - [ ] Implement Anthropic blog adapter.
-- [ ] Implement OpenAI blog adapter.
+- [x] Implement OpenAI blog adapter. (RSS-based)
 - [ ] Add adapter contract tests with recorded/minimal fixtures.
 
 ## Milestone 4 — End-to-end run

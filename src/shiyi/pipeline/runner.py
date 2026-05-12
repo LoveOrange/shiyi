@@ -9,12 +9,14 @@ from shiyi.ports.adapter import Adapter
 from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
 from shiyi.ports.metadata_store import MetadataStore
+from shiyi.ports.normalizer import Normalizer
 
 
 class CapturePipeline:
     """Coordinates adapter discovery, AI enrichment, and persistence writes."""
 
-    def __init__(
+    # Six dependencies are intentional at this composition root; each is an explicit port.
+    def __init__(  # noqa: PLR0913
         self,
         *,
         adapter: Adapter,
@@ -22,6 +24,7 @@ class CapturePipeline:
         artifact_store: ArtifactStore,
         metadata_store: MetadataStore,
         enrichment_tasks: Sequence[EnrichmentTask],
+        normalizer: Normalizer | None = None,
     ) -> None:
         """Create a pipeline from concrete extension implementations."""
         self._adapter = adapter
@@ -29,6 +32,7 @@ class CapturePipeline:
         self._artifact_store = artifact_store
         self._metadata_store = metadata_store
         self._enrichment_tasks = tuple(enrichment_tasks)
+        self._normalizer = normalizer
 
     async def run_once(self) -> int:
         """Process discovered events once and return the number of events handled."""
@@ -39,10 +43,16 @@ class CapturePipeline:
                 continue
 
             raw_artifact = await self._artifact_store.put(_raw_artifact_from_event(event))
+            normalized_artifact = None
+            if self._normalizer is not None:
+                normalized_write = await self._normalizer.normalize(event)
+                if normalized_write is not None:
+                    normalized_artifact = await self._artifact_store.put(normalized_write)
+
             await self._metadata_store.save_event(
                 event,
                 raw_artifact=raw_artifact,
-                normalized_artifact=None,
+                normalized_artifact=normalized_artifact,
             )
 
             for task in self._enrichment_tasks:
