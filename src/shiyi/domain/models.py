@@ -73,7 +73,7 @@ class CaptureEvent(StrictModel):
 
 
 class ClassifyTask(StrictModel):
-    """Classify a capture event into one or more configured labels."""
+    """Classify a capture event into one or more configured tags."""
 
     type: Literal["classify"] = "classify"
     labels: tuple[NonEmptyString, ...]
@@ -121,9 +121,45 @@ class EnrichmentResult(StrictModel):
     usage: TokenUsage | None = None
 
 
-class Checkpoint(StrictModel):
-    """Durable adapter cursor committed after successful processing."""
+ArtifactKind = Literal["raw", "normalized", "enrichment"]
 
-    adapter_name: NonEmptyString
-    cursor: NonEmptyString
-    committed_at: datetime
+
+class ArtifactWrite(StrictModel):
+    """Artifact content to persist outside metadata storage."""
+
+    kind: ArtifactKind
+    media_type: NonEmptyString
+    content: bytes
+    suggested_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactRef(StrictModel):
+    """Stable reference to a stored artifact."""
+
+    uri: NonEmptyString
+    kind: ArtifactKind
+    media_type: NonEmptyString
+    size_bytes: int = Field(ge=0)
+    sha256: NonEmptyString
+
+
+class ArtifactRead(StrictModel):
+    """Stored artifact content plus reference metadata."""
+
+    ref: ArtifactRef
+    content: bytes
+
+
+EventStatus = Literal["persisted", "enriched", "partially_enriched", "failed", "skipped"]
+
+
+class EventRecord(StrictModel):
+    """Metadata-store record for one logical capture event."""
+
+    event_id: NonEmptyString
+    idempotency_key: NonEmptyString
+    status: EventStatus
+    raw_artifact: ArtifactRef | None = None
+    normalized_artifact: ArtifactRef | None = None
+    last_error: str | None = None

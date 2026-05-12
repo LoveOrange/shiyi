@@ -13,7 +13,7 @@ Shiyi core will define three primary extension boundaries:
 
 1. Adapter
 2. AI Provider
-3. Persistence
+3. Artifact Store and Metadata Store
 
 Core owns orchestration, validation, policy, idempotency, observability, and contract definitions. Implementations live outside the core boundary and communicate through typed ports.
 

@@ -39,7 +39,7 @@ A user-provided component for enrichment tasks such as classification, extractio
 
 ### Persistence
 
-Persistence is a family of user-provided storage components. The MVP should separate artifact storage from metadata and checkpoint storage instead of assuming one database. Raw documents and generated files can be stored in a filesystem-backed artifact store; metadata and checkpoints can start with JSONL or SQLite and later move to Postgres, document databases, or other backends.
+Persistence is a family of user-provided storage components. The MVP separates artifact storage from metadata storage instead of assuming one database. Raw documents and generated files are stored in a filesystem-backed artifact store; metadata starts with SQLite and can later move to Postgres, document databases, or other backends. Checkpointing is deferred for the MVP.
 
 ## 4. Pipeline stages
 
@@ -51,8 +51,7 @@ Persistence is a family of user-provided storage components. The MVP should sepa
 6. **Enrich** — core invokes AI provider through task-specific contracts.
 7. **Policy check** — core validates model output, user policy, and persistence rules.
 8. **Persist metadata** — core records event status, artifact references, enrichment references, and failures.
-9. **Checkpoint** — adapter checkpoint is committed after successful processing.
-10. **Observe** — logs, metrics, traces, and run summaries are emitted.
+9. **Observe** — logs, metrics, traces, and run summaries are emitted.
 
 ## 5. Ports and adapters
 
@@ -62,7 +61,6 @@ Shiyi core exposes these primary ports:
 - `AIProviderPort`
 - `ArtifactStorePort`
 - `MetadataStorePort`
-- `CheckpointStorePort`
 
 All ports should be asynchronous, cancellable, typed, and testable with contract test suites.
 
@@ -73,12 +71,10 @@ flowchart TB
   Core --> AIProviderPort[AI Provider Port]
   Core --> ArtifactStorePort[Artifact Store Port]
   Core --> MetadataStorePort[Metadata Store Port]
-  Core --> CheckpointStorePort[Checkpoint Store Port]
   AdapterPort --> CustomAdapter[Custom Adapter]
   AIProviderPort --> CustomAI[Custom AI Provider]
   ArtifactStorePort --> FileSystem[Filesystem / Object Store]
   MetadataStorePort --> MetadataBackend[JSONL / SQLite / Postgres / Document DB]
-  CheckpointStorePort --> CheckpointBackend[Checkpoint Backend]
 ```
 
 ## 6. Error model
@@ -109,5 +105,5 @@ Shiyi should align with top-tier open-source infrastructure projects:
 
 - Shiyi is not a hosted SaaS product.
 - Shiyi does not require one default model provider.
-- Shiyi does not require one default database. The MVP default should be filesystem-first for artifacts with lightweight metadata/checkpoint storage.
+- Shiyi does not require a server database. The MVP default is filesystem-first artifacts with SQLite metadata.
 - Shiyi does not make AI output authoritative without validation.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from shiyi.domain.models import CaptureEvent, Checkpoint
+from shiyi.domain.models import CaptureEvent
 
 
 class Adapter(Protocol):
@@ -21,6 +21,6 @@ class Adapter(Protocol):
         """Adapter implementation version."""
         ...
 
-    def discover(self, checkpoint: Checkpoint | None = None) -> AsyncIterator[CaptureEvent]:
+    def discover(self) -> AsyncIterator[CaptureEvent]:
         """Discover source items and yield normalized capture events."""
         ...

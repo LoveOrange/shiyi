@@ -1,34 +1,38 @@
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from shiyi import (
     AIProvider,
+    ArtifactRead,
+    ArtifactRef,
+    ArtifactStore,
+    ArtifactWrite,
     CaptureEvent,
     CapturePipeline,
     EnrichmentResult,
+    EventRecord,
+    HtmlPayload,
+    MetadataStore,
     ModelIdentity,
-    Persistence,
     Provenance,
     SourceIdentity,
     SummarizeTask,
-    TextPayload,
 )
-from shiyi.domain.models import Checkpoint, EnrichmentTask
-from shiyi.ports.persistence import PersistenceResult
+from shiyi.domain.models import EnrichmentTask
 
 
 class FakeAdapter:
     name = "fake"
     version = "0.1.0"
 
-    async def discover(self, checkpoint: Checkpoint | None = None) -> AsyncIterator[CaptureEvent]:
-        del checkpoint
+    async def discover(self) -> AsyncIterator[CaptureEvent]:
         yield CaptureEvent(
             id="evt_1",
             source=SourceIdentity(kind="test"),
             occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-            payload=TextPayload(text="hello"),
+            payload=HtmlPayload(html="<article>hello</article>"),
             provenance=Provenance(
                 adapter_name=self.name,
                 adapter_version=self.version,
@@ -49,52 +53,123 @@ class FakeAIProvider:
         )
 
 
-class FakePersistence:
-    name = "fake-store"
+class FakeArtifactStore:
+    name = "fake-artifacts"
 
     def __init__(self) -> None:
-        self.raw_count = 0
-        self.enriched_count = 0
+        self.artifacts: dict[str, ArtifactRead] = {}
 
-    async def save_raw(self, event: CaptureEvent) -> PersistenceResult:
-        del event
-        self.raw_count += 1
-        return PersistenceResult(status="committed", record_id="raw_1")
+    async def put(self, artifact: ArtifactWrite) -> ArtifactRef:
+        digest = hashlib.sha256(artifact.content).hexdigest()
+        ref = ArtifactRef(
+            uri=f"memory://{artifact.kind}/{digest}",
+            kind=artifact.kind,
+            media_type=artifact.media_type,
+            size_bytes=len(artifact.content),
+            sha256=digest,
+        )
+        self.artifacts[ref.uri] = ArtifactRead(ref=ref, content=artifact.content)
+        return ref
 
-    async def save_enriched(
+    async def get(self, ref: ArtifactRef) -> ArtifactRead:
+        return self.artifacts[ref.uri]
+
+    async def exists(self, ref: ArtifactRef) -> bool:
+        return ref.uri in self.artifacts
+
+
+class FakeMetadataStore:
+    name = "fake-metadata"
+
+    def __init__(self) -> None:
+        self.records: dict[str, EventRecord] = {}
+        self.enrichment_count = 0
+
+    async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
+        return self.records.get(idempotency_key)
+
+    async def save_event(
+        self,
+        event: CaptureEvent,
+        *,
+        raw_artifact: ArtifactRef | None,
+        normalized_artifact: ArtifactRef | None,
+    ) -> EventRecord:
+        record = EventRecord(
+            event_id=event.id,
+            idempotency_key=event.idempotency_key,
+            status="persisted",
+            raw_artifact=raw_artifact,
+            normalized_artifact=normalized_artifact,
+        )
+        self.records[event.idempotency_key] = record
+        return record
+
+    async def save_enrichment(
         self,
         event: CaptureEvent,
         result: EnrichmentResult,
-    ) -> PersistenceResult:
-        del event, result
-        self.enriched_count += 1
-        return PersistenceResult(status="committed", record_id="enriched_1")
+        artifact: ArtifactRef,
+    ) -> EventRecord:
+        del result, artifact
+        self.enrichment_count += 1
+        record = EventRecord(
+            event_id=event.id,
+            idempotency_key=event.idempotency_key,
+            status="enriched",
+        )
+        self.records[event.idempotency_key] = record
+        return record
 
-    async def commit_checkpoint(self, checkpoint: Checkpoint) -> None:
-        del checkpoint
 
-
-def test_pipeline_runs_adapter_ai_and_persistence() -> None:
-    persistence = FakePersistence()
+def test_pipeline_runs_adapter_ai_and_stores() -> None:
+    artifact_store = FakeArtifactStore()
+    metadata_store = FakeMetadataStore()
     pipeline = CapturePipeline(
         adapter=FakeAdapter(),
         ai_provider=FakeAIProvider(),
-        persistence=persistence,
+        artifact_store=artifact_store,
+        metadata_store=metadata_store,
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
     processed = asyncio.run(pipeline.run_once())
 
     assert processed == 1
-    assert persistence.raw_count == 1
-    assert persistence.enriched_count == 1
+    expected_artifact_count = 2
+    assert len(artifact_store.artifacts) == expected_artifact_count
+    assert metadata_store.enrichment_count == 1
+
+
+def test_pipeline_skips_already_enriched_event() -> None:
+    artifact_store = FakeArtifactStore()
+    metadata_store = FakeMetadataStore()
+    metadata_store.records["test:evt_1"] = EventRecord(
+        event_id="evt_1",
+        idempotency_key="test:evt_1",
+        status="enriched",
+    )
+    pipeline = CapturePipeline(
+        adapter=FakeAdapter(),
+        ai_provider=FakeAIProvider(),
+        artifact_store=artifact_store,
+        metadata_store=metadata_store,
+        enrichment_tasks=[SummarizeTask(max_tokens=100)],
+    )
+
+    processed = asyncio.run(pipeline.run_once())
+
+    assert processed == 0
+    assert artifact_store.artifacts == {}
 
 
 def test_fake_implementations_match_ports() -> None:
     adapter_name = FakeAdapter().name
     ai_provider: AIProvider = FakeAIProvider()
-    persistence: Persistence = FakePersistence()
+    artifact_store: ArtifactStore = FakeArtifactStore()
+    metadata_store: MetadataStore = FakeMetadataStore()
 
     assert adapter_name == "fake"
     assert ai_provider.name == "fake-ai"
-    assert persistence.name == "fake-store"
+    assert artifact_store.name == "fake-artifacts"
+    assert metadata_store.name == "fake-metadata"

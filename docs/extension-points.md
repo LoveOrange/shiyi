@@ -48,18 +48,12 @@ Responsibilities:
 
 - Enforce idempotency keys and optimistic concurrency where possible.
 - Track event status, fingerprints, artifact references, enrichment references, failures, and retry counts.
-- Support lightweight local storage first, such as JSONL or SQLite.
+- Use SQLite as the MVP default implementation.
 - Allow future implementations backed by Postgres, document databases, or other stores.
 
-## Checkpoint Store
+## Checkpointing
 
-Checkpoint Store implementations track adapter cursors.
-
-Responsibilities:
-
-- Store checkpoints only after successful processing according to adapter semantics.
-- Avoid advancing cursors past required failed events.
-- Make checkpoint commit failure explicit and observable.
+A dedicated Checkpoint Store is deferred for the MVP. Scheduled capture runs should rely on idempotency and metadata status to skip completed records and retry incomplete work.
 
 ## Contract testing
 
