@@ -35,7 +35,7 @@ flowchart LR
 
 Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
-See [`docs/architecture.md`](docs/architecture.md) and [`docs/extension-points.md`](docs/extension-points.md) for the current design.
+See [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), and [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md) for the current design.
 
 ## Repository layout
 

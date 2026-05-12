@@ -1,6 +1,6 @@
 # Extension Points
 
-Shiyi is designed so users can customize three major extension points without changing core.
+Shiyi is designed so users can customize major extension points without changing core.
 
 ## Adapter
 
@@ -29,18 +29,37 @@ Responsibilities:
 
 AI Providers should not persist final records directly.
 
-## Persistence
+## Artifact Store
 
-Persistence implementations store Shiyi data in user-selected backends.
+Artifact Store implementations store raw and generated content such as HTML, markdown, extracted text, attachments, screenshots, and AI response JSON.
 
 Responsibilities:
 
-- Store raw capture events and enriched records.
-- Enforce idempotency keys and optimistic concurrency where possible.
-- Store checkpoints only after successful pipeline processing.
-- Preserve provenance and audit trail.
+- Store artifacts durably.
+- Return stable artifact references.
+- Preserve media type, size, checksum, and creation time.
+- Support local filesystem storage as the MVP default.
 
-Persistence should make failure semantics clear: committed, rejected, conflict, or unknown.
+## Metadata Store
+
+Metadata Store implementations track pipeline control data and artifact references.
+
+Responsibilities:
+
+- Enforce idempotency keys and optimistic concurrency where possible.
+- Track event status, fingerprints, artifact references, enrichment references, failures, and retry counts.
+- Support lightweight local storage first, such as JSONL or SQLite.
+- Allow future implementations backed by Postgres, document databases, or other stores.
+
+## Checkpoint Store
+
+Checkpoint Store implementations track adapter cursors.
+
+Responsibilities:
+
+- Store checkpoints only after successful processing according to adapter semantics.
+- Avoid advancing cursors past required failed events.
+- Make checkpoint commit failure explicit and observable.
 
 ## Contract testing
 
