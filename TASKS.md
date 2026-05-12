@@ -5,8 +5,8 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 ## Status summary
 
 - Current state: Anthropic and OpenAI capture both run locally end-to-end.
-- MVP completion estimate: ~82%.
-- Biggest remaining gap: adapter robustness and final MVP release definition, not core pipeline feasibility.
+- MVP completion estimate: 100% for local MVP.
+- Biggest remaining gap: post-MVP provider integrations and robustness hardening.
 
 ## Milestone 1 — Local storage foundation
 
@@ -30,7 +30,7 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 - [x] Implement Anthropic blog adapter. (news index parser)
 - [x] Implement OpenAI blog adapter. (RSS-based)
 - [x] Add adapter contract tests with recorded/minimal fixtures.
-- [ ] Add source-level smoke tests that assert current public source pages still parse enough items.
+- [x] Add source-level smoke tests that assert current public source pages still parse enough items. (opt-in live tests)
 
 ## Milestone 4 — End-to-end run
 
@@ -45,10 +45,11 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 - [x] Add CLI tests for `capture --source openai|anthropic`.
 - [x] Improve CLI output: JSON summary with processed/events/enrichments/artifacts counts.
 - [x] Add metadata query/list command or documented SQLite inspection snippet. (README SQLite snippet)
+- [x] Add metadata listing CLI.
 - [x] Add source configuration docs: source name, URL, adapter type, limit, workspace. (README quickstart + built-in sources)
-- [ ] Add minimal real AI provider design spec before implementing provider integrations.
-- [ ] Decide whether MVP includes a real LLM provider or ships with local heuristic enrichment only.
-- [ ] Add release notes / MVP definition in docs.
+- [x] Add minimal real AI provider design spec before implementing provider integrations.
+- [x] Decide whether MVP includes a real LLM provider or ships with local heuristic enrichment only. (MVP ships local heuristic only)
+- [x] Add release notes / MVP definition in docs.
 
 ## Nice-to-have after MVP
 

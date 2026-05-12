@@ -13,7 +13,8 @@ A successful MVP run must:
 5. Store metadata and enrichment references in SQLite.
 6. Produce deterministic CLI summaries.
 7. Skip already-enriched records on re-run using idempotency keys.
-8. Pass local and CI quality gates.
+8. List captured metadata from the CLI.
+9. Pass local and CI quality gates.
 
 ## Included in MVP
 
@@ -26,6 +27,7 @@ A successful MVP run must:
 - Local heuristic enrichment provider.
 - One-shot CLI capture command.
 - README quickstart.
+- Metadata listing CLI.
 
 ## Not included in MVP
 
@@ -45,6 +47,7 @@ The MVP is ready when these commands work on a clean checkout:
 uv sync
 uv run shiyi capture --source openai --workspace .shiyi/openai --limit 2
 uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --limit 2
+uv run shiyi list --workspace .shiyi/openai
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
@@ -52,3 +55,13 @@ uv run pytest
 ```
 
 A second capture run for the same source and workspace should report `"processed": 0`.
+
+## Live source smoke tests
+
+Public-source smoke tests are opt-in so normal CI remains deterministic:
+
+```bash
+SHIYI_RUN_LIVE_TESTS=1 uv run pytest tests/live/test_public_sources.py
+```
+
+These tests verify that the current Anthropic news index still exposes article links and that the OpenAI RSS feed is reachable.

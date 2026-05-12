@@ -73,7 +73,13 @@ The CLI prints a JSON summary:
 
 A second run over the same source should return `"processed": 0` for already-enriched records. This is the MVP idempotency behavior.
 
-Inspect metadata directly with SQLite:
+List captured events with the CLI:
+
+```bash
+uv run shiyi list --workspace .shiyi/openai
+```
+
+Or inspect metadata directly with SQLite:
 
 ```bash
 sqlite3 .shiyi/openai/metadata.sqlite \
@@ -92,6 +98,14 @@ Current built-in sources:
 
 - `openai` — OpenAI news RSS feed.
 - `anthropic` — Anthropic news index parser.
+
+## Live smoke tests
+
+Network-dependent public-source smoke tests are opt-in:
+
+```bash
+SHIYI_RUN_LIVE_TESTS=1 uv run pytest tests/live/test_public_sources.py
+```
 
 ## Development
 

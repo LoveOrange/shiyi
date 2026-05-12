@@ -8,9 +8,9 @@ import json
 import sqlite3
 import sys
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from shiyi.adapters.anthropic import anthropic_news_adapter
 from shiyi.adapters.rss import openai_news_adapter
@@ -41,6 +41,18 @@ class CaptureSummary:
     enriched_events: int
     enrichments: int
     artifacts: int
+
+
+@dataclass(frozen=True, slots=True)
+class EventSummary:
+    """Compact metadata summary for one captured event."""
+
+    event_id: str
+    idempotency_key: str
+    status: str
+    updated_at: str
+    has_raw_artifact: bool
+    has_normalized_artifact: bool
 
 
 class LocalHeuristicAIProvider:
@@ -78,6 +90,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             run_capture(source=args.source, workspace=args.workspace, limit=args.limit)
         )
         sys.stdout.write(_format_summary(summary))
+    elif args.command == "list":
+        events = list_events(workspace=args.workspace, limit=args.limit)
+        sys.stdout.write(_format_json(events))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -87,6 +102,10 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--source", choices=["openai", "anthropic"], required=True)
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     capture.add_argument("--limit", type=int, default=5)
+
+    list_events = subcommands.add_parser("list", help="List captured event metadata")
+    list_events.add_argument("--workspace", type=Path, default=Path(".shiyi"))
+    list_events.add_argument("--limit", type=int, default=20)
     return parser
 
 
@@ -146,9 +165,53 @@ def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> 
     )
 
 
+def list_events(*, workspace: Path, limit: int) -> list[EventSummary]:
+    """List captured event metadata from a workspace."""
+    metadata_path = workspace / "metadata.sqlite"
+    if not metadata_path.exists():
+        return []
+    with sqlite3.connect(metadata_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            """
+            SELECT event_id, idempotency_key, status, raw_artifact_json,
+                   normalized_artifact_json, updated_at
+            FROM events
+            ORDER BY updated_at DESC, event_id ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        EventSummary(
+            event_id=str(row["event_id"]),
+            idempotency_key=str(row["idempotency_key"]),
+            status=str(row["status"]),
+            updated_at=str(row["updated_at"]),
+            has_raw_artifact=row["raw_artifact_json"] is not None,
+            has_normalized_artifact=row["normalized_artifact_json"] is not None,
+        )
+        for row in rows
+    ]
+
+
 def _format_summary(summary: CaptureSummary) -> str:
-    payload = json.dumps(asdict(summary), ensure_ascii=False, sort_keys=True)
-    return f"{payload}\n"
+    return _format_json(summary)
+
+
+def _format_json(payload: object) -> str:
+    data: Any
+    if isinstance(payload, list):
+        data = [_jsonable(item) for item in payload]
+    else:
+        data = _jsonable(payload)
+    return f"{json.dumps(data, ensure_ascii=False, sort_keys=True)}\n"
+
+
+def _jsonable(value: object) -> object:
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(cast(Any, value))
+    return value
 
 
 def _infer_tags(title: str) -> list[str]:

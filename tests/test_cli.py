@@ -5,7 +5,14 @@ from pathlib import Path
 from _pytest.capture import CaptureFixture
 from _pytest.monkeypatch import MonkeyPatch
 
-from shiyi.cli import CaptureSummary, SourceName, _capture_summary, _format_summary, main
+from shiyi.cli import (
+    CaptureSummary,
+    SourceName,
+    _capture_summary,
+    _format_summary,
+    list_events,
+    main,
+)
 
 
 def test_format_summary_outputs_json_line() -> None:
@@ -86,3 +93,60 @@ def test_main_capture_prints_summary(
     payload = json.loads(capsys.readouterr().out)
     assert payload["processed"] == 1
     assert payload["artifacts"] == expected_artifacts
+
+
+def test_list_events_reads_sqlite_rows(tmp_path: Path) -> None:
+    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+        connection.executescript(
+            """
+            CREATE TABLE events (
+              event_id TEXT NOT NULL,
+              idempotency_key TEXT NOT NULL,
+              status TEXT NOT NULL,
+              raw_artifact_json TEXT,
+              normalized_artifact_json TEXT,
+              updated_at TEXT NOT NULL
+            );
+            INSERT INTO events (
+              event_id, idempotency_key, status, raw_artifact_json,
+              normalized_artifact_json, updated_at
+            ) VALUES (
+              'evt_1', 'source:evt_1', 'enriched', '{}', '{}', '2026-05-12T00:00:00Z'
+            );
+            """
+        )
+
+    events = list_events(workspace=tmp_path, limit=10)
+
+    assert len(events) == 1
+    assert events[0].event_id == "evt_1"
+    assert events[0].has_raw_artifact
+    assert events[0].has_normalized_artifact
+
+
+def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path: Path) -> None:
+    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+        connection.executescript(
+            """
+            CREATE TABLE events (
+              event_id TEXT NOT NULL,
+              idempotency_key TEXT NOT NULL,
+              status TEXT NOT NULL,
+              raw_artifact_json TEXT,
+              normalized_artifact_json TEXT,
+              updated_at TEXT NOT NULL
+            );
+            INSERT INTO events (
+              event_id, idempotency_key, status, raw_artifact_json,
+              normalized_artifact_json, updated_at
+            ) VALUES (
+              'evt_1', 'source:evt_1', 'enriched', '{}', NULL, '2026-05-12T00:00:00Z'
+            );
+            """
+        )
+
+    main(["list", "--workspace", str(tmp_path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["event_id"] == "evt_1"
+    assert payload[0]["has_normalized_artifact"] is False
