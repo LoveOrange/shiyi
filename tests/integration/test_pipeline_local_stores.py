@@ -17,7 +17,7 @@ from shiyi import (
 from shiyi.domain.models import EnrichmentTask
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.stores.filesystem import FileSystemArtifactStore
-from shiyi.stores.sqlite import SQLiteMetadataStore
+from shiyi.stores.sqlite import SQLiteEventRecordStore
 
 
 class SingleEventAdapter:
@@ -52,12 +52,12 @@ class FakeAIProvider:
 
 def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path: Path) -> None:
     artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
-    metadata = SQLiteMetadataStore(tmp_path / "metadata.sqlite")
+    metadata = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
     pipeline = CapturePipeline(
         adapter=SingleEventAdapter(),
         ai_provider=FakeAIProvider(),
         artifact_store=artifacts,
-        metadata_store=metadata,
+        event_record_store=metadata,
         normalizer=HtmlMarkdownNormalizer(),
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
@@ -65,7 +65,7 @@ def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path:
     processed = asyncio.run(pipeline.run_once())
 
     assert processed == 1
-    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
         event_count = connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         enrichment_count = connection.execute("SELECT COUNT(*) FROM enrichments").fetchone()[0]
         row = connection.execute(

@@ -40,9 +40,9 @@ Responsibilities:
 - Preserve media type, size, checksum, and creation time.
 - Support local filesystem storage as the MVP default.
 
-## Metadata Store
+## Event Record Store
 
-Metadata Store implementations track pipeline control data and artifact references.
+Event Record Store implementations track pipeline control data and artifact references.
 
 Responsibilities:
 
@@ -53,7 +53,7 @@ Responsibilities:
 
 ## Checkpointing
 
-A dedicated Checkpoint Store is deferred for the MVP. Scheduled capture runs should rely on idempotency and metadata status to skip completed records and retry incomplete work.
+A dedicated Checkpoint Store is deferred for the MVP. Scheduled capture runs should rely on idempotency and event record status to skip completed records and retry incomplete work.
 
 ## Contract testing
 

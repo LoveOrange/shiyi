@@ -25,7 +25,7 @@ The fetcher layer is intentionally not a crawler framework, scheduler, semantic 
 1. **Simple first** — avoid candidate/discovery frameworks until the main flow proves they are needed.
 2. **Adapter owns source semantics** — the adapter decides which entry metadata identifies a raw item.
 3. **Fetcher owns transport mechanics** — the fetcher uses `source + raw_key` only as a filesystem cache path.
-4. **Pipeline owns processing state** — normalization, artifact persistence, metadata status, and enrichment remain pipeline concerns.
+4. **Pipeline owns processing state** — normalization, artifact persistence, event record status, and enrichment remain pipeline concerns.
 5. **Event-level raw only for now** — source-level snapshots such as full RSS XML/index HTML are not part of this design.
 
 ## 3. Main flow
@@ -38,7 +38,7 @@ Fetcher fetches lightweight listing/index/feed
    -> cache hit: read local raw.html, skip remote full fetch
    -> cache miss: fetch remote full content, save raw.html
 -> Adapter emits CaptureEvent with event-level raw payload
--> Pipeline persists raw artifact, normalizes, persists metadata, enriches
+-> Pipeline persists raw artifact, normalizes, persists event records, enriches
 ```
 
 For feeds where the entry already contains enough event-level raw content, the adapter may emit a `CaptureEvent` directly without a second full-page fetch.
@@ -62,18 +62,18 @@ For feeds where the entry already contains enough event-level raw content, the a
 
 ### Pipeline responsibilities
 
-- Check processing idempotency through metadata store.
+- Check processing idempotency through event record store.
 - Persist raw artifacts from `CaptureEvent.payload`.
 - Normalize content.
-- Persist normalized artifacts and metadata.
+- Persist normalized artifacts and event records.
 - Run enrichment.
-- Persist enrichment artifacts and metadata.
+- Persist enrichment artifacts and event records.
 
 ## 5. Explicit non-goals
 
 The fetcher layer must not:
 
-- Query SQLite metadata.
+- Query SQLite event records.
 - Decide whether an event is normalized or enriched.
 - Know about normalized Markdown, semantic input, model versions, tags, summaries, or enrichment outputs.
 - Compute semantic fingerprints.
@@ -226,7 +226,7 @@ Rate limiting remains simple for v0.2. A richer token-bucket policy can be added
 
 - Sitemap/XML parsing must use `defusedxml` or another safe XML parser.
 - Cache paths must be derived from adapter-provided hash-like keys, not arbitrary URLs.
-- Cache hits should not bypass pipeline metadata checks.
+- Cache hits should not bypass pipeline event records checks.
 - Listing/feed fetches should not be cached as event-level raw unless an adapter explicitly treats them as an event item.
 
 ## 12. Test requirements

@@ -1,4 +1,4 @@
-"""SQLite-backed metadata store."""
+"""SQLite-backed event record store."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from pathlib import Path
 from shiyi.domain.models import ArtifactRef, CaptureEvent, EnrichmentResult, EventRecord
 
 
-class SQLiteMetadataStore:
-    """Stores event metadata and enrichment references in SQLite."""
+class SQLiteEventRecordStore:
+    """Stores event processing records and enrichment references in SQLite."""
 
-    name = "sqlite-metadata-store"
+    name = "sqlite-event-record-store"
 
     def __init__(self, path: Path) -> None:
-        """Create a metadata store backed by a SQLite database path."""
+        """Create an event record store backed by a SQLite database path."""
         self._path = path
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
@@ -43,7 +43,7 @@ class SQLiteMetadataStore:
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
     ) -> EventRecord:
-        """Create or update event metadata."""
+        """Create or update an event processing record."""
         now = _utc_now()
         raw_json = raw_artifact.model_dump_json() if raw_artifact else None
         normalized_json = normalized_artifact.model_dump_json() if normalized_artifact else None

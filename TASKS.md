@@ -13,8 +13,8 @@ Target: ship and evolve a usable local information-capture pipeline for Anthropi
 
 - [x] Define local storage contracts in code and docs.
 - [x] Implement `FileSystemArtifactStore`.
-- [x] Implement `SQLiteMetadataStore`.
-- [x] Add contract tests for artifact and metadata stores.
+- [x] Implement `SQLiteEventRecordStore`.
+- [x] Add contract tests for artifact and event record stores.
 - [x] Update pipeline tests to use real local stores.
 
 ## Milestone 2 — Article capture foundation
@@ -38,15 +38,15 @@ Target: ship and evolve a usable local information-capture pipeline for Anthropi
 - [x] Add CLI or script for one-shot capture run.
 - [x] Run Anthropic adapter into local `.shiyi/` workspace.
 - [x] Run OpenAI adapter into local `.shiyi/` workspace.
-- [x] Verify raw artifacts, normalized artifacts, metadata rows, and idempotent re-run behavior.
+- [x] Verify raw artifacts, normalized artifacts, event record rows, and idempotent re-run behavior.
 
 ## Milestone 5 — MVP closing work
 
 - [x] Add README quickstart for `uv run shiyi capture`.
 - [x] Add CLI tests for `capture --source openai|anthropic`.
 - [x] Improve CLI output: JSON summary with processed/events/enrichments/artifacts counts.
-- [x] Add metadata query/list command or documented SQLite inspection snippet. (README SQLite snippet)
-- [x] Add metadata listing CLI.
+- [x] Add event record query/list command or documented SQLite inspection snippet. (README SQLite snippet)
+- [x] Add event record listing CLI.
 - [x] Add source configuration docs: source name, URL, adapter type, limit, workspace. (README quickstart + built-in sources)
 - [x] Add minimal real AI provider design spec before implementing provider integrations.
 - [x] Decide whether MVP includes a real LLM provider or ships with local heuristic enrichment only. (MVP ships local heuristic only)
@@ -106,7 +106,7 @@ Goal: reduce breakage from public website structure changes.
 Goal: expand capabilities after capture semantics are stable.
 
 - [ ] Implement real AI provider v1 after provider config is reviewed.
-- [ ] Add JSONL export for metadata/debugging.
+- [ ] Add JSONL export for event records/debugging.
 - [ ] Sync tasks to Notion PARA/Product Tasks DB once DB/project mapping is confirmed.
 - [ ] Add stronger article extraction quality tests.
 
@@ -114,7 +114,7 @@ Goal: expand capabilities after capture semantics are stable.
 
 - Metadata default: SQLite.
 - Artifact default: filesystem.
-- Checkpointing: deferred; scheduled capture re-runs use idempotency and metadata status.
+- Checkpointing: deferred; scheduled capture re-runs use idempotency and event record status.
 - Daily capture should use date windows, not item count limits.
 - Daily jobs should use a 2-3 day overlap window and rely on idempotency.
 - Classification: multi-label tags, not single exclusive category.

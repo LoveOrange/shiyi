@@ -1,4 +1,4 @@
-"""Metadata store extension port."""
+"""Event record store extension port."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from typing import Protocol
 from shiyi.domain.models import ArtifactRef, CaptureEvent, EnrichmentResult, EventRecord
 
 
-class MetadataStore(Protocol):
+class EventRecordStore(Protocol):
     """Tracks event status, idempotency, and artifact references."""
 
     @property
     def name(self) -> str:
-        """Stable metadata store implementation name."""
+        """Stable event record store implementation name."""
         ...
 
     async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
@@ -26,7 +26,7 @@ class MetadataStore(Protocol):
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
     ) -> EventRecord:
-        """Create or update event metadata."""
+        """Create or update an event processing record."""
         ...
 
     async def save_enrichment(

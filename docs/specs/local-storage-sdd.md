@@ -2,11 +2,11 @@
 
 - Status: Draft
 - Last updated: 2026-05-12
-- Scope: MVP filesystem artifact store and SQLite metadata store
+- Scope: MVP filesystem artifact store and SQLite event record store
 
 ## 1. Purpose
 
-The MVP local storage implementation must support deterministic local capture runs without requiring external services. Artifacts are stored as files. Pipeline metadata is stored in SQLite.
+The MVP local storage implementation must support deterministic local capture runs without requiring external services. Artifacts are stored as files. Pipeline event records are stored in SQLite.
 
 ## 2. Filesystem Artifact Store
 
@@ -31,7 +31,7 @@ The MVP local storage implementation must support deterministic local capture ru
         └── <sha256-prefix>/<sha256>
 ```
 
-## 3. SQLite Metadata Store
+## 3. SQLite Event Record Store
 
 ### Responsibilities
 

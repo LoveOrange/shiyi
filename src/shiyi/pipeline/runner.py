@@ -8,7 +8,7 @@ from shiyi.domain.models import ArtifactWrite, CaptureEvent, EnrichmentTask
 from shiyi.ports.adapter import Adapter
 from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
-from shiyi.ports.metadata_store import MetadataStore
+from shiyi.ports.event_record_store import EventRecordStore
 from shiyi.ports.normalizer import Normalizer
 
 
@@ -22,7 +22,7 @@ class CapturePipeline:
         adapter: Adapter,
         ai_provider: AIProvider,
         artifact_store: ArtifactStore,
-        metadata_store: MetadataStore,
+        event_record_store: EventRecordStore,
         enrichment_tasks: Sequence[EnrichmentTask],
         normalizer: Normalizer | None = None,
     ) -> None:
@@ -30,7 +30,7 @@ class CapturePipeline:
         self._adapter = adapter
         self._ai_provider = ai_provider
         self._artifact_store = artifact_store
-        self._metadata_store = metadata_store
+        self._event_record_store = event_record_store
         self._enrichment_tasks = tuple(enrichment_tasks)
         self._normalizer = normalizer
 
@@ -38,7 +38,7 @@ class CapturePipeline:
         """Process discovered events once and return the number of events handled."""
         processed = 0
         async for event in self._adapter.discover():
-            existing = await self._metadata_store.find_by_idempotency_key(event.idempotency_key)
+            existing = await self._event_record_store.find_by_idempotency_key(event.idempotency_key)
             if existing is not None and existing.status == "enriched":
                 continue
 
@@ -49,7 +49,7 @@ class CapturePipeline:
                 if normalized_write is not None:
                     normalized_artifact = await self._artifact_store.put(normalized_write)
 
-            await self._metadata_store.save_event(
+            await self._event_record_store.save_event(
                 event,
                 raw_artifact=raw_artifact,
                 normalized_artifact=normalized_artifact,
@@ -65,7 +65,9 @@ class CapturePipeline:
                         suggested_name=f"{event.id}-{task.type}.json",
                     )
                 )
-                await self._metadata_store.save_enrichment(event, enrichment, enrichment_artifact)
+                await self._event_record_store.save_enrichment(
+                    event, enrichment, enrichment_artifact
+                )
 
             processed += 1
         return processed

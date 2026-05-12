@@ -13,8 +13,8 @@ from shiyi import (
     CapturePipeline,
     EnrichmentResult,
     EventRecord,
+    EventRecordStore,
     HtmlPayload,
-    MetadataStore,
     ModelIdentity,
     Provenance,
     SourceIdentity,
@@ -78,8 +78,8 @@ class FakeArtifactStore:
         return ref.uri in self.artifacts
 
 
-class FakeMetadataStore:
-    name = "fake-metadata"
+class FakeEventRecordStore:
+    name = "fake-event-records"
 
     def __init__(self) -> None:
         self.records: dict[str, EventRecord] = {}
@@ -124,12 +124,12 @@ class FakeMetadataStore:
 
 def test_pipeline_runs_adapter_ai_and_stores() -> None:
     artifact_store = FakeArtifactStore()
-    metadata_store = FakeMetadataStore()
+    event_record_store = FakeEventRecordStore()
     pipeline = CapturePipeline(
         adapter=FakeAdapter(),
         ai_provider=FakeAIProvider(),
         artifact_store=artifact_store,
-        metadata_store=metadata_store,
+        event_record_store=event_record_store,
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
@@ -138,13 +138,13 @@ def test_pipeline_runs_adapter_ai_and_stores() -> None:
     assert processed == 1
     expected_artifact_count = 2
     assert len(artifact_store.artifacts) == expected_artifact_count
-    assert metadata_store.enrichment_count == 1
+    assert event_record_store.enrichment_count == 1
 
 
 def test_pipeline_skips_already_enriched_event() -> None:
     artifact_store = FakeArtifactStore()
-    metadata_store = FakeMetadataStore()
-    metadata_store.records["test:evt_1"] = EventRecord(
+    event_record_store = FakeEventRecordStore()
+    event_record_store.records["test:evt_1"] = EventRecord(
         event_id="evt_1",
         idempotency_key="test:evt_1",
         status="enriched",
@@ -153,7 +153,7 @@ def test_pipeline_skips_already_enriched_event() -> None:
         adapter=FakeAdapter(),
         ai_provider=FakeAIProvider(),
         artifact_store=artifact_store,
-        metadata_store=metadata_store,
+        event_record_store=event_record_store,
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
@@ -167,9 +167,9 @@ def test_fake_implementations_match_ports() -> None:
     adapter_name = FakeAdapter().name
     ai_provider: AIProvider = FakeAIProvider()
     artifact_store: ArtifactStore = FakeArtifactStore()
-    metadata_store: MetadataStore = FakeMetadataStore()
+    event_record_store: EventRecordStore = FakeEventRecordStore()
 
     assert adapter_name == "fake"
     assert ai_provider.name == "fake-ai"
     assert artifact_store.name == "fake-artifacts"
-    assert metadata_store.name == "fake-metadata"
+    assert event_record_store.name == "fake-event-records"

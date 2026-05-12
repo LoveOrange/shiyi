@@ -25,7 +25,7 @@ from shiyi.pipeline.runner import CapturePipeline
 from shiyi.ports.adapter import Adapter
 from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
-from shiyi.ports.metadata_store import MetadataStore
+from shiyi.ports.event_record_store import EventRecordStore
 from shiyi.ports.normalizer import Normalizer
 
 __all__ = [
@@ -42,10 +42,10 @@ __all__ = [
     "ClassifyTask",
     "EnrichmentResult",
     "EventRecord",
+    "EventRecordStore",
     "ExtractTask",
     "HtmlMarkdownNormalizer",
     "HtmlPayload",
-    "MetadataStore",
     "ModelIdentity",
     "Normalizer",
     "Provenance",

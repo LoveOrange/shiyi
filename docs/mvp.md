@@ -10,17 +10,17 @@ A successful MVP run must:
 2. Capture Anthropic news content.
 3. Preserve raw source HTML or feed content as filesystem artifacts.
 4. Normalize HTML into Markdown artifacts.
-5. Store metadata and enrichment references in SQLite.
+5. Store event records and enrichment references in SQLite.
 6. Produce deterministic CLI summaries.
 7. Skip already-enriched records on re-run using idempotency keys.
-8. List captured metadata from the CLI.
+8. List captured event records from the CLI.
 9. Pass local and CI quality gates.
 
 ## Included in MVP
 
 - Python package with strict typing and tests.
 - Filesystem artifact store.
-- SQLite metadata store.
+- SQLite event record store.
 - HTML-to-Markdown normalizer.
 - OpenAI RSS adapter.
 - Anthropic news index adapter.

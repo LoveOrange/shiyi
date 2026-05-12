@@ -41,7 +41,7 @@ def test_capture_summary_reads_sqlite_and_artifact_counts(tmp_path: Path) -> Non
     artifacts_root = tmp_path / "artifacts" / "raw" / "ab"
     artifacts_root.mkdir(parents=True)
     (artifacts_root / "abc").write_text("hello")
-    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
         connection.executescript(
             """
             CREATE TABLE events (status TEXT NOT NULL);
@@ -116,7 +116,7 @@ def test_main_capture_prints_summary(
 
 
 def test_list_events_reads_sqlite_rows(tmp_path: Path) -> None:
-    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
         connection.executescript(
             """
             CREATE TABLE events (
@@ -145,7 +145,7 @@ def test_list_events_reads_sqlite_rows(tmp_path: Path) -> None:
 
 
 def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path: Path) -> None:
-    with sqlite3.connect(tmp_path / "metadata.sqlite") as connection:
+    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
         connection.executescript(
             """
             CREATE TABLE events (

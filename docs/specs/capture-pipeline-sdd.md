@@ -3,7 +3,7 @@
 - Status: Draft
 - Owner: Shiyi contributors
 - Last updated: 2026-05-12
-- Scope: MVP capture pipeline, extension contracts, filesystem artifacts, and SQLite metadata
+- Scope: MVP capture pipeline, extension contracts, filesystem artifacts, and SQLite event records
 
 ## 1. Purpose
 
@@ -19,7 +19,7 @@ The MVP must support:
 2. A pipeline runner that validates, deduplicates, enriches, and persists events.
 3. AI provider contracts for structured enrichment.
 4. Filesystem-first artifact persistence for raw and generated documents.
-5. Lightweight SQLite metadata persistence for idempotency, status, and artifact references.
+5. Lightweight SQLite event-record persistence for idempotency, status, and artifact references.
 6. Deterministic local tests for domain validation, pipeline behavior, idempotency, and persistence semantics.
 
 ## 3. Non-goals
@@ -47,9 +47,9 @@ All extension points must be defined as explicit Python protocols plus Pydantic 
 
 Article bodies, raw HTML, markdown, extracted text, attachments, and AI result JSON are artifacts. The default MVP stores artifacts on the filesystem because that is simple, inspectable, backup-friendly, and avoids premature database coupling.
 
-### 4.3 Metadata is separate from artifacts
+### 4.3 Event records are separate from artifacts
 
-Metadata required for pipeline control must not be mixed with artifact blobs. Metadata includes idempotency keys, fingerprints, pipeline run state, processing status, source information, and artifact references.
+Event records required for pipeline control must not be mixed with artifact blobs. Event records include idempotency keys, fingerprints, pipeline run state, processing status, source information, and artifact references.
 
 ### 4.4 AI output is untrusted
 
@@ -61,7 +61,7 @@ Re-running the same adapter over the same source item must not create duplicate 
 
 ### 4.6 Backend neutrality
 
-Core should remain backend-neutral at the contract level, but the MVP default implementation is filesystem artifacts plus SQLite metadata. Postgres, document databases, S3-compatible storage, and other backends remain future implementations behind ports.
+Core should remain backend-neutral at the contract level, but the MVP default implementation is filesystem artifacts plus SQLite event records. Postgres, document databases, S3-compatible storage, and other backends remain future implementations behind ports.
 
 ## 5. Core concepts
 
@@ -94,7 +94,7 @@ For article-like web sources, the event should point to or contain enough inform
 
 ### 5.3 Artifact
 
-An artifact is durable content stored outside the metadata index.
+An artifact is durable content stored outside the event record index.
 
 Examples:
 
@@ -105,11 +105,11 @@ Examples:
 - AI provider raw response.
 - Validated enrichment JSON.
 
-Artifacts are addressed by `artifact_ref`, not embedded into metadata tables/documents once they become large or binary.
+Artifacts are addressed by `artifact_ref`, not embedded into event record tables/documents once they become large or binary.
 
-### 5.4 Metadata record
+### 5.4 EventRecord
 
-A metadata record describes what exists and how the pipeline should operate.
+An event record describes what exists and how the pipeline should operate.
 
 Examples:
 
@@ -143,7 +143,7 @@ flowchart LR
   Dedupe --> AIProvider[AI Provider]
   AIProvider --> Policy[Schema & Policy Check]
   Policy --> ArtifactStore
-  Policy --> MetadataStore[Metadata Store]
+  Policy --> EventRecordStore[Event Record Store]
 ```
 
 ## 7. Extension ports
@@ -211,7 +211,7 @@ class ArtifactStore(Protocol):
     async def exists(self, ref: ArtifactRef) -> bool: ...
 ```
 
-### 7.4 MetadataStore port
+### 7.4 EventRecordStore port
 
 Responsibilities:
 
@@ -227,7 +227,7 @@ SQLite is still lightweight, local-first, and easy to inspect, while providing s
 
 ### 7.5 Checkpointing
 
-Checkpointing is deferred for the MVP. Capture runs are scheduled periodically. If a run fails, the next scheduled run should rediscover source items and rely on idempotency plus metadata status to skip completed work and resume incomplete work.
+Checkpointing is deferred for the MVP. Capture runs are scheduled periodically. If a run fails, the next scheduled run should rediscover source items and rely on idempotency plus event record status to skip completed work and resume incomplete work.
 
 A dedicated `CheckpointStore` may be introduced later for adapters that need cursor-based incremental sync.
 
@@ -245,10 +245,10 @@ The default filesystem-backed project workspace should use a deterministic layou
 │   └── enrichment/
 ├── normalized/
 │   └── markdown/
-└── metadata.sqlite
+└── event-records.sqlite
 ```
 
-This layout is intentionally simple and inspectable. Artifacts remain plain files; metadata lives in a local SQLite database for reliable idempotency and status updates.
+This layout is intentionally simple and inspectable. Artifacts remain plain files; event records live in a local SQLite database for reliable idempotency and status updates.
 
 ### 8.2 Future storage implementations
 
@@ -256,10 +256,10 @@ Future persistence packages can provide:
 
 - Filesystem artifact store.
 - S3-compatible artifact store.
-- SQLite metadata store.
+- SQLite event record store.
 - JSONL export/import for debugging and portability.
-- Postgres metadata store.
-- MongoDB/document metadata store.
+- Postgres event record store.
+- MongoDB/document event record store.
 - Search index store.
 - Vector index store.
 
@@ -267,7 +267,7 @@ Core must not require any of them.
 
 ### 8.3 Document database position
 
-Document databases are appropriate for flexible extracted article records and nested metadata. They should be supported as a `MetadataStore` implementation, not assumed by core.
+Document databases are appropriate for flexible extracted article records and nested metadata. They should be supported as a `EventRecordStore` implementation, not assumed by core.
 
 For MVP, a document database is probably heavier than needed unless the first real use case requires remote sync, concurrent writers, or flexible querying immediately.
 
@@ -281,12 +281,12 @@ For each event emitted by an adapter:
 2. Persist raw artifact when available, such as original HTML.
 3. Normalize web/article content into canonical Markdown or text artifact.
 4. Compute or verify content fingerprint from the canonical artifact.
-5. Check idempotency key in SQLite metadata store.
-6. Create or update metadata record as `persisted`.
+5. Check idempotency key in SQLite event record store.
+6. Create or update event record as `persisted`.
 7. Run configured enrichment tasks, including extraction, summarization, and multi-label classification/tagging.
 8. Validate AI output.
 9. Persist enrichment artifacts.
-10. Update metadata record as `enriched` or `partially_enriched`.
+10. Update event record as `enriched` or `partially_enriched`.
 11. Emit structured logs and metrics.
 
 ### 9.2 Duplicate event
@@ -296,7 +296,7 @@ If the idempotency key already exists:
 - The pipeline must not create a duplicate logical record.
 - It may skip processing if the existing record is complete.
 - It may resume missing enrichment if prior processing was incomplete.
-- It must not lose incomplete work; retry behavior is driven by metadata status rather than checkpoints in the MVP.
+- It must not lose incomplete work; retry behavior is driven by event record status rather than checkpoints in the MVP.
 
 ### 9.3 Partial failure
 
@@ -304,7 +304,7 @@ If raw artifact persistence succeeds but enrichment fails:
 
 - Metadata status becomes `failed` or `partially_enriched`.
 - Failure reason and retry count are recorded.
-- The next scheduled capture run should rediscover the item and resume or retry based on idempotency key and metadata status.
+- The next scheduled capture run should rediscover the item and resume or retry based on idempotency key and event record status.
 
 ### 9.4 AI validation failure
 
@@ -338,7 +338,7 @@ Fingerprints support:
 
 ### 10.3 Versioning
 
-If the same idempotency key appears with a different fingerprint, the metadata store must represent this as either:
+If the same idempotency key appears with a different fingerprint, the event record store must represent this as either:
 
 - A new version of the same logical item, or
 - A conflict requiring policy decision.
@@ -356,7 +356,7 @@ Initial error categories:
 - `ValidationError`: AI output or event validation failure.
 - `PolicyViolationError`: output rejected by configured policy.
 - `ArtifactStoreError`: artifact read/write failure.
-- `MetadataStoreError`: metadata read/write failure.
+- `EventRecordStoreError`: event-record read/write failure.
 - `FatalIntegrationError`: integration cannot safely continue.
 
 Errors must be observable and typed. Hidden retries are not allowed.
@@ -405,7 +405,7 @@ Each extension port should eventually have shared tests:
 - Adapter contract tests.
 - AI provider contract tests.
 - Artifact store contract tests.
-- Metadata store contract tests.
+- Event record store contract tests.
 
 Third-party implementations should be able to run these tests.
 
@@ -434,13 +434,13 @@ The first implementation should prefer stable source indexes such as RSS feeds o
 ### Phase 1: Refine contracts
 
 - Add `ArtifactRef`, `ArtifactWrite`, `ArtifactRead` domain models.
-- Split current `Persistence` into `ArtifactStore` and `MetadataStore`.
+- Split current `Persistence` into `ArtifactStore` and `EventRecordStore`.
 - Keep an aggregate convenience implementation only if it does not hide semantics.
 
 ### Phase 2: Filesystem-first persistence
 
 - Implement local filesystem artifact store.
-- Implement SQLite metadata store.
+- Implement SQLite event record store.
 - Add JSONL export later if useful for debugging.
 - Add contract tests for all stores.
 

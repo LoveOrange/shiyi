@@ -28,7 +28,7 @@ from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline
 from shiyi.stores.filesystem import FileSystemArtifactStore
-from shiyi.stores.sqlite import SQLiteMetadataStore
+from shiyi.stores.sqlite import SQLiteEventRecordStore
 
 SourceName = Literal["openai", "anthropic"]
 DATE_ONLY_LENGTH = 10
@@ -49,7 +49,7 @@ class CaptureSummary:
 
 @dataclass(frozen=True, slots=True)
 class EventSummary:
-    """Compact metadata summary for one captured event."""
+    """Compact processing-record summary for one captured event."""
 
     event_id: str
     idempotency_key: str
@@ -129,7 +129,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exclusive UTC date/time, e.g. 2026-05-13",
     )
 
-    list_events = subcommands.add_parser("list", help="List captured event metadata")
+    list_events = subcommands.add_parser("list", help="List captured event records")
     list_events.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     list_events.add_argument("--limit", type=int, default=20)
     return parser
@@ -146,7 +146,7 @@ async def run_capture(  # noqa: PLR0913
 ) -> CaptureSummary:
     """Run one local capture for a source and return a summary."""
     workspace.mkdir(parents=True, exist_ok=True)
-    metadata_path = workspace / "metadata.sqlite"
+    metadata_path = workspace / "event-records.sqlite"
     item_cap = max_items if max_items is not None else limit
     window = CaptureWindow(since=since, until=until, max_items=item_cap or 5)
     raw_cache_root = workspace / "data" / "raw"
@@ -162,7 +162,7 @@ async def run_capture(  # noqa: PLR0913
         adapter=adapter,
         ai_provider=LocalHeuristicAIProvider(),
         artifact_store=FileSystemArtifactStore(workspace / "artifacts"),
-        metadata_store=SQLiteMetadataStore(metadata_path),
+        event_record_store=SQLiteEventRecordStore(metadata_path),
         normalizer=HtmlMarkdownNormalizer(),
         enrichment_tasks=[
             SummarizeTask(max_tokens=120),
@@ -174,7 +174,7 @@ async def run_capture(  # noqa: PLR0913
 
 
 def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> CaptureSummary:
-    metadata_path = workspace / "metadata.sqlite"
+    metadata_path = workspace / "event-records.sqlite"
     total_events = 0
     enriched_events = 0
     enrichments = 0
@@ -206,8 +206,8 @@ def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> 
 
 
 def list_events(*, workspace: Path, limit: int) -> list[EventSummary]:
-    """List captured event metadata from a workspace."""
-    metadata_path = workspace / "metadata.sqlite"
+    """List captured event records from a workspace."""
+    metadata_path = workspace / "event-records.sqlite"
     if not metadata_path.exists():
         return []
     with sqlite3.connect(metadata_path) as connection:

@@ -141,7 +141,7 @@ ArtifactKind = Literal["raw", "normalized", "enrichment"]
 
 
 class ArtifactWrite(StrictModel):
-    """Artifact content to persist outside metadata storage."""
+    """Artifact content to persist outside event-record storage."""
 
     kind: ArtifactKind
     media_type: NonEmptyString

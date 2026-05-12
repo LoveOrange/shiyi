@@ -7,14 +7,14 @@ The project is intentionally designed around three extension points:
 - **Fetchers** — retrieve web, RSS, and sitemap source material with shared HTTP policy.
 - **Adapters** — parse source-specific data and normalize raw input into capture events.
 - **AI Providers** — enrich, classify, extract, summarize, and evaluate content with interchangeable model backends.
-- **Artifact and Metadata Stores** — store raw captures, normalized records, generated artifacts, idempotency state, and audit metadata in user-selected backends.
+- **Artifact Stores and Event Record Stores** — store raw captures, normalized records, generated artifacts, idempotency state, and audit metadata in user-selected backends.
 
 > Status: early architecture draft. APIs are not stable yet.
 
 ## Design goals
 
 1. **Composable capture pipeline** — sources, AI enrichment, and storage should evolve independently.
-2. **Open extension model** — users can bring their own Adapter, AI Provider, Artifact Store, or Metadata Store implementation without forking core.
+2. **Open extension model** — users can bring their own Adapter, AI Provider, Artifact Store, or Event Record Store implementation without forking core.
 3. **Production-grade quality** — typed contracts, deterministic tests, observable runtime, clear error semantics, and compatibility discipline.
 4. **Trustworthy data flow** — raw input, transformations, model outputs, and persistence writes should be traceable and auditable.
 5. **Language-first documentation** — English is the primary documentation language until the design stabilizes; other languages will follow later.
@@ -31,9 +31,9 @@ flowchart LR
   AI --> Enriched[Enriched Record]
   Pipeline --> Policy[Policy & Validation]
   Enriched --> ArtifactStore[Artifact Store]
-  Enriched --> MetadataStore[Metadata Store]
+  Enriched --> EventRecordStore[Event Record Store]
   ArtifactStore --> FS[(Filesystem Artifacts)]
-  MetadataStore --> SQLite[(SQLite Metadata)]
+  EventRecordStore --> SQLite[(SQLite Event Records)]
   Pipeline --> Telemetry[Logs / Metrics / Traces]
 ```
 
@@ -59,7 +59,7 @@ See [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`]
 
 ## Quickstart
 
-Run a local capture into filesystem artifacts plus SQLite metadata:
+Run a local capture into filesystem artifacts plus SQLite event records:
 
 ```bash
 uv sync
@@ -92,7 +92,7 @@ uv run shiyi list --workspace .shiyi/openai
 Or inspect metadata directly with SQLite:
 
 ```bash
-sqlite3 .shiyi/openai/metadata.sqlite \
+sqlite3 .shiyi/openai/event-records.sqlite \
   "select event_id, idempotency_key, status from events;"
 ```
 
@@ -110,7 +110,7 @@ Fetcher raw-cache entries for full article pages are stored separately under:
 .shiyi/<source>/data/raw/{source}/{adapter-defined-raw-key}/raw.html
 ```
 
-Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline metadata still controls whether an event is normalized or enriched.
+Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline event records still controls whether an event is normalized or enriched.
 
 Current built-in sources:
 

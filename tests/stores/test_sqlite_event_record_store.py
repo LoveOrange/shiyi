@@ -11,11 +11,11 @@ from shiyi.domain.models import (
     Provenance,
     SourceIdentity,
 )
-from shiyi.stores.sqlite import SQLiteMetadataStore
+from shiyi.stores.sqlite import SQLiteEventRecordStore
 
 
-def test_sqlite_metadata_store_saves_event_and_enrichment(tmp_path: Path) -> None:
-    store = SQLiteMetadataStore(tmp_path / "metadata.sqlite")
+def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) -> None:
+    store = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
     event = _event()
     artifact = _artifact()
 
