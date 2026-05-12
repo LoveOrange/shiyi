@@ -132,14 +132,14 @@ The current pipeline flow is:
 Adapter.discover()
   -> CaptureEvent
   -> find existing EventRecord by idempotency_key
-  -> skip if existing.status == enriched
+  -> count already-complete and skip if existing.status == enriched
   -> convert CaptureEvent.payload to raw ArtifactWrite
   -> ArtifactStore.put(raw)
   -> Normalizer.normalize(event) when configured
   -> ArtifactStore.put(normalized) when normalizer returns content
   -> EventRecordStore.save_event(..., status=persisted)
   -> for each EnrichmentTask:
-       AIProvider.run(task, event)
+       AIProvider.run(task, event)  # MVP temporary input shape
        serialize EnrichmentResult as enrichment ArtifactWrite
        ArtifactStore.put(enrichment)
        EventRecordStore.save_enrichment(..., status=enriched)
@@ -154,7 +154,7 @@ for event in adapter.discover():
   existing = event_record_store.find_by_idempotency_key(event.idempotency_key)
   decision = decide_skip_or_resume(existing)
   if decision == skip:
-    record skipped summary
+    record already_complete/skipped run outcome
     continue
 
   try:
@@ -162,7 +162,8 @@ for event in adapter.discover():
     normalized_ref = normalize_and_persist(event)
     event_record_store.save_event(event, raw_ref, normalized_ref)
     for task in enrichment_tasks:
-      result = ai_provider.run(task, event)
+      canonical_input = load_normalized_or_raw_content(event, normalized_ref, raw_ref)
+      result = ai_provider.run(task, canonical_input)  # target provider contract
       enrichment_ref = persist_enrichment(event, task, result)
       event_record_store.save_enrichment(event, result, enrichment_ref)
   except retryable_error as error:
@@ -251,22 +252,23 @@ Output: `EventRecord`.
 Rules:
 
 - Saving an event record records that the event payload and available normalized artifact have been persisted.
-- MVP status after this stage is `persisted`.
+- MVP status after this stage is `persisted`. `persisted` means raw and optional normalized artifacts are durable and referenced; it does not mean enrichment or semantic processing is complete.
 - This stage must not embed artifact blobs; it stores references.
 - `CaptureEvent.metadata` may be stored in a future schema if needed, but it remains source/event descriptive metadata, not pipeline state.
 
 ### 6.7 Enrichment stage
 
-Input: configured `EnrichmentTask` list and `CaptureEvent`.
+Input: configured `EnrichmentTask` list plus canonical content from the normalized artifact when available.
 
 Output: one `EnrichmentResult` per task.
 
 Rules:
 
 - Enrichment tasks are explicit pipeline configuration.
-- The pipeline calls `AIProvider.run(task, event)` and expects a typed result.
+- Target behavior: enrichment should operate on normalized/canonical content, with the event used only for provenance and source/event descriptive metadata.
+- Current MVP behavior: the provider contract is still `AIProvider.run(task, event)`. This is a temporary compatibility shape, not the long-term semantic target.
 - AI providers must not persist final records directly.
-- The pipeline should eventually prefer normalized artifacts as enrichment input when provider contracts support artifact references; current provider contract receives the event.
+- The pipeline must not let enrichment bypass normalization indefinitely; otherwise normalized artifacts become decorative instead of canonical.
 
 Current MVP tasks: summarize and multi-label classify.
 
@@ -293,11 +295,11 @@ Rules:
 
 - The pipeline should expose enough counts for daily operation: discovered, processed, skipped, duplicate/already-complete, failed, enriched.
 - Current `run_once` returns only processed count. CLI derives additional counts from the local store.
-- P1 should add explicit skipped/duplicate/failure summary fields when pipeline exposes them.
+- P1 should add explicit skipped/already-complete/duplicate/failure summary fields when pipeline exposes them.
 
 ## 7. State model
 
-Allowed domain statuses:
+Allowed persisted `EventRecord.status` values:
 
 ```text
 persisted
@@ -312,16 +314,13 @@ partially_enriched
 
 failed
   processing failed and should be inspected or retried according to retry metadata.
-
-skipped
-  event was intentionally skipped by policy.
 ```
 
 MVP implemented transitions:
 
 ```text
 new -> persisted -> enriched
-existing enriched -> skipped by pipeline without writing a new record
+existing enriched -> already_complete run outcome without writing a new record
 ```
 
 Target near-term transitions:
@@ -332,7 +331,7 @@ new -> failed
 persisted -> partially_enriched
 partially_enriched -> enriched
 failed -> persisted -> enriched
-existing enriched -> skipped summary
+existing enriched -> already_complete/skipped run summary outcome
 ```
 
 Rules:
@@ -340,6 +339,7 @@ Rules:
 - Status transitions belong to `EventRecordStore`; adapters do not set pipeline processing status.
 - Fetch raw cache hits do not imply `persisted` or `enriched`.
 - Event records are the source of truth for pipeline resume behavior in MVP.
+- `skipped` is a run outcome or summary counter, not a persisted event-record status for replaying an already-complete event.
 
 ## 8. Idempotency and replay
 
@@ -375,13 +375,13 @@ Rules:
 
 A source item may change under the same idempotency key.
 
-Target rule:
+Target rule for a later dedicated versioning/fingerprint spec:
 
 - The pipeline should compute a canonical content fingerprint after normalization.
 - If the same idempotency key appears with a different fingerprint, record a version or conflict explicitly.
 - Do not silently overwrite prior artifacts without traceability.
 
-Current status: content fingerprint/version semantics are not implemented yet.
+Current status: content fingerprint/version semantics are not implemented yet and must not affect the v0.2 replay/cache/pipeline main flow.
 
 ## 9. Artifact and event-record boundaries
 
@@ -418,7 +418,7 @@ Current MVP behavior is intentionally simple: unhandled exceptions fail the run.
 Target behavior:
 
 - Raw persistence failure: mark event failed if possible; do not continue to normalization/enrichment.
-- Normalization failure: keep raw artifact, mark failed or persisted-with-error depending on policy.
+- Normalization failure: keep raw artifact, mark failed with the raw artifact reference when possible.
 - Event record write failure: fail fast; do not continue because resume state is unreliable.
 - AI provider failure: preserve already-written raw/normalized artifacts; mark failed or partially enriched.
 - Enrichment artifact failure: do not mark the enrichment task successful.
@@ -460,7 +460,7 @@ Current CLI summary includes:
 - enrichments;
 - artifact count.
 
-P1 should add skipped/duplicates/failure fields after pipeline exposes those outcomes directly.
+P1 should add skipped/already-complete/duplicates/failure fields after pipeline exposes those outcomes directly.
 
 ## 12. Testing requirements
 
@@ -483,7 +483,7 @@ The MVP must keep tests for:
 
 P1 should add tests for:
 
-- skipped/duplicate summary counts;
+- skipped/already-complete/duplicate summary counts;
 - failure status persistence;
 - retry metadata updates;
 - partial enrichment behavior;

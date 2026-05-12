@@ -142,9 +142,9 @@ Fetches a sitemap and exposes URL entries plus optional `lastmod` values. XML pa
 
 The raw cache is a fetcher-level optimization for avoiding repeated full item fetches.
 
-Adapters define `raw_key`. The fetcher does not know or care which metadata fields are used.
+Adapters define `raw_key`. The fetcher does not know, inspect, validate, or care which metadata fields are used. The examples below are adapter strategy examples only; they must never become fetcher-level semantics.
 
-Recommended raw key input examples:
+Possible adapter raw key input examples:
 
 ```text
 source + canonical_url
@@ -152,7 +152,7 @@ source + source_item_id
 source + canonical_url + title + published_or_updated
 ```
 
-The exact choice belongs to each adapter because source metadata stability differs.
+The exact choice belongs to each adapter because source metadata stability differs. Fetcher implementations must treat `raw_key` as an opaque path segment supplied by the adapter.
 
 When `raw_cache_root`, `source`, and `raw_key` are present, `HttpWebFetcher` uses this path:
 

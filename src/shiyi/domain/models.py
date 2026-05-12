@@ -167,11 +167,11 @@ class ArtifactRead(StrictModel):
     content: bytes
 
 
-EventStatus = Literal["persisted", "enriched", "partially_enriched", "failed", "skipped"]
+EventStatus = Literal["persisted", "enriched", "partially_enriched", "failed"]
 
 
 class EventRecord(StrictModel):
-    """Metadata-store record for one logical capture event."""
+    """Processing ledger record for one logical capture event."""
 
     event_id: NonEmptyString
     idempotency_key: NonEmptyString
