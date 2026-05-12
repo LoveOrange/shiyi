@@ -19,8 +19,8 @@ Target: run Anthropic and OpenAI blog adapters by Wednesday, 2026-05-13.
 
 ## Milestone 3 — Blog adapters
 
-- [ ] Investigate Anthropic blog/news source shape: RSS, sitemap, index HTML, article HTML.
-- [ ] Investigate OpenAI blog/news source shape: RSS, sitemap, index HTML, article HTML.
+- [x] Investigate Anthropic blog/news source shape: no official `https://www.anthropic.com/news/rss.xml`; news index HTML is usable, may need source-specific index parser or sitemap check.
+- [x] Investigate OpenAI blog/news source shape: RSS available at `https://openai.com/news/rss.xml`; index HTML also usable.
 - [ ] Implement Anthropic blog adapter.
 - [ ] Implement OpenAI blog adapter.
 - [ ] Add adapter contract tests with recorded/minimal fixtures.
