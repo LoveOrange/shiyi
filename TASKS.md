@@ -1,12 +1,13 @@
-# Shiyi MVP Tasks
+# Shiyi Tasks
 
-Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news content into filesystem artifacts plus SQLite metadata.
+Target: ship and evolve a usable local information-capture pipeline for Anthropic and OpenAI blog/news content.
 
 ## Status summary
 
-- Current state: Anthropic and OpenAI capture both run locally end-to-end.
+- Current state: local MVP is complete for the defined scope.
 - MVP completion estimate: 100% for local MVP.
-- Biggest remaining gap: post-MVP provider integrations and robustness hardening.
+- Next focus: post-MVP architecture hardening for production-like daily capture.
+- Current priority theme: date-window capture and shared fetcher infrastructure.
 
 ## Milestone 1 — Local storage foundation
 
@@ -51,12 +52,61 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 - [x] Decide whether MVP includes a real LLM provider or ships with local heuristic enrichment only. (MVP ships local heuristic only)
 - [x] Add release notes / MVP definition in docs.
 
-## Nice-to-have after MVP
+## Priority plan — Post-MVP v0.2
 
-- [ ] Sync tasks to Notion PARA/Product Tasks DB once DB/project mapping is confirmed.
+### P0 — Capture window semantics
+
+Goal: make daily and backfill capture safe without relying on arbitrary `limit`.
+
+- [ ] Add `CaptureWindow` domain model with `since`, `until`, and optional `max_items`.
+- [ ] Add CLI flags: `--since`, `--until`, `--max-items`.
+- [ ] Keep `--limit` only as a debug/smoke alias or deprecate it in favor of `--max-items`.
+- [ ] Define default daily window behavior: overlap last 2-3 days and rely on idempotency to skip already-enriched items.
+- [ ] Define initial backfill behavior: explicit `--since` plus optional `--max-items` safety cap.
+- [ ] Update OpenAI RSS adapter to filter by feed item `published` / `updated` date.
+- [ ] Update Anthropic adapter to derive dates from article page, sitemap `lastmod`, or index metadata.
+- [ ] Add tests for date-window filtering, inclusive/exclusive boundaries, and idempotent overlap reruns.
+
+### P0 — Shared fetcher infrastructure
+
+Goal: move crawling/fetching concerns below adapters so rate limiting, retry, timeout, and user-agent policy are centralized.
+
+- [ ] Add fetcher SDD: WebFetcher, RSSFetcher, SitemapFetcher, FetchResult, rate-limit policy, retry policy.
+- [ ] Add `ports/fetcher.py` contracts.
+- [ ] Implement `HttpWebFetcher` with shared `httpx.AsyncClient`, timeout, user-agent, and minimal retry.
+- [ ] Implement `RssFetcher` on top of WebFetcher + feed parsing.
+- [ ] Implement `SitemapFetcher` for sitemap URL discovery and `lastmod` extraction.
+- [ ] Move direct `httpx` calls out of OpenAI and Anthropic adapters.
+- [ ] Refactor adapters to do only source-specific parsing, mapping, idempotency keys, and metadata construction.
+- [ ] Add fetcher contract tests and adapter tests using fake fetchers.
+
+### P1 — Daily capture operation
+
+Goal: prepare for scheduled capture without introducing a daemon yet.
+
+- [ ] Add documented daily command examples using `--since` / `--until`.
+- [ ] Add overlap-window recommendation to README and `docs/mvp.md`.
+- [ ] Add CLI summary fields for skipped/duplicates if pipeline exposes them.
+- [ ] Add failure status and retry metadata for fetch or parse failures.
+- [ ] Add one local script/example for daily capture of both sources.
+
+### P1 — Adapter robustness
+
+Goal: reduce breakage from public website structure changes.
+
+- [ ] Add recorded fixtures for representative Anthropic index/article pages.
+- [ ] Add recorded fixtures for representative OpenAI RSS entries.
+- [ ] Add live smoke tests for date extraction where available.
+- [ ] Add parser fallback behavior and explicit parse errors.
+- [ ] Add source-specific notes documenting assumptions and known fragility.
+
+### P2 — Provider and export extensions
+
+Goal: expand capabilities after capture semantics are stable.
+
+- [ ] Implement real AI provider v1 after provider config is reviewed.
 - [ ] Add JSONL export for metadata/debugging.
-- [ ] Add retry policy and richer failure status.
-- [ ] Add pagination/backfill controls for source adapters.
+- [ ] Sync tasks to Notion PARA/Product Tasks DB once DB/project mapping is confirmed.
 - [ ] Add stronger article extraction quality tests.
 
 ## Review decisions
@@ -64,5 +114,8 @@ Target: ship a usable local MVP that captures Anthropic and OpenAI blog/news con
 - Metadata default: SQLite.
 - Artifact default: filesystem.
 - Checkpointing: deferred; scheduled capture re-runs use idempotency and metadata status.
+- Daily capture should use date windows, not item count limits.
+- Daily jobs should use a 2-3 day overlap window and rely on idempotency.
 - Classification: multi-label tags, not single exclusive category.
 - First sources: Anthropic and OpenAI blogs/news.
+- Fetching/crawling belongs in lower-level fetchers; adapters should focus on source-specific parsing and mapping.
