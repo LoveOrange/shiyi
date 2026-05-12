@@ -1,44 +1,241 @@
 # Shiyi Fetcher SDD
 
-- Status: Draft
+- Status: Accepted for v0.2
 - Last updated: 2026-05-12
-- Scope: shared web/RSS/sitemap fetching infrastructure for post-MVP v0.2
+- Scope: shared web/RSS/sitemap fetching infrastructure and event-level raw fetch cache
 
-## Purpose
+## 1. Purpose
 
-Adapters should not own crawling concerns. Fetching, timeout, retry, user-agent, and future rate limiting belong below adapters in shared fetcher infrastructure.
+The fetcher layer provides the minimum reusable crawling capability required by Shiyi's main capture flow.
 
-## Boundaries
+It exists to keep network concerns out of adapters:
 
-- Fetchers retrieve source material and expose typed fetch results.
-- Adapters parse source-specific structure and map fetched data to `CaptureEvent`.
-- Pipeline remains responsible for normalization, artifacts, metadata, enrichment, and idempotency.
+- HTTP client lifecycle
+- timeout
+- redirects
+- retry for transient failures
+- user-agent
+- safe XML parsing for sitemap-like documents
+- simple event-level raw cache for full item fetches
 
-## Ports
+The fetcher layer is intentionally not a crawler framework, scheduler, semantic cache, or pipeline state manager.
 
-- `WebFetcher.fetch(url, source=None, raw_key=None) -> FetchResult`
-- `RssFetcher.fetch(feed_url) -> RssFeed`
-- `SitemapFetcher.fetch(sitemap_url) -> Sitemap`
+## 2. Design principles
 
-## MVP policy
+1. **Simple first** — avoid candidate/discovery frameworks until the main flow proves they are needed.
+2. **Adapter owns source semantics** — the adapter decides which entry metadata identifies a raw item.
+3. **Fetcher owns transport mechanics** — the fetcher uses `source + raw_key` only as a filesystem cache path.
+4. **Pipeline owns processing state** — normalization, artifact persistence, metadata status, and enrichment remain pipeline concerns.
+5. **Event-level raw only for now** — source-level snapshots such as full RSS XML/index HTML are not part of this design.
 
-- Use one shared `httpx.AsyncClient` per default web fetcher instance.
-- Set an explicit user-agent.
-- Set explicit timeout.
-- Use minimal bounded retry for transient HTTP/network failures.
-- Keep rate limiting simple for v0.2; richer token-bucket policy can follow.
+## 3. Main flow
 
+```text
+Fetcher fetches lightweight listing/index/feed
+-> Adapter parses entry-level metadata
+-> Adapter computes raw_key from metadata it trusts
+-> Fetcher fetches full item with source + raw_key
+   -> cache hit: read local raw.html, skip remote full fetch
+   -> cache miss: fetch remote full content, save raw.html
+-> Adapter emits CaptureEvent with event-level raw payload
+-> Pipeline persists raw artifact, normalizes, persists metadata, enriches
+```
 
-## Event-level raw cache
+For feeds where the entry already contains enough event-level raw content, the adapter may emit a `CaptureEvent` directly without a second full-page fetch.
 
-Fetcher-level caching stays deliberately simple. Adapters define an event-level `raw_key` from the entry metadata they trust, such as URL, source item id, title, or published date. The fetcher does not interpret those fields.
+## 4. Boundaries
 
-When both `source` and `raw_key` are supplied, `HttpWebFetcher` stores or reads the full raw response at:
+### Fetcher responsibilities
+
+- Retrieve remote text resources.
+- Parse generic RSS/Atom and sitemap documents into simple fetcher DTOs.
+- Optionally cache full event-level raw content under an adapter-defined key.
+- Return fetch metadata such as URL, status code, content type, fetched time, cache status, and cache path.
+
+### Adapter responsibilities
+
+- Choose which fetcher(s) to call.
+- Parse source-specific structures.
+- Define `raw_key` from entry-level metadata.
+- Construct `CaptureEvent` payloads and source metadata.
+- Apply source-specific date/window filtering.
+
+### Pipeline responsibilities
+
+- Check processing idempotency through metadata store.
+- Persist raw artifacts from `CaptureEvent.payload`.
+- Normalize content.
+- Persist normalized artifacts and metadata.
+- Run enrichment.
+- Persist enrichment artifacts and metadata.
+
+## 5. Explicit non-goals
+
+The fetcher layer must not:
+
+- Query SQLite metadata.
+- Decide whether an event is normalized or enriched.
+- Know about normalized Markdown, semantic input, model versions, tags, summaries, or enrichment outputs.
+- Compute semantic fingerprints.
+- Own source-level snapshot persistence.
+- Replace pipeline idempotency.
+
+## 6. Ports
+
+### `WebFetcher`
+
+```python
+async def fetch(
+    url: str,
+    *,
+    source: str | None = None,
+    raw_key: str | None = None,
+) -> FetchResult
+```
+
+`source` and `raw_key` are optional. When omitted, the fetcher performs a normal remote fetch.
+
+When both are supplied and the fetcher has a `raw_cache_root`, they activate event-level raw caching.
+
+### `RssFetcher`
+
+```python
+async def fetch(feed_url: str) -> RssFeed
+```
+
+Fetches a feed and exposes normalized RSS/Atom entries. It does not apply event-level raw caching by default because the feed is a listing/source document, not a full event raw item.
+
+### `SitemapFetcher`
+
+```python
+async def fetch(sitemap_url: str) -> Sitemap
+```
+
+Fetches a sitemap and exposes URL entries plus optional `lastmod` values. XML parsing must use a safe parser.
+
+## 7. Data contracts
+
+### `FetchResult`
+
+- `url`: final fetched URL
+- `status_code`: HTTP status code or `200` for cache hits
+- `content`: fetched or cached text content
+- `content_type`: response content type when available
+- `fetched_at`: time when fetch/cache read occurred
+- `from_cache`: whether content came from the event-level raw cache
+- `raw_cache_path`: filesystem path used for the cache entry, when applicable
+
+### `RssEntry`
+
+- `entry_id`
+- `title`
+- `link`
+- `html`
+- `published_at`
+
+### `SitemapEntry`
+
+- `loc`
+- `lastmod`
+
+## 8. Event-level raw cache
+
+The raw cache is a fetcher-level optimization for avoiding repeated full item fetches.
+
+Adapters define `raw_key`. The fetcher does not know or care which metadata fields are used.
+
+Recommended raw key input examples:
+
+```text
+source + canonical_url
+source + source_item_id
+source + canonical_url + title + published_or_updated
+```
+
+The exact choice belongs to each adapter because source metadata stability differs.
+
+When `raw_cache_root`, `source`, and `raw_key` are present, `HttpWebFetcher` uses this path:
 
 ```text
 {raw_cache_root}/{source}/{raw_key}/raw.html
 ```
 
-If the file already exists, the fetcher returns that local raw content and skips the remote full-page request. Listing/index/RSS fetches normally omit `raw_key`, so they are not treated as event-level raw cache entries.
+Example:
 
-This cache only avoids repeated full fetches. Pipeline metadata still decides whether normalization and enrichment are complete.
+```text
+.shiyi/anthropic/data/raw/anthropic-news/37cc778a.../raw.html
+```
+
+Cache behavior:
+
+1. If `raw.html` exists, return it with `from_cache=True` and do not call the remote full-item URL.
+2. If it does not exist, fetch the remote URL, write the response body to `raw.html`, and return it with `from_cache=False`.
+3. If `source` or `raw_key` is missing, skip cache handling and fetch normally.
+
+This cache only saves network calls. It does not mean the event has been normalized, persisted, or enriched.
+
+## 9. Current source usage
+
+### Anthropic news
+
+Current flow:
+
+1. Fetch `https://www.anthropic.com/news` as a listing page.
+2. Extract article URLs.
+3. Compute adapter-defined `raw_key` from entry-level metadata.
+4. Fetch each article page through `WebFetcher.fetch(url, source="anthropic-news", raw_key=...)`.
+5. Emit `CaptureEvent` with article HTML as event-level raw payload.
+
+Current raw key:
+
+```text
+sha256("anthropic-news\n{article_url}")
+```
+
+This is intentionally simple. If Anthropic metadata later proves useful for update detection, the Anthropic adapter may change its raw-key definition without changing fetcher behavior.
+
+### OpenAI RSS
+
+Current flow:
+
+1. Fetch `https://openai.com/news/rss.xml` as a feed/listing document.
+2. Parse entries.
+3. Emit `CaptureEvent` from RSS entry content/summary.
+
+OpenAI currently does not use full-page raw cache because the RSS entry already provides event-level raw content for the MVP flow.
+
+## 10. HTTP policy
+
+`HttpWebFetcher` must provide:
+
+- explicit timeout
+- redirects enabled
+- explicit user-agent
+- bounded minimal retry for transient network/HTTP failures
+
+Retryable failures include:
+
+- timeout/transport errors
+- HTTP 408
+- HTTP 429
+- HTTP 500/502/503/504
+
+Rate limiting remains simple for v0.2. A richer token-bucket policy can be added later if source pressure requires it.
+
+## 11. Safety and correctness notes
+
+- Sitemap/XML parsing must use `defusedxml` or another safe XML parser.
+- Cache paths must be derived from adapter-provided hash-like keys, not arbitrary URLs.
+- Cache hits should not bypass pipeline metadata checks.
+- Listing/feed fetches should not be cached as event-level raw unless an adapter explicitly treats them as an event item.
+
+## 12. Test requirements
+
+The fetcher design is covered by:
+
+- Web fetch result test.
+- Raw cache hit/miss test proving the second full fetch skips the remote request.
+- RSS parser test.
+- Sitemap parser test.
+- Adapter tests using fake fetchers.
+- End-to-end capture smoke test proving raw cache files are created and pipeline idempotency still works.
