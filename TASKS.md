@@ -90,6 +90,7 @@ Goal: make pipeline stage boundaries, status transitions, and replay semantics r
 - [x] Clarify ArtifactStore vs EventRecordStore responsibilities.
 - [ ] Review with Lin and revise accepted scope.
 - [x] Apply Kana review: persisted means artifact persistence only; enrichment target is canonical/normalized content; content versioning remains later spec.
+- [x] Apply Kana second review: `save_enrichment` appends refs only; `mark_enriched` runs only after all configured tasks succeed.
 
 ### P1 — Daily capture operation
 
@@ -97,7 +98,7 @@ Goal: prepare for scheduled capture without introducing a daemon yet.
 
 - [x] Add documented daily command examples using `--since` / `--until`.
 - [x] Add overlap-window recommendation to README and `docs/mvp.md`.
-- [ ] Add CLI summary fields for skipped/already-complete/duplicates if pipeline exposes them.
+- [ ] Add CLI summary fields for already_complete/duplicate/skipped if pipeline exposes them.
 - [ ] Add failure status and retry metadata for fetch or parse failures.
 - [ ] Add one local script/example for daily capture of both sources.
 - [x] Add adapter-defined raw-key cache for full-page fetches.

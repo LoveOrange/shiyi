@@ -69,6 +69,9 @@ class CapturePipeline:
                     event, enrichment, enrichment_artifact
                 )
 
+            if self._enrichment_tasks:
+                await self._event_record_store.mark_enriched(event)
+
             processed += 1
         return processed
 

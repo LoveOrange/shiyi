@@ -117,6 +117,7 @@ class EventRecordStore(Protocol):
         result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord: ...
+    async def mark_enriched(self, event: CaptureEvent) -> EventRecord: ...
 
 class AIProvider(Protocol):
     @property
@@ -142,7 +143,8 @@ Adapter.discover()
        AIProvider.run(task, event)  # MVP temporary input shape
        serialize EnrichmentResult as enrichment ArtifactWrite
        ArtifactStore.put(enrichment)
-       EventRecordStore.save_enrichment(..., status=enriched)
+       EventRecordStore.save_enrichment(...)  # append enrichment ref only
+  -> EventRecordStore.mark_enriched(...) after all configured tasks succeed
   -> return processed event count
 ```
 
@@ -166,6 +168,7 @@ for event in adapter.discover():
       result = ai_provider.run(task, canonical_input)  # target provider contract
       enrichment_ref = persist_enrichment(event, task, result)
       event_record_store.save_enrichment(event, result, enrichment_ref)
+    event_record_store.mark_enriched(event)
   except retryable_error as error:
     event_record_store.save_failure(event, error, retryable=True)
   except fatal_error as error:
@@ -281,9 +284,10 @@ Output: enrichment `ArtifactRef` and updated `EventRecord`.
 Rules:
 
 - Enrichment results are serialized as JSON artifacts.
-- The event record store records enrichment references and transitions status.
-- MVP status after successful enrichment save is `enriched`.
-- Future multi-task behavior should distinguish `partially_enriched` from fully `enriched`.
+- `save_enrichment` records the task result reference only; it must not mark the event fully `enriched`.
+- The pipeline calls `mark_enriched` only after every configured enrichment task succeeds.
+- If task 1 succeeds and task 2 fails, the event must not be marked `enriched`; otherwise replay would incorrectly skip an incomplete event.
+- Future task-level status may distinguish `partially_enriched`, but MVP keeps the simpler all-or-nothing event-level completion rule.
 
 ### 6.9 Observe stage
 
@@ -293,9 +297,10 @@ Output: CLI summary, logs, and future metrics/traces.
 
 Rules:
 
-- The pipeline should expose enough counts for daily operation: discovered, processed, skipped, duplicate/already-complete, failed, enriched.
+- The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, enriched.
 - Current `run_once` returns only processed count. CLI derives additional counts from the local store.
-- P1 should add explicit skipped/already-complete/duplicate/failure summary fields when pipeline exposes them.
+- P1 should add explicit outcome fields when pipeline exposes them.
+- Outcome definitions: `already_complete` means an existing event record is `enriched`; `duplicate` means the same idempotency key appeared more than once in a single run; `skipped` means a policy decision intentionally skipped an event.
 
 ## 7. State model
 
@@ -319,7 +324,8 @@ failed
 MVP implemented transitions:
 
 ```text
-new -> persisted -> enriched
+new -> persisted
+persisted -> enriched only after all configured enrichment tasks succeed
 existing enriched -> already_complete run outcome without writing a new record
 ```
 
@@ -328,8 +334,8 @@ Target near-term transitions:
 ```text
 new -> persisted -> enriched
 new -> failed
-persisted -> partially_enriched
-partially_enriched -> enriched
+persisted -> partially_enriched when at least one required task succeeds and another remains missing/failed
+partially_enriched -> enriched only after all required tasks complete
 failed -> persisted -> enriched
 existing enriched -> already_complete/skipped run summary outcome
 ```
@@ -339,6 +345,7 @@ Rules:
 - Status transitions belong to `EventRecordStore`; adapters do not set pipeline processing status.
 - Fetch raw cache hits do not imply `persisted` or `enriched`.
 - Event records are the source of truth for pipeline resume behavior in MVP.
+- `enriched` must mean all configured required enrichment tasks completed successfully, not merely that one enrichment artifact exists.
 - `skipped` is a run outcome or summary counter, not a persisted event-record status for replaying an already-complete event.
 
 ## 8. Idempotency and replay
@@ -460,7 +467,7 @@ Current CLI summary includes:
 - enrichments;
 - artifact count.
 
-P1 should add skipped/already-complete/duplicates/failure fields after pipeline exposes those outcomes directly.
+P1 should add already_complete/duplicate/skipped/failure fields after pipeline exposes those outcomes directly.
 
 ## 12. Testing requirements
 
@@ -483,7 +490,8 @@ The MVP must keep tests for:
 
 P1 should add tests for:
 
-- skipped/already-complete/duplicate summary counts;
+- already_complete/duplicate/skipped summary counts;
+- multi-task enrichment does not mark the event `enriched` until all configured tasks succeed;
 - failure status persistence;
 - retry metadata updates;
 - partial enrichment behavior;
@@ -501,6 +509,7 @@ A pipeline change is acceptable only if:
 4. Replaying the same completed event does not duplicate logical records.
 5. Raw and normalized artifacts are inspectable and referenced by event records.
 6. Enrichment results are persisted as artifacts before being recorded as successful.
+7. `enriched` is written only after every configured required enrichment task succeeds.
 7. Failure behavior is explicit when introduced; no hidden infinite retries.
 8. Tests pass locally and in CI.
 

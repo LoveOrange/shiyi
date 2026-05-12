@@ -11,6 +11,7 @@ from shiyi import (
     ArtifactWrite,
     CaptureEvent,
     CapturePipeline,
+    ClassifyTask,
     EnrichmentResult,
     EventRecord,
     EventRecordStore,
@@ -84,6 +85,7 @@ class FakeEventRecordStore:
     def __init__(self) -> None:
         self.records: dict[str, EventRecord] = {}
         self.enrichment_count = 0
+        self.mark_enriched_count = 0
 
     async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
         return self.records.get(idempotency_key)
@@ -113,10 +115,17 @@ class FakeEventRecordStore:
     ) -> EventRecord:
         del result, artifact
         self.enrichment_count += 1
+        return self.records[event.idempotency_key]
+
+    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+        self.mark_enriched_count += 1
+        existing = self.records[event.idempotency_key]
         record = EventRecord(
             event_id=event.id,
             idempotency_key=event.idempotency_key,
             status="enriched",
+            raw_artifact=existing.raw_artifact,
+            normalized_artifact=existing.normalized_artifact,
         )
         self.records[event.idempotency_key] = record
         return record
@@ -139,6 +148,32 @@ def test_pipeline_runs_adapter_ai_and_stores() -> None:
     expected_artifact_count = 2
     assert len(artifact_store.artifacts) == expected_artifact_count
     assert event_record_store.enrichment_count == 1
+    assert event_record_store.mark_enriched_count == 1
+    assert event_record_store.records["test:evt_1"].status == "enriched"
+
+
+def test_pipeline_marks_enriched_only_after_all_tasks_succeed() -> None:
+    artifact_store = FakeArtifactStore()
+    event_record_store = FakeEventRecordStore()
+    pipeline = CapturePipeline(
+        adapter=FakeAdapter(),
+        ai_provider=FakeAIProvider(),
+        artifact_store=artifact_store,
+        event_record_store=event_record_store,
+        enrichment_tasks=[
+            SummarizeTask(max_tokens=100),
+            ClassifyTask(labels=("research", "product")),
+        ],
+    )
+
+    processed = asyncio.run(pipeline.run_once())
+
+    expected_task_count = 2
+
+    assert processed == 1
+    assert event_record_store.enrichment_count == expected_task_count
+    assert event_record_store.mark_enriched_count == 1
+    assert event_record_store.records["test:evt_1"].status == "enriched"
 
 
 def test_pipeline_skips_already_enriched_event() -> None:

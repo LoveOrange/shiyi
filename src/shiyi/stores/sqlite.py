@@ -86,7 +86,7 @@ class SQLiteEventRecordStore:
         result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord:
-        """Record a validated enrichment result and mark the event enriched."""
+        """Record a validated enrichment result without marking the event complete."""
         now = _utc_now()
         with self._connect() as connection:
             connection.execute(
@@ -104,6 +104,16 @@ class SQLiteEventRecordStore:
                     now,
                 ),
             )
+        record = await self.find_by_idempotency_key(event.idempotency_key)
+        if record is None:
+            msg = "event record was not found after enrichment"
+            raise RuntimeError(msg)
+        return record
+
+    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+        """Mark an event fully enriched after all configured tasks succeed."""
+        now = _utc_now()
+        with self._connect() as connection:
             connection.execute(
                 """
                 UPDATE events
@@ -114,7 +124,7 @@ class SQLiteEventRecordStore:
             )
         record = await self.find_by_idempotency_key(event.idempotency_key)
         if record is None:
-            msg = "event record was not found after enrichment"
+            msg = "event record was not found after marking enriched"
             raise RuntimeError(msg)
         return record
 

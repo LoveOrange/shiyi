@@ -37,3 +37,7 @@ class EventRecordStore(Protocol):
     ) -> EventRecord:
         """Record a validated enrichment result and its artifact reference."""
         ...
+
+    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+        """Mark an event fully enriched after all configured tasks succeed."""
+        ...

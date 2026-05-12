@@ -32,7 +32,7 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
     assert found is not None
     assert found.raw_artifact == artifact
 
-    enriched = asyncio.run(
+    still_persisted = asyncio.run(
         store.save_enrichment(
             event,
             EnrichmentResult(
@@ -43,6 +43,10 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
             artifact,
         )
     )
+
+    assert still_persisted.status == "persisted"
+
+    enriched = asyncio.run(store.mark_enriched(event))
 
     assert enriched.status == "enriched"
 
