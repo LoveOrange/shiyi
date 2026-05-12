@@ -7,7 +7,7 @@ Target: ship and evolve a usable local information-capture pipeline for Anthropi
 - Current state: local MVP is complete for the defined scope.
 - MVP completion estimate: 100% for local MVP.
 - Next focus: post-MVP architecture hardening for production-like daily capture.
-- Current priority theme: date-window capture and shared fetcher infrastructure.
+- Current priority theme: pipeline SDD review, daily capture operations, and adapter robustness.
 
 ## Milestone 1 — Local storage foundation
 
@@ -80,6 +80,16 @@ Goal: move crawling/fetching concerns below adapters so rate limiting, retry, ti
 - [x] Refactor adapters to do only source-specific parsing, mapping, idempotency keys, and metadata construction.
 - [x] Add fetcher contract tests and adapter tests using fake fetchers.
 
+### P1 — Pipeline specification review
+
+Goal: make pipeline stage boundaries, status transitions, and replay semantics reviewable before adding more operational behavior.
+
+- [x] Rewrite `docs/specs/capture-pipeline-sdd.md` as one pipeline-level SDD instead of splitting stages prematurely.
+- [x] Specify stage contracts from discovery through enrichment persistence.
+- [x] Specify current and target event status transitions.
+- [x] Clarify ArtifactStore vs EventRecordStore responsibilities.
+- [ ] Review with Lin and revise accepted scope.
+
 ### P1 — Daily capture operation
 
 Goal: prepare for scheduled capture without introducing a daemon yet.
@@ -121,3 +131,4 @@ Goal: expand capabilities after capture semantics are stable.
 - First sources: Anthropic and OpenAI blogs/news.
 - Fetching/crawling belongs in lower-level fetchers; adapters should focus on source-specific parsing and mapping.
 - Event-level raw cache keys are adapter-defined metadata hashes; fetchers only use `{source}/{raw_key}` to skip repeated full-page fetches.
+- Pipeline stages should stay in one SDD until a stage has independent design pressure; split only for failure/retry, enrichment orchestration, event versioning, or observability when needed.

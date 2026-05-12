@@ -1,476 +1,525 @@
 # Shiyi Capture Pipeline SDD
 
-- Status: Draft
+- Status: Review
 - Owner: Shiyi contributors
 - Last updated: 2026-05-12
-- Scope: MVP capture pipeline, extension contracts, filesystem artifacts, and SQLite event records
+- Scope: capture pipeline orchestration from adapter events to durable artifacts, event records, and enrichment artifacts
 
 ## 1. Purpose
 
-This document specifies the first implementation slice of Shiyi using Specification-Driven Development. The goal is to make the behavior, contracts, and storage boundaries precise before expanding implementation.
+This document specifies the Capture Pipeline behavior for Shiyi. It is the single pipeline-level SDD for now.
 
-Shiyi captures information from external sources, normalizes it into durable events, optionally enriches it with AI, and persists both source artifacts and structured metadata in user-controlled backends.
+We intentionally keep the pipeline stages in one document because the hard part is not an individual stage; it is the ordering, boundary, and state transition between stages. Split stage-specific SDDs only when a stage develops enough independent complexity to justify it.
 
-## 2. MVP goals
+The pipeline coordinates these responsibilities:
 
-The MVP must support:
+1. Consume `CaptureEvent` objects from an adapter.
+2. Use idempotency to skip already-complete logical events.
+3. Persist raw source payloads as artifacts.
+4. Normalize event payloads into canonical artifacts when a normalizer is configured.
+5. Persist processing state in an `EventRecordStore`.
+6. Run configured enrichment tasks through an `AIProvider`.
+7. Persist validated enrichment results as artifacts.
+8. Update event records with status and artifact references.
 
-1. A source adapter that emits normalized `CaptureEvent` objects.
-2. A pipeline runner that validates, deduplicates, enriches, and persists events.
-3. AI provider contracts for structured enrichment.
-4. Filesystem-first artifact persistence for raw and generated documents.
-5. Lightweight SQLite event-record persistence for idempotency, status, and artifact references.
-6. Deterministic local tests for domain validation, pipeline behavior, idempotency, and persistence semantics.
+## 2. Non-goals
 
-## 3. Non-goals
+The pipeline must not own these responsibilities:
 
-The MVP will not provide:
+- Fetching HTTP pages, RSS feeds, sitemaps, pagination, timeout, retry, or raw fetch cache. These belong to fetchers.
+- Source-specific parsing, source identity, source timestamps, source metadata, or adapter-defined raw keys. These belong to adapters.
+- Artifact layout details beyond calling `ArtifactStore.put` and using returned `ArtifactRef` values.
+- Database schema details beyond the `EventRecordStore` contract.
+- Real model vendor configuration, prompt management, or provider retries. These belong to AI provider implementations.
+- Scheduling or daemon behavior. Scheduled runs call the pipeline repeatedly with overlapping capture windows.
+- Search, vector indexing, export, or Notion sync.
 
-- A hosted service.
-- A web UI.
-- A required relational database.
-- A required document database.
-- A required model provider.
-- Distributed workers.
-- Full-text or vector search as a core dependency.
-- Multi-tenant authorization.
+## 3. Core terms
 
-These can be added as optional packages after the core contracts stabilize.
+### 3.1 CaptureEvent
 
-## 4. Design principles
+`CaptureEvent` is the normalized input boundary emitted by adapters and consumed by the pipeline.
 
-### 4.1 Contract-first
+Required semantics:
 
-All extension points must be defined as explicit Python protocols plus Pydantic models before implementation-specific behavior is added.
-
-### 4.2 Filesystem-first artifacts
-
-Article bodies, raw HTML, markdown, extracted text, attachments, and AI result JSON are artifacts. The default MVP stores artifacts on the filesystem because that is simple, inspectable, backup-friendly, and avoids premature database coupling.
-
-### 4.3 Event records are separate from artifacts
-
-Event records required for pipeline control must not be mixed with artifact blobs. Event records include idempotency keys, fingerprints, pipeline run state, processing status, source information, and artifact references.
-
-### 4.4 AI output is untrusted
-
-AI output must be schema-validated and policy-checked before it is treated as an enriched record.
-
-### 4.5 Replay safety
-
-Re-running the same adapter over the same source item must not create duplicate logical records or corrupt checkpoints.
-
-### 4.6 Backend neutrality
-
-Core should remain backend-neutral at the contract level, but the MVP default implementation is filesystem artifacts plus SQLite event records. Postgres, document databases, S3-compatible storage, and other backends remain future implementations behind ports.
-
-## 5. Core concepts
-
-### 5.1 Adapter
-
-An adapter connects an external source to Shiyi. It owns source-specific concerns such as authentication, pagination, rate limits, raw item discovery, canonical source identity, and source-specific metadata.
-
-An adapter emits `CaptureEvent` objects and should preserve the original source representation when available. For web pages, this means raw HTML should be retained as a raw artifact. The adapter should not decide the canonical downstream document format; HTML-to-Markdown conversion belongs to a normalizer stage after capture.
-
-An adapter must not directly call AI providers or final persistence stores.
-
-### 5.2 CaptureEvent
-
-A `CaptureEvent` is the normalized boundary object entering the pipeline.
-
-Required fields:
-
-- `id`: stable event ID within Shiyi.
-- `source`: source identity, including source kind and optional URI/account.
-- `occurred_at`: source event timestamp when available, otherwise fetch/discovery time.
-- `payload`: typed payload (`text`, `html`, or `binary`).
+- `id`: stable event ID inside Shiyi.
+- `source`: source identity.
+- `occurred_at`: source event timestamp when available, otherwise discovery/fetch time.
+- `payload`: typed raw-ish event payload (`html`, `text`, or `binary`).
 - `provenance`: adapter name/version, source item ID, and fetch timestamp.
-- `idempotency_key`: stable logical identity for deduplication.
-- `metadata`: optional structured metadata.
+- `idempotency_key`: stable logical identity for replay safety.
+- `metadata`: source/event descriptive metadata. This is not pipeline processing state.
 
-For article-like web sources, the event should point to or contain enough information to persist both:
+### 3.2 Artifact
 
-- the **raw artifact**: original HTML and fetch metadata for audit/reprocessing;
-- the **canonical artifact**: normalized Markdown or text generated by a normalizer for AI processing and user consumption.
+An artifact is durable content stored outside event-record storage.
 
-### 5.3 Artifact
+Pipeline-created artifact kinds:
 
-An artifact is durable content stored outside the event record index.
+- `raw`: original payload material from the event.
+- `normalized`: canonical Markdown/text or other normalized form.
+- `enrichment`: validated AI enrichment JSON.
 
-Examples:
+### 3.3 EventRecord
 
-- Raw HTML fetched from a page.
-- Cleaned markdown.
-- Extracted plain text.
-- Screenshot or PDF attachment.
-- AI provider raw response.
-- Validated enrichment JSON.
+`EventRecord` is the pipeline processing ledger for one logical capture event.
 
-Artifacts are addressed by `artifact_ref`, not embedded into event record tables/documents once they become large or binary.
+It tracks:
 
-### 5.4 EventRecord
+- event ID;
+- idempotency key;
+- processing status;
+- raw artifact reference;
+- normalized artifact reference;
+- last error when applicable;
+- enrichment artifact references through the store implementation.
 
-An event record describes what exists and how the pipeline should operate.
+`EventRecord` is deliberately not called metadata because `CaptureEvent.metadata` already means source/event descriptive metadata.
 
-Examples:
+### 3.4 EnrichmentResult
 
-- Event ID and idempotency key.
-- Content fingerprint.
-- Current status: discovered, persisted, enriched, failed, skipped.
-- Artifact references.
-- Last error.
-- Retry count.
+`EnrichmentResult` is a structured AI-provider result for a configured task such as `summarize`, `classify`, or `extract`.
 
-### 5.5 Enrichment task
+The pipeline treats provider output as untrusted until it has been parsed into the domain model and persisted as an enrichment artifact.
 
-An enrichment task asks an AI provider to transform a capture event into structured output.
+## 4. Ports used by the pipeline
 
-Initial task types:
-
-- `summarize`
-- `extract`
-- `classify`
-
-For Shiyi, `classify` should be interpreted as multi-label tagging by default, not as a single exclusive category. A source item may produce multiple tags such as `model-release`, `research`, `safety`, `product`, `policy`, or `engineering`. The MVP should keep `classify` because tags are useful routing metadata and can be generated together with extraction in one LLM pass when cost and schema design allow it.
-
-## 6. Target architecture
-
-```mermaid
-flowchart LR
-  Adapter[Adapter] --> Pipeline[Capture Pipeline]
-  Pipeline --> Validator[Validation]
-  Validator --> Dedupe[Deduplication]
-  Dedupe --> ArtifactStore[Artifact Store]
-  Dedupe --> AIProvider[AI Provider]
-  AIProvider --> Policy[Schema & Policy Check]
-  Policy --> ArtifactStore
-  Policy --> EventRecordStore[Event Record Store]
-```
-
-## 7. Extension ports
-
-### 7.1 Adapter port
-
-Responsibilities:
-
-- Discover source items.
-- Normalize source data into `CaptureEvent`.
-- Provide stable idempotency keys.
-- Preserve raw source material when available, especially original HTML for web sources.
-- Surface retryable and non-retryable source errors.
-- Respect source rate limits.
-
-Contract shape:
+The pipeline depends on explicit ports only:
 
 ```python
 class Adapter(Protocol):
     @property
     def name(self) -> str: ...
-
     @property
     def version(self) -> str: ...
-
     def discover(self) -> AsyncIterator[CaptureEvent]: ...
-```
 
-### 7.2 AIProvider port
+class Normalizer(Protocol):
+    async def normalize(self, event: CaptureEvent) -> ArtifactWrite | None: ...
 
-Responsibilities:
-
-- Execute typed enrichment tasks.
-- Return structured `EnrichmentResult` objects.
-- Surface model identity and usage metadata.
-- Avoid persistence side effects.
-
-Contract shape:
-
-```python
-class AIProvider(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult: ...
-```
-
-### 7.3 ArtifactStore port
-
-Responsibilities:
-
-- Store raw and generated artifacts.
-- Return stable artifact references.
-- Support content-addressed writes where possible.
-- Preserve media type, size, checksum, and creation time.
-
-MVP default: local filesystem.
-
-Expected contract shape:
-
-```python
 class ArtifactStore(Protocol):
     async def put(self, artifact: ArtifactWrite) -> ArtifactRef: ...
     async def get(self, ref: ArtifactRef) -> ArtifactRead: ...
     async def exists(self, ref: ArtifactRef) -> bool: ...
+
+class EventRecordStore(Protocol):
+    async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None: ...
+    async def save_event(
+        self,
+        event: CaptureEvent,
+        *,
+        raw_artifact: ArtifactRef | None,
+        normalized_artifact: ArtifactRef | None,
+    ) -> EventRecord: ...
+    async def save_enrichment(
+        self,
+        event: CaptureEvent,
+        result: EnrichmentResult,
+        artifact: ArtifactRef,
+    ) -> EventRecord: ...
+
+class AIProvider(Protocol):
+    @property
+    def name(self) -> str: ...
+    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult: ...
 ```
 
-### 7.4 EventRecordStore port
+## 5. End-to-end flow
 
-Responsibilities:
-
-- Track event records and processing status.
-- Enforce idempotency.
-- Store artifact references.
-- Store enrichment record references.
-- Support query patterns needed by the pipeline.
-
-MVP default: SQLite.
-
-SQLite is still lightweight, local-first, and easy to inspect, while providing safer idempotency, status transitions, and retry bookkeeping than JSONL. JSONL can remain useful as an export/debug format, but it is not the default metadata implementation.
-
-### 7.5 Checkpointing
-
-Checkpointing is deferred for the MVP. Capture runs are scheduled periodically. If a run fails, the next scheduled run should rediscover source items and rely on idempotency plus event record status to skip completed work and resume incomplete work.
-
-A dedicated `CheckpointStore` may be introduced later for adapters that need cursor-based incremental sync.
-
-## 8. Storage design
-
-### 8.1 Default MVP storage layout
-
-The default filesystem-backed project workspace should use a deterministic layout:
+The current pipeline flow is:
 
 ```text
-.shiyi/
-├── artifacts/
-│   ├── raw/
-│   ├── normalized/
-│   └── enrichment/
-├── normalized/
-│   └── markdown/
-└── event-records.sqlite
+Adapter.discover()
+  -> CaptureEvent
+  -> find existing EventRecord by idempotency_key
+  -> skip if existing.status == enriched
+  -> convert CaptureEvent.payload to raw ArtifactWrite
+  -> ArtifactStore.put(raw)
+  -> Normalizer.normalize(event) when configured
+  -> ArtifactStore.put(normalized) when normalizer returns content
+  -> EventRecordStore.save_event(..., status=persisted)
+  -> for each EnrichmentTask:
+       AIProvider.run(task, event)
+       serialize EnrichmentResult as enrichment ArtifactWrite
+       ArtifactStore.put(enrichment)
+       EventRecordStore.save_enrichment(..., status=enriched)
+  -> return processed event count
 ```
 
-This layout is intentionally simple and inspectable. Artifacts remain plain files; event records live in a local SQLite database for reliable idempotency and status updates.
-
-### 8.2 Future storage implementations
-
-Future persistence packages can provide:
-
-- Filesystem artifact store.
-- S3-compatible artifact store.
-- SQLite event record store.
-- JSONL export/import for debugging and portability.
-- Postgres event record store.
-- MongoDB/document event record store.
-- Search index store.
-- Vector index store.
-
-Core must not require any of them.
-
-### 8.3 Document database position
-
-Document databases are appropriate for flexible extracted article records and nested metadata. They should be supported as a `EventRecordStore` implementation, not assumed by core.
-
-For MVP, a document database is probably heavier than needed unless the first real use case requires remote sync, concurrent writers, or flexible querying immediately.
-
-## 9. Pipeline lifecycle
-
-### 9.1 Happy path
-
-For each event emitted by an adapter:
-
-1. Validate `CaptureEvent` schema.
-2. Persist raw artifact when available, such as original HTML.
-3. Normalize web/article content into canonical Markdown or text artifact.
-4. Compute or verify content fingerprint from the canonical artifact.
-5. Check idempotency key in SQLite event record store.
-6. Create or update event record as `persisted`.
-7. Run configured enrichment tasks, including extraction, summarization, and multi-label classification/tagging.
-8. Validate AI output.
-9. Persist enrichment artifacts.
-10. Update event record as `enriched` or `partially_enriched`.
-11. Emit structured logs and metrics.
-
-### 9.2 Duplicate event
-
-If the idempotency key already exists:
-
-- The pipeline must not create a duplicate logical record.
-- It may skip processing if the existing record is complete.
-- It may resume missing enrichment if prior processing was incomplete.
-- It must not lose incomplete work; retry behavior is driven by event record status rather than checkpoints in the MVP.
-
-### 9.3 Partial failure
-
-If raw artifact persistence succeeds but enrichment fails:
-
-- Metadata status becomes `failed` or `partially_enriched`.
-- Failure reason and retry count are recorded.
-- The next scheduled capture run should rediscover the item and resume or retry based on idempotency key and event record status.
-
-### 9.4 AI validation failure
-
-If AI output fails schema validation:
-
-- Store raw provider response as an artifact for debugging when allowed by policy.
-- Mark enrichment as `rejected`.
-- Do not publish the rejected result as a valid enriched record.
-
-## 10. Idempotency and fingerprints
-
-### 10.1 Idempotency key
-
-Adapters should provide stable idempotency keys using source-specific identity.
-
-Recommended format:
+Target flow adds explicit failure status and retry metadata without changing the boundary shape:
 
 ```text
-<source-kind>:<source-account-or-space>:<source-item-id-or-canonical-url>
+for event in adapter.discover():
+  validate event
+  existing = event_record_store.find_by_idempotency_key(event.idempotency_key)
+  decision = decide_skip_or_resume(existing)
+  if decision == skip:
+    record skipped summary
+    continue
+
+  try:
+    raw_ref = persist_raw(event)
+    normalized_ref = normalize_and_persist(event)
+    event_record_store.save_event(event, raw_ref, normalized_ref)
+    for task in enrichment_tasks:
+      result = ai_provider.run(task, event)
+      enrichment_ref = persist_enrichment(event, task, result)
+      event_record_store.save_enrichment(event, result, enrichment_ref)
+  except retryable_error as error:
+    event_record_store.save_failure(event, error, retryable=True)
+  except fatal_error as error:
+    event_record_store.save_failure(event, error, retryable=False)
 ```
 
-### 10.2 Content fingerprint
+## 6. Stage specifications
 
-The pipeline should compute a content fingerprint from normalized payload content.
+### 6.1 Discover stage
 
-Fingerprints support:
+Input: `Adapter`.
 
-- Detecting changed source content under the same source ID.
-- Avoiding duplicate artifacts.
-- Supporting future recapture/versioning.
+Output: async stream of `CaptureEvent` objects.
 
-### 10.3 Versioning
+Rules:
 
-If the same idempotency key appears with a different fingerprint, the event record store must represent this as either:
+- The adapter owns source-specific discovery, parsing, source metadata, and idempotency key construction.
+- The pipeline must not know source-specific HTML/RSS/API structure.
+- Adapter failures should be surfaced as typed errors in future work; the pipeline should not silently drop items.
 
-- A new version of the same logical item, or
-- A conflict requiring policy decision.
+### 6.2 Validate stage
 
-The MVP should record the conflict explicitly instead of silently overwriting.
+Input: `CaptureEvent`.
 
-## 11. Error model
+Output: valid event or failure.
 
-Initial error categories:
+Rules:
 
-- `InvalidInputError`: malformed event or unsupported payload.
-- `TransientSourceError`: retryable adapter/source failure.
-- `RateLimitError`: source or model provider throttling.
-- `AIProviderError`: model/provider failure.
-- `ValidationError`: AI output or event validation failure.
-- `PolicyViolationError`: output rejected by configured policy.
-- `ArtifactStoreError`: artifact read/write failure.
-- `EventRecordStoreError`: event-record read/write failure.
-- `FatalIntegrationError`: integration cannot safely continue.
+- Pydantic model construction validates structural fields.
+- The pipeline may add semantic validation later: payload size, required provenance, supported content type.
+- Invalid events must not produce durable artifacts unless explicitly stored for debugging under policy.
 
-Errors must be observable and typed. Hidden retries are not allowed.
+Current status: model validation exists; explicit pipeline semantic validation is still minimal.
 
-## 12. Observability
+### 6.3 Dedupe/resume stage
 
-Every pipeline run should produce:
+Input: `event.idempotency_key`.
 
-- `run_id`
-- `trace_id`
-- adapter name/version
-- event count discovered
-- event count processed
-- duplicate count
-- failure count
-- enrichment task count
-- artifact bytes written
-- latency per major stage
+Output: process, skip, or resume decision.
 
-The MVP can implement structured logs first. Metrics/tracing can follow.
+Rules:
 
-## 13. Security and privacy
+- `EventRecordStore.find_by_idempotency_key` is the only pipeline-level idempotency lookup.
+- If an existing record is `enriched`, the event is complete and should be skipped.
+- If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key.
+- The pipeline must not consult fetch raw cache for processing idempotency. Fetch cache only avoids repeated full-page downloads.
 
-- Secrets must not be stored in `CaptureEvent` metadata.
-- Raw artifacts may contain private data; default local storage must be easy to locate and delete.
-- AI provider calls must be explicit and configurable.
-- Future remote stores must document encryption and credential behavior.
-- Logs must avoid dumping full article bodies or raw provider responses by default.
+Current status: records with status `enriched` are skipped; other statuses are reprocessed.
 
-## 14. Testing strategy
+### 6.4 Raw artifact stage
 
-### 14.1 Unit tests
+Input: `CaptureEvent.payload`.
 
-Required:
+Output: raw `ArtifactRef`.
 
-- Domain model validation.
-- Idempotency key handling.
-- Fingerprint calculation.
-- Artifact reference generation.
-- Pipeline branch behavior.
+Rules:
 
-### 14.2 Contract tests
+- `html` payload becomes `text/html` raw artifact.
+- `text` payload uses its declared content type.
+- `binary` payload records a reference payload as raw content until real binary handling is introduced.
+- The pipeline persists event-level raw artifacts even if fetcher-level raw cache was hit. Fetch cache and durable pipeline artifacts are separate concerns.
 
-Each extension port should eventually have shared tests:
+### 6.5 Normalize stage
 
-- Adapter contract tests.
-- AI provider contract tests.
-- Artifact store contract tests.
-- Event record store contract tests.
+Input: `CaptureEvent` and optional `Normalizer`.
 
-Third-party implementations should be able to run these tests.
+Output: normalized `ArtifactRef | None`.
 
-### 14.3 Integration tests
+Rules:
 
-MVP integration tests should cover:
+- Normalization is optional.
+- If no normalizer is configured, the pipeline still persists raw and event record state.
+- If the normalizer returns `None`, no normalized artifact is written.
+- Normalizers must not write event records directly.
 
-- Fake adapter + fake AI provider + filesystem persistence.
-- Duplicate event replay.
-- AI validation failure.
-- Partial failure and retry.
-- Scheduled recapture without checkpoints.
+Current MVP normalizer: HTML to Markdown/text artifact.
 
-## 15. First MVP sources
+### 6.6 Save event record stage
 
-The first real capture targets are:
+Input: event, raw artifact ref, normalized artifact ref.
 
-- Anthropic blog/news content.
-- OpenAI blog/news content.
+Output: `EventRecord`.
 
-The first implementation should prefer stable source indexes such as RSS feeds or sitemaps when available. If those are insufficient, source-specific HTML index adapters may be used. Full crawling and broad web discovery are non-goals for the first source implementation.
+Rules:
 
+- Saving an event record records that the event payload and available normalized artifact have been persisted.
+- MVP status after this stage is `persisted`.
+- This stage must not embed artifact blobs; it stores references.
+- `CaptureEvent.metadata` may be stored in a future schema if needed, but it remains source/event descriptive metadata, not pipeline state.
 
-## 16. Implementation plan
+### 6.7 Enrichment stage
 
-### Phase 1: Refine contracts
+Input: configured `EnrichmentTask` list and `CaptureEvent`.
 
-- Add `ArtifactRef`, `ArtifactWrite`, `ArtifactRead` domain models.
-- Split current `Persistence` into `ArtifactStore` and `EventRecordStore`.
-- Keep an aggregate convenience implementation only if it does not hide semantics.
+Output: one `EnrichmentResult` per task.
 
-### Phase 2: Filesystem-first persistence
+Rules:
 
-- Implement local filesystem artifact store.
-- Implement SQLite event record store.
-- Add JSONL export later if useful for debugging.
-- Add contract tests for all stores.
+- Enrichment tasks are explicit pipeline configuration.
+- The pipeline calls `AIProvider.run(task, event)` and expects a typed result.
+- AI providers must not persist final records directly.
+- The pipeline should eventually prefer normalized artifacts as enrichment input when provider contracts support artifact references; current provider contract receives the event.
 
-### Phase 3: Pipeline correctness
+Current MVP tasks: summarize and multi-label classify.
 
-- Add validation stage.
-- Add fingerprinting.
-- Add idempotency check.
-- Add status transitions.
-- Add explicit failure handling.
-- Add scheduled recapture semantics without checkpoints.
+### 6.8 Persist enrichment stage
 
-### Phase 4: First real adapter and provider
+Input: `EnrichmentResult`.
 
-- Add Anthropic blog adapter/source configuration.
-- Add OpenAI blog adapter/source configuration.
-- Add a basic AI provider implementation.
-- Add one end-to-end capture example for each blog source.
+Output: enrichment `ArtifactRef` and updated `EventRecord`.
 
-### Phase 5: Release hygiene
+Rules:
 
-- Add CLI entrypoint.
-- Add examples.
-- Add changelog.
-- Add API docs.
-- Mark unstable public contracts clearly.
+- Enrichment results are serialized as JSON artifacts.
+- The event record store records enrichment references and transitions status.
+- MVP status after successful enrichment save is `enriched`.
+- Future multi-task behavior should distinguish `partially_enriched` from fully `enriched`.
 
-## 17. Open questions
+### 6.9 Observe stage
 
-1. Should Shiyi introduce a higher-level `DocumentRecord` for article-like content, or keep article data as enriched metadata attached to `CaptureEvent`?
-2. Should AI enrichment tasks be configured per adapter, per source, or globally per pipeline run?
-3. What tag taxonomy should the default classifier use for Anthropic and OpenAI blog posts?
-4. Should the first blog ingestion use RSS feeds where available, HTML index pages, sitemaps, or a source-specific scraper?
+Input: run results and stage outcomes.
+
+Output: CLI summary, logs, and future metrics/traces.
+
+Rules:
+
+- The pipeline should expose enough counts for daily operation: discovered, processed, skipped, duplicate/already-complete, failed, enriched.
+- Current `run_once` returns only processed count. CLI derives additional counts from the local store.
+- P1 should add explicit skipped/duplicate/failure summary fields when pipeline exposes them.
+
+## 7. State model
+
+Allowed domain statuses:
+
+```text
+persisted
+  raw and optional normalized artifacts have been persisted;
+  enrichment is not guaranteed complete.
+
+enriched
+  configured enrichment work has completed successfully for the event.
+
+partially_enriched
+  some enrichment work completed, but at least one task remains missing or failed.
+
+failed
+  processing failed and should be inspected or retried according to retry metadata.
+
+skipped
+  event was intentionally skipped by policy.
+```
+
+MVP implemented transitions:
+
+```text
+new -> persisted -> enriched
+existing enriched -> skipped by pipeline without writing a new record
+```
+
+Target near-term transitions:
+
+```text
+new -> persisted -> enriched
+new -> failed
+persisted -> partially_enriched
+partially_enriched -> enriched
+failed -> persisted -> enriched
+existing enriched -> skipped summary
+```
+
+Rules:
+
+- Status transitions belong to `EventRecordStore`; adapters do not set pipeline processing status.
+- Fetch raw cache hits do not imply `persisted` or `enriched`.
+- Event records are the source of truth for pipeline resume behavior in MVP.
+
+## 8. Idempotency and replay
+
+### 8.1 Idempotency key
+
+Adapters provide `idempotency_key`. Recommended shape:
+
+```text
+<source-kind>:<source-item-id-or-canonical-url>
+```
+
+Rules:
+
+- The same logical source item must produce the same idempotency key across overlapping runs.
+- The pipeline must not create duplicate logical event records for the same key.
+- SQLite enforces uniqueness for MVP local storage.
+
+### 8.2 Overlapping capture windows
+
+Daily capture should use 2-3 days of overlap and rely on idempotency:
+
+```bash
+uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
+```
+
+Rules:
+
+- Overlap is expected and safe.
+- Complete records are skipped.
+- Incomplete/failed records are candidates for retry/resume.
+
+### 8.3 Content changes
+
+A source item may change under the same idempotency key.
+
+Target rule:
+
+- The pipeline should compute a canonical content fingerprint after normalization.
+- If the same idempotency key appears with a different fingerprint, record a version or conflict explicitly.
+- Do not silently overwrite prior artifacts without traceability.
+
+Current status: content fingerprint/version semantics are not implemented yet.
+
+## 9. Artifact and event-record boundaries
+
+### 9.1 ArtifactStore owns content bytes
+
+Artifact store owns:
+
+- raw HTML/text/reference payloads;
+- normalized Markdown/text;
+- enrichment JSON;
+- content digest and size;
+- backend-specific URI layout.
+
+### 9.2 EventRecordStore owns processing ledger
+
+Event record store owns:
+
+- idempotency key lookup;
+- status transitions;
+- artifact references;
+- enrichment references;
+- last error and retry metadata in target behavior.
+
+### 9.3 CaptureEvent.metadata remains descriptive
+
+`CaptureEvent.metadata` may include source-level facts such as title, author, URL, tags from the source, feed fields, or adapter-specific hints.
+
+It must not become the pipeline status ledger. That belongs to `EventRecord`.
+
+## 10. Failure behavior
+
+Current MVP behavior is intentionally simple: unhandled exceptions fail the run. This is acceptable for local MVP but not enough for daily operation.
+
+Target behavior:
+
+- Raw persistence failure: mark event failed if possible; do not continue to normalization/enrichment.
+- Normalization failure: keep raw artifact, mark failed or persisted-with-error depending on policy.
+- Event record write failure: fail fast; do not continue because resume state is unreliable.
+- AI provider failure: preserve already-written raw/normalized artifacts; mark failed or partially enriched.
+- Enrichment artifact failure: do not mark the enrichment task successful.
+- Parse/fetch failures inside adapters should become explicit failures in adapter results or typed exceptions in a future adapter contract revision.
+
+Retry metadata target fields:
+
+- `last_error`;
+- `retry_count`;
+- `last_attempt_at`;
+- `next_retry_at | None`;
+- `retryable`.
+
+These are P1 and should be added only when needed by daily capture operations. Do not add unused fields just to make the schema look complete.
+
+## 11. Observability and summaries
+
+Pipeline/run summaries should eventually include:
+
+- source;
+- workspace;
+- discovered count;
+- processed count;
+- skipped/already-complete count;
+- failed count;
+- enriched event count;
+- enrichment row count;
+- artifact count;
+- raw-cache hit count when fetchers expose it;
+- run duration.
+
+Current CLI summary includes:
+
+- source;
+- workspace;
+- processed;
+- total events;
+- enriched events;
+- enrichments;
+- artifact count.
+
+P1 should add skipped/duplicates/failure fields after pipeline exposes those outcomes directly.
+
+## 12. Testing requirements
+
+### 12.1 Existing required coverage
+
+The MVP must keep tests for:
+
+- domain model validation;
+- fake adapter + fake AI provider pipeline behavior;
+- duplicate enriched record skip;
+- raw artifact persistence;
+- normalized artifact persistence;
+- enrichment artifact persistence;
+- filesystem artifact store;
+- SQLite event record store;
+- CLI capture/list behavior;
+- OpenAI and Anthropic adapter behavior with fake fetchers.
+
+### 12.2 Required next tests
+
+P1 should add tests for:
+
+- skipped/duplicate summary counts;
+- failure status persistence;
+- retry metadata updates;
+- partial enrichment behavior;
+- normalizer failure behavior;
+- AI provider failure behavior;
+- overlapping daily capture window idempotency at pipeline summary level.
+
+## 13. Acceptance criteria
+
+A pipeline change is acceptable only if:
+
+1. The main flow remains simple: adapter -> pipeline -> artifact store + event record store -> AI provider.
+2. Fetcher concerns do not leak into pipeline state decisions.
+3. Source metadata and pipeline event records remain distinct.
+4. Replaying the same completed event does not duplicate logical records.
+5. Raw and normalized artifacts are inspectable and referenced by event records.
+6. Enrichment results are persisted as artifacts before being recorded as successful.
+7. Failure behavior is explicit when introduced; no hidden infinite retries.
+8. Tests pass locally and in CI.
+
+## 14. Split policy for future specs
+
+Keep this document as the single pipeline SDD until one stage has independent design pressure.
+
+Split a stage into its own SDD only when at least one is true:
+
+- It has its own public port and multiple implementations.
+- It needs a separate state machine.
+- It has provider/backend-specific policy.
+- It has enough tests and acceptance criteria to review independently.
+
+Likely future split candidates:
+
+- failure/retry SDD;
+- enrichment orchestration SDD;
+- event versioning/fingerprint SDD;
+- pipeline observability/run-summary SDD.
+
+Do not split specs just to make the docs look more enterprise. Split only when review and implementation benefit from the separation.
