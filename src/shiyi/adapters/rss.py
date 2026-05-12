@@ -25,12 +25,14 @@ class RssFeedAdapter:
         feed_url: str,
         source_kind: str,
         client: httpx.AsyncClient | None = None,
+        limit: int | None = None,
     ) -> None:
         """Create an RSS adapter for one feed URL."""
         self._name = name
         self._feed_url = feed_url
         self._source_kind = source_kind
         self._client = client
+        self._limit = limit
 
     @property
     def name(self) -> str:
@@ -42,7 +44,8 @@ class RssFeedAdapter:
         fetched_at = datetime.now(UTC)
         feed_xml = await self._fetch_feed()
         parsed = feedparser.parse(feed_xml)
-        for raw_entry in parsed.entries:
+        entries = parsed.entries[: self._limit] if self._limit is not None else parsed.entries
+        for raw_entry in entries:
             entry = cast(Mapping[str, object], raw_entry)
             entry_id = _entry_id(entry)
             link = str(entry.get("link", "")) or None
@@ -78,13 +81,18 @@ class RssFeedAdapter:
             return response.text
 
 
-def openai_news_adapter(client: httpx.AsyncClient | None = None) -> RssFeedAdapter:
+def openai_news_adapter(
+    client: httpx.AsyncClient | None = None,
+    *,
+    limit: int | None = None,
+) -> RssFeedAdapter:
     """Create the default OpenAI news RSS adapter."""
     return RssFeedAdapter(
         name="openai-news-rss",
         feed_url="https://openai.com/news/rss.xml",
         source_kind="openai-news",
         client=client,
+        limit=limit,
     )
 
 

@@ -24,6 +24,9 @@ dependencies = [
   "selectolax>=0.4.8",
 ]
 
+[project.scripts]
+shiyi = "shiyi.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/LoveOrange/shiyi"
 Repository = "https://github.com/LoveOrange/shiyi"

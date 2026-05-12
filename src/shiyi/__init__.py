@@ -1,5 +1,6 @@
 """Shiyi public API."""
 
+from shiyi.adapters.anthropic import AnthropicNewsAdapter, anthropic_news_adapter
 from shiyi.adapters.rss import RssFeedAdapter, openai_news_adapter
 from shiyi.domain.models import (
     ArtifactRead,
@@ -7,6 +8,7 @@ from shiyi.domain.models import (
     ArtifactWrite,
     BinaryPayload,
     CaptureEvent,
+    ClassifyTask,
     EnrichmentResult,
     EventRecord,
     ExtractTask,
@@ -29,6 +31,7 @@ from shiyi.ports.normalizer import Normalizer
 __all__ = [
     "AIProvider",
     "Adapter",
+    "AnthropicNewsAdapter",
     "ArtifactRead",
     "ArtifactRef",
     "ArtifactStore",
@@ -36,6 +39,7 @@ __all__ = [
     "BinaryPayload",
     "CaptureEvent",
     "CapturePipeline",
+    "ClassifyTask",
     "EnrichmentResult",
     "EventRecord",
     "ExtractTask",
@@ -50,5 +54,6 @@ __all__ = [
     "SummarizeTask",
     "TextPayload",
     "TokenUsage",
+    "anthropic_news_adapter",
     "openai_news_adapter",
 ]

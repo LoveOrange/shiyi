@@ -21,16 +21,16 @@ Target: run Anthropic and OpenAI blog adapters by Wednesday, 2026-05-13.
 
 - [x] Investigate Anthropic blog/news source shape: no official `https://www.anthropic.com/news/rss.xml`; news index HTML is usable, may need source-specific index parser or sitemap check.
 - [x] Investigate OpenAI blog/news source shape: RSS available at `https://openai.com/news/rss.xml`; index HTML also usable.
-- [ ] Implement Anthropic blog adapter.
+- [x] Implement Anthropic blog adapter. (news index parser)
 - [x] Implement OpenAI blog adapter. (RSS-based)
 - [ ] Add adapter contract tests with recorded/minimal fixtures.
 
 ## Milestone 4 — End-to-end run
 
-- [ ] Add CLI or script for one-shot capture run.
-- [ ] Run Anthropic adapter into local `.shiyi/` workspace.
-- [ ] Run OpenAI adapter into local `.shiyi/` workspace.
-- [ ] Verify raw artifacts, normalized artifacts, metadata rows, and idempotent re-run behavior.
+- [x] Add CLI or script for one-shot capture run.
+- [x] Run Anthropic adapter into local `.shiyi/` workspace.
+- [x] Run OpenAI adapter into local `.shiyi/` workspace.
+- [x] Verify raw artifacts, normalized artifacts, metadata rows, and idempotent re-run behavior.
 
 ## Review decisions
 
