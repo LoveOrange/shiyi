@@ -1,7 +1,19 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 dist/
-coverage/
-.DS_Store
+build/
+.venv/
+
+# Local config
 .env
 .env.*
 !.env.example
+.DS_Store

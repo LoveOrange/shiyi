@@ -35,7 +35,7 @@ flowchart LR
 
 Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
-See [`docs/architecture.md`](docs/architecture.md) for the current design.
+See [`docs/architecture.md`](docs/architecture.md) and [`docs/extension-points.md`](docs/extension-points.md) for the current design.
 
 ## Repository layout
 
@@ -45,20 +45,24 @@ See [`docs/architecture.md`](docs/architecture.md) for the current design.
 │   ├── architecture.md
 │   ├── extension-points.md
 │   └── adr/
-├── packages/
-│   └── core/
-│       └── src/
-└── .github/workflows/
+├── src/
+│   └── shiyi/
+│       ├── domain/
+│       ├── ports/
+│       └── pipeline/
+└── tests/
 ```
 
 ## Development
 
-This repository currently contains the initial architecture contract and TypeScript interface sketch.
+Shiyi uses Python-first tooling with strict contracts and fast local feedback.
 
 ```bash
-pnpm install
-pnpm typecheck
-pnpm test
+uv sync
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src tests
+uv run pytest
 ```
 
 ## License

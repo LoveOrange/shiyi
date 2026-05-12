@@ -1,0 +1,106 @@
+[project]
+name = "shiyi"
+version = "0.1.0"
+description = "A general information capture pipeline with pluggable adapters, AI providers, and persistence."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Shiyi contributors" }]
+keywords = ["ai", "crawler", "capture", "pipeline", "adapter", "persistence"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "pydantic>=2.12,<3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/LoveOrange/shiyi"
+Repository = "https://github.com/LoveOrange/shiyi"
+Issues = "https://github.com/LoveOrange/shiyi/issues"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.19,<2.0",
+  "pytest>=9.0,<10.0",
+  "pytest-cov>=7.0,<8.0",
+  "ruff>=0.14,<0.15",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.0,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "ANN",
+  "ARG",
+  "ASYNC",
+  "B",
+  "C4",
+  "D",
+  "DTZ",
+  "E",
+  "EM",
+  "F",
+  "FA",
+  "FBT",
+  "I",
+  "N",
+  "PERF",
+  "PIE",
+  "PLC",
+  "PLE",
+  "PLR",
+  "PLW",
+  "PTH",
+  "RET",
+  "RUF",
+  "S",
+  "SIM",
+  "T20",
+  "TRY",
+  "UP",
+  "W",
+]
+ignore = [
+  "D100",
+  "D104",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --cov=shiyi --cov-report=term-missing"
+testpaths = ["tests"]

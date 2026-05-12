@@ -13,6 +13,9 @@ Shiyi is early, but the quality bar is intentionally high.
 ## Development checks
 
 ```bash
-pnpm typecheck
-pnpm test
+uv sync
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src tests
+uv run pytest
 ```
