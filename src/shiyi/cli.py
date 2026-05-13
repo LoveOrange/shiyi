@@ -165,7 +165,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Source kind filter; repeat for OR semantics",
     )
-    export.add_argument("--limit", type=int, default=20)
+    export.add_argument("--limit", type=_positive_int, default=20)
     return parser
 
 
@@ -288,6 +288,14 @@ def _jsonable(value: object) -> object:
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
     return value
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        msg = "must be >= 1"
+        raise argparse.ArgumentTypeError(msg)
+    return parsed
 
 
 def _parse_datetime_arg(value: str) -> datetime:

@@ -2,6 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
 from _pytest.capture import CaptureFixture
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -171,6 +172,11 @@ def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path:
     payload = json.loads(capsys.readouterr().out)
     assert payload[0]["event_id"] == "evt_1"
     assert payload[0]["has_normalized_artifact"] is False
+
+
+def test_main_export_rejects_non_positive_limit(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        main(["export", "--workspace", str(tmp_path), "--limit", "0"])
 
 
 def test_main_export_prints_normalized_items(

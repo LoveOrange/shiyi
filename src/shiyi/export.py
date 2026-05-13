@@ -46,6 +46,9 @@ def export_items(
     It intentionally returns Shiyi's canonical trace + normalized content, not third-party
     adapter DTOs.
     """
+    if limit <= 0:
+        return []
+
     metadata_path = workspace / "event-records.sqlite"
     artifacts_root = workspace / "artifacts"
     if not metadata_path.exists():
@@ -82,13 +85,10 @@ def export_items(
 def _read_rows(
     *, metadata_path: Path, since: datetime | None, until: datetime | None
 ) -> list[sqlite3.Row]:
-    clauses: list[str] = []
     params: list[str] = []
     if since is not None:
-        clauses.append("captured_at >= ?")
         params.append(since.isoformat())
     if until is not None:
-        clauses.append("captured_at < ?")
         params.append(until.isoformat())
 
     query = _export_query(has_since=since is not None, has_until=until is not None)
@@ -103,7 +103,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
                    source_json, captured_at, content_hash, adapter_name, adapter_version
             FROM events
-            WHERE captured_at >= ? AND captured_at < ?
+            WHERE normalized_artifact_json IS NOT NULL
+              AND captured_at >= ? AND captured_at < ?
             ORDER BY captured_at DESC, event_id ASC
         """
     if has_since:
@@ -111,7 +112,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
                    source_json, captured_at, content_hash, adapter_name, adapter_version
             FROM events
-            WHERE captured_at >= ?
+            WHERE normalized_artifact_json IS NOT NULL
+              AND captured_at >= ?
             ORDER BY captured_at DESC, event_id ASC
         """
     if has_until:
@@ -119,13 +121,15 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
                    source_json, captured_at, content_hash, adapter_name, adapter_version
             FROM events
-            WHERE captured_at < ?
+            WHERE normalized_artifact_json IS NOT NULL
+              AND captured_at < ?
             ORDER BY captured_at DESC, event_id ASC
         """
     return """
         SELECT event_id, idempotency_key, status, normalized_artifact_json,
                source_json, captured_at, content_hash, adapter_name, adapter_version
         FROM events
+        WHERE normalized_artifact_json IS NOT NULL
         ORDER BY captured_at DESC, event_id ASC
     """
 

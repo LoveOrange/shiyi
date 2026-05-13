@@ -65,6 +65,70 @@ def test_export_items_returns_empty_when_workspace_has_no_records(tmp_path: Path
     assert export_items(workspace=tmp_path) == []
 
 
+def test_export_items_returns_empty_for_non_positive_limit(tmp_path: Path) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event("evt_1", "blog", datetime(2026, 5, 12, 10, tzinfo=UTC))
+    asyncio.run(_save_event(artifacts=artifacts, records=records, event=event, normalized=True))
+
+    assert export_items(workspace=tmp_path, limit=0) == []
+    assert export_items(workspace=tmp_path, limit=-1) == []
+
+
+def test_export_items_skips_events_without_normalized_artifact(tmp_path: Path) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    normalized_event = _event("evt_1", "blog", datetime(2026, 5, 12, 10, tzinfo=UTC))
+    raw_only_event = _event("evt_2", "blog", datetime(2026, 5, 12, 11, tzinfo=UTC))
+
+    async def arrange() -> None:
+        await _save_event(
+            artifacts=artifacts,
+            records=records,
+            event=normalized_event,
+            normalized=True,
+        )
+        await _save_event(
+            artifacts=artifacts,
+            records=records,
+            event=raw_only_event,
+            normalized=False,
+        )
+
+    asyncio.run(arrange())
+
+    exported = export_items(workspace=tmp_path, limit=10)
+
+    assert [item.event_id for item in exported] == ["evt_1"]
+    assert exported[0].normalized_content is not None
+
+
+async def _save_event(
+    *,
+    artifacts: FileSystemArtifactStore,
+    records: SQLiteEventRecordStore,
+    event: InternalItem,
+    normalized: bool,
+) -> None:
+    raw_ref = await artifacts.put(
+        ArtifactWrite(
+            kind="raw",
+            media_type="text/html",
+            content=_html_payload(event).html.encode(),
+        )
+    )
+    normalized_ref = None
+    if normalized:
+        normalized_artifact = await HtmlMarkdownNormalizer().normalize(event)
+        assert normalized_artifact is not None
+        normalized_ref = await artifacts.put(normalized_artifact)
+    await records.save_event(
+        event,
+        raw_artifact=raw_ref,
+        normalized_artifact=normalized_ref,
+    )
+
+
 def _html_payload(event: InternalItem) -> HtmlPayload:
     assert isinstance(event.payload, HtmlPayload)
     return event.payload
