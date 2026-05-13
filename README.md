@@ -48,7 +48,7 @@ flowchart LR
 
 Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
-See [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), and [`docs/mvp.md`](docs/mvp.md) for the current design and MVP boundary.
+See [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), [`docs/mvp.md`](docs/mvp.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md) for the current design, MVP boundary, and P2 test boundary.
 
 ## Repository layout
 

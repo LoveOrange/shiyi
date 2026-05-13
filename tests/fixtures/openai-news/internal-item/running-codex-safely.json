@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-05-13T01:30:00Z",
+  "content_hash": "5dc91fa3e3d992581c1fc752e59adc09447b9f1efa5ac34d0697e65eb64d5745",
+  "id": "openai-news:running-codex-safely",
+  "idempotency_key": "openai-news:running-codex-safely",
+  "metadata": {
+    "link": "https://openai.com/index/running-codex-safely/",
+    "title": "Running Codex safely"
+  },
+  "occurred_at": "2026-05-08T10:00:00Z",
+  "payload": {
+    "html": "<article><h1>Running Codex safely</h1><p>Safety evals and sandboxing for coding agents.</p></article>",
+    "type": "html",
+    "url": "https://openai.com/index/running-codex-safely/"
+  },
+  "provenance": {
+    "adapter_name": "openai-news-rss",
+    "adapter_version": "0.2.0",
+    "fetched_at": "2026-05-13T01:30:00Z",
+    "source_item_id": "running-codex-safely"
+  },
+  "schema_version": "internal-item.v1",
+  "source": {
+    "account_id": null,
+    "kind": "openai-news",
+    "uri": "https://openai.com/news/rss.xml"
+  }
+}

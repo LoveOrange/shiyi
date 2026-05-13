@@ -1,0 +1,13 @@
+{
+  "url": "https://openai.com/news/rss.xml",
+  "fetched_at": "2026-05-13T01:30:00Z",
+  "entries": [
+    {
+      "entry_id": "running-codex-safely",
+      "title": "Running Codex safely",
+      "link": "https://openai.com/index/running-codex-safely/",
+      "html": "<article><h1>Running Codex safely</h1><p>Safety evals and sandboxing for coding agents.</p></article>",
+      "published_at": "2026-05-08T10:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "adapter_name": "openai-news-rss",
+    "adapter_version": "0.2.0",
+    "captured_at": "2026-05-13T01:30:00+00:00",
+    "content_hash": "5dc91fa3e3d992581c1fc752e59adc09447b9f1efa5ac34d0697e65eb64d5745",
+    "event_id": "openai-news:running-codex-safely",
+    "idempotency_key": "openai-news:running-codex-safely",
+    "normalized_artifact_uri": "normalized/f4/f4b882754c2b9c5a70166f16e677ceb33a45def0346f660c7bd2a9f521217963",
+    "normalized_content": "# Running Codex safely\n\nSafety evals and sandboxing for coding agents.\n",
+    "normalized_media_type": "text/markdown",
+    "schema_version": "shiyi-export-item.v1",
+    "source": {
+      "account_id": null,
+      "kind": "openai-news",
+      "uri": "https://openai.com/news/rss.xml"
+    },
+    "status": "persisted"
+  }
+]
