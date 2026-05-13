@@ -63,23 +63,39 @@ def test_anthropic_fixture_matches_internal_item_golden_output() -> None:
     ]
     assert [call.url for call in fetcher.calls] == [ANTHROPIC_NEWS_URL, CLAUDE_DESIGN_URL]
     assert fetcher.calls[1].source == "anthropic-news"
-    assert fetcher.calls[1].raw_key is not None
+    assert fetcher.calls[1].raw_key
 
 
-def test_anthropic_adapter_deduplicates_index_links_and_keeps_idempotency_stable() -> None:
+def test_anthropic_adapter_deduplicates_index_links_and_keeps_raw_keys_stable() -> None:
     first_fetcher = FixtureWebFetcher()
     second_fetcher = FixtureWebFetcher()
 
     first_items = asyncio.run(
-        _collect_internal_items(anthropic_news_adapter(limit=1, web_fetcher=first_fetcher))
+        _collect_internal_items(anthropic_news_adapter(limit=2, web_fetcher=first_fetcher))
     )
     second_items = asyncio.run(
-        _collect_internal_items(anthropic_news_adapter(limit=1, web_fetcher=second_fetcher))
+        _collect_internal_items(anthropic_news_adapter(limit=2, web_fetcher=second_fetcher))
     )
 
-    assert first_items[0].idempotency_key == second_items[0].idempotency_key
-    assert first_items[0].content_hash == second_items[0].content_hash
-    assert [call.url for call in first_fetcher.calls] == [ANTHROPIC_NEWS_URL, CLAUDE_DESIGN_URL]
+    assert [item.idempotency_key for item in first_items] == [
+        "anthropic-news:claude-design-anthropic-labs",
+        "anthropic-news:project-glasswing",
+    ]
+    assert [item.idempotency_key for item in first_items] == [
+        item.idempotency_key for item in second_items
+    ]
+    assert [item.content_hash for item in first_items] == [
+        item.content_hash for item in second_items
+    ]
+    assert [call.url for call in first_fetcher.calls] == [
+        ANTHROPIC_NEWS_URL,
+        CLAUDE_DESIGN_URL,
+        PROJECT_GLASSWING_URL,
+    ]
+    assert [call.raw_key for call in first_fetcher.calls[1:]] == [
+        call.raw_key for call in second_fetcher.calls[1:]
+    ]
+    assert all(call.raw_key for call in first_fetcher.calls[1:])
 
 
 async def _collect_internal_items(adapter: Adapter) -> list[InternalItem]:
