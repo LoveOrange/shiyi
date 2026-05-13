@@ -265,6 +265,7 @@ Rules:
 - Saving an event record records that the item payload and available normalized artifact have been persisted.
 - MVP status after this stage is `persisted`. `persisted` means raw and optional normalized artifacts are durable and referenced; it does not mean configured enrichment or semantic annotation is complete.
 - This stage must not embed artifact blobs; it stores references.
+- Persistent records store the trace fields required by P1-04: source, captured_at, content_hash, idempotency_key, adapter_name, and adapter_version.
 - `InternalItem.metadata` may be stored in a future schema if needed, but it remains source/item descriptive metadata, not pipeline state.
 
 ### 6.7 Optional neutral annotation stage

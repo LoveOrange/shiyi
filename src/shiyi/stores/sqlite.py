@@ -6,7 +6,13 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from shiyi.domain.models import ArtifactRef, EnrichmentResult, EventRecord, InternalItem
+from shiyi.domain.models import (
+    ArtifactRef,
+    EnrichmentResult,
+    EventRecord,
+    InternalItem,
+    SourceIdentity,
+)
 
 
 class SQLiteEventRecordStore:
@@ -26,7 +32,8 @@ class SQLiteEventRecordStore:
             row = connection.execute(
                 """
                 SELECT event_id, idempotency_key, status, raw_artifact_json,
-                       normalized_artifact_json, last_error
+                       normalized_artifact_json, source_json, captured_at,
+                       content_hash, adapter_name, adapter_version, last_error
                 FROM events
                 WHERE idempotency_key = ?
                 """,
@@ -52,14 +59,21 @@ class SQLiteEventRecordStore:
                 """
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
-                  normalized_artifact_json, last_error, created_at, updated_at
+                  normalized_artifact_json, source_json, captured_at,
+                  content_hash, adapter_name, adapter_version, last_error,
+                  created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
                   raw_artifact_json = excluded.raw_artifact_json,
                   normalized_artifact_json = excluded.normalized_artifact_json,
+                  source_json = excluded.source_json,
+                  captured_at = excluded.captured_at,
+                  content_hash = excluded.content_hash,
+                  adapter_name = excluded.adapter_name,
+                  adapter_version = excluded.adapter_version,
                   last_error = excluded.last_error,
                   updated_at = excluded.updated_at
                 """,
@@ -69,6 +83,11 @@ class SQLiteEventRecordStore:
                     "persisted",
                     raw_json,
                     normalized_json,
+                    event.source.model_dump_json(),
+                    event.captured_at.isoformat(),
+                    event.content_hash,
+                    event.provenance.adapter_name,
+                    event.provenance.adapter_version,
                     None,
                     now,
                     now,
@@ -139,6 +158,11 @@ class SQLiteEventRecordStore:
                   status TEXT NOT NULL,
                   raw_artifact_json TEXT,
                   normalized_artifact_json TEXT,
+                  source_json TEXT,
+                  captured_at TEXT,
+                  content_hash TEXT,
+                  adapter_name TEXT,
+                  adapter_version TEXT,
                   last_error TEXT,
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL
@@ -154,6 +178,7 @@ class SQLiteEventRecordStore:
                 );
                 """
             )
+            _ensure_events_columns(connection)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._path)
@@ -161,15 +186,34 @@ class SQLiteEventRecordStore:
         return connection
 
 
+def _ensure_events_columns(connection: sqlite3.Connection) -> None:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+    for column, definition in {
+        "source_json": "TEXT",
+        "captured_at": "TEXT",
+        "content_hash": "TEXT",
+        "adapter_name": "TEXT",
+        "adapter_version": "TEXT",
+    }.items():
+        if column not in columns:
+            connection.execute(f"ALTER TABLE events ADD COLUMN {column} {definition}")
+
+
 def _row_to_event_record(row: sqlite3.Row) -> EventRecord:
     raw_artifact = _artifact_from_json(row["raw_artifact_json"])
     normalized_artifact = _artifact_from_json(row["normalized_artifact_json"])
+    captured_at = _datetime_from_json(row["captured_at"])
     return EventRecord(
         event_id=row["event_id"],
         idempotency_key=row["idempotency_key"],
         status=row["status"],
         raw_artifact=raw_artifact,
         normalized_artifact=normalized_artifact,
+        source=_source_from_json(row["source_json"]),
+        captured_at=captured_at,
+        content_hash=row["content_hash"],
+        adapter_name=row["adapter_name"],
+        adapter_version=row["adapter_version"],
         last_error=row["last_error"],
     )
 
@@ -178,6 +222,18 @@ def _artifact_from_json(value: str | None) -> ArtifactRef | None:
     if value is None:
         return None
     return ArtifactRef.model_validate_json(value)
+
+
+def _source_from_json(value: str | None) -> SourceIdentity | None:
+    if value is None:
+        return None
+    return SourceIdentity.model_validate_json(value)
+
+
+def _datetime_from_json(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
 
 
 def _utc_now() -> str:

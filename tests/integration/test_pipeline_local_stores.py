@@ -73,7 +73,12 @@ def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path:
         event_count = connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         enrichment_count = connection.execute("SELECT COUNT(*) FROM enrichments").fetchone()[0]
         row = connection.execute(
-            "SELECT raw_artifact_json, normalized_artifact_json, status FROM events"
+            """
+            SELECT raw_artifact_json, normalized_artifact_json, status,
+                   source_json, captured_at, content_hash, adapter_name, adapter_version,
+                   idempotency_key
+            FROM events
+            """
         ).fetchone()
 
     assert event_count == 1
@@ -81,6 +86,14 @@ def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path:
     assert row[0] is not None
     assert row[1] is not None
     assert row[2] == "enriched"
+    assert row[3] is not None
+    assert row[4] == "2026-05-12T00:00:00+00:00"
+    assert row[5] == payload_content_hash(
+        HtmlPayload(html="<article><h1>Hello</h1><p>World</p></article>")
+    )
+    assert row[6] == "single-event"
+    assert row[7] == "0.1.0"
+    assert row[8] == "blog:evt_1"
 
     processed_again = asyncio.run(pipeline.run_once())
 

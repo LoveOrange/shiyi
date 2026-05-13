@@ -38,6 +38,7 @@ The MVP local storage implementation must support deterministic local capture ru
 - Enforce idempotency by `idempotency_key`.
 - Track event status.
 - Store raw and normalized artifact references as JSON.
+- Store minimal trace fields needed to audit pipeline writes: source, captured_at, content_hash, idempotency_key, adapter_name, and adapter_version.
 - Store optional annotation/preprocess artifact references as JSON rows.
 - Support idempotent re-runs by returning existing complete records.
 
@@ -51,6 +52,11 @@ CREATE TABLE events (
   status TEXT NOT NULL,
   raw_artifact_json TEXT,
   normalized_artifact_json TEXT,
+  source_json TEXT,
+  captured_at TEXT,
+  content_hash TEXT,
+  adapter_name TEXT,
+  adapter_version TEXT,
   last_error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
