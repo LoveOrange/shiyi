@@ -12,9 +12,9 @@ Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Outp
 Core extension points:
 
 - **Fetchers** — retrieve web, RSS, and sitemap source material with shared HTTP policy.
-- **Adapters** — parse source-specific data and normalize raw input into capture events.
+- **Adapters** — parse source-specific data and normalize raw input into internal items.
 - **Normalizers** — turn source payloads into canonical Markdown/text or structured artifacts.
-- **Preprocessors / AI Providers** — optionally produce neutral, reusable annotations such as summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
+- **AI Providers** — optionally produce neutral, reusable annotations such as summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
 - **Artifact Stores and Event Record Stores** — store raw captures, normalized records, optional neutral annotations, idempotency state, and audit metadata in user-selected backends.
 
 > Status: early architecture draft. APIs are not stable yet.
@@ -22,8 +22,8 @@ Core extension points:
 ## Design goals
 
 1. **Composable capture pipeline** — sources, normalization, optional neutral preprocessing, and storage should evolve independently.
-2. **Open extension model** — users can bring their own Adapter, Normalizer, Preprocessor/AI Provider, Artifact Store, or Event Record Store implementation without forking core.
-3. **Production-grade quality** — typed contracts, deterministic tests, observable runtime, clear error semantics, and compatibility discipline.
+2. **Open extension model** — users can bring their own Adapter, Normalizer, AI Provider, Artifact Store, or Event Record Store implementation without forking core.
+3. **Production-grade quality** — typed contracts, deterministic tests, observable runtime, clear error semantics, and simple MVP-first evolution.
 4. **Trustworthy data flow** — raw input, transformations, model outputs, and persistence writes should be traceable and auditable.
 5. **Language-first documentation** — English is the primary documentation language until the design stabilizes; other languages will follow later.
 
@@ -33,13 +33,14 @@ Core extension points:
 flowchart LR
   Source[External Source] --> Fetcher[Fetcher]
   Fetcher --> Adapter[Adapter]
-  Adapter --> CaptureEvent[Capture Event]
-  CaptureEvent --> Pipeline[Capture Pipeline]
-  Pipeline --> Preprocess[Optional Neutral Preprocess]
-  Preprocess --> Annotation[Annotation Artifact]
+  Adapter --> InternalItem[Internal Item]
+  InternalItem --> Pipeline[Capture Pipeline]
+  Pipeline --> Annotation[Optional Neutral Annotation]
   Pipeline --> Policy[Policy & Validation]
-  Annotation --> ArtifactStore[Artifact Store]
-  Annotation --> EventRecordStore[Event Record Store]
+  Pipeline --> ArtifactStore[Artifact Store]
+  Pipeline --> EventRecordStore[Event Record Store]
+  Annotation --> ArtifactStore
+  Annotation --> EventRecordStore
   ArtifactStore --> FS[(Filesystem Artifacts)]
   EventRecordStore --> SQLite[(SQLite Event Records)]
   Pipeline --> Telemetry[Logs / Metrics / Traces]
@@ -81,7 +82,7 @@ The CLI prints a JSON summary:
 {"artifacts": 4, "enriched_events": 1, "enrichments": 2, "processed": 1, "source": "openai", "total_events": 1, "workspace": ".shiyi/openai"}
 ```
 
-A second run over the same source should return `"processed": 0` for already-complete records. This is the MVP idempotency behavior. Current code still uses enrichment terminology for optional local heuristic annotations; that naming is transitional.
+A second run over the same source should return `"processed": 0` for already-complete records. This is the MVP idempotency behavior. Optional local heuristic annotations are recorded as enrichment artifacts.
 
 For daily capture, prefer a date window plus a small overlap instead of an arbitrary item limit:
 
@@ -91,7 +92,7 @@ uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-1
 
 Date windows are half-open: `--since` is inclusive and `--until` is exclusive. For scheduled jobs, use a 2-3 day overlap and let idempotency skip already-complete records. `--limit` remains as a deprecated debug alias for the item cap.
 
-List captured events with the CLI:
+List captured records with the CLI:
 
 ```bash
 uv run shiyi list --workspace .shiyi/openai

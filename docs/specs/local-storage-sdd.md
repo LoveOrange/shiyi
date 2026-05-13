@@ -27,7 +27,7 @@ The MVP local storage implementation must support deterministic local capture ru
     │   └── <sha256-prefix>/<sha256>
     ├── normalized/
     │   └── <sha256-prefix>/<sha256>
-    └── enrichment/  # transitional name for annotation/preprocess artifacts
+    └── enrichment/  # neutral annotation artifacts
         └── <sha256-prefix>/<sha256>
 ```
 

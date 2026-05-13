@@ -17,7 +17,7 @@ class StrictModel(BaseModel):
 
 
 class SourceIdentity(StrictModel):
-    """Identifies the external system that produced a capture event."""
+    """Identifies the external system that produced an internal item."""
 
     kind: NonEmptyString
     uri: HttpUrl | None = None
@@ -25,7 +25,7 @@ class SourceIdentity(StrictModel):
 
 
 class Provenance(StrictModel):
-    """Traceable source metadata for a normalized capture event."""
+    """Traceable source metadata for a normalized internal item."""
 
     adapter_name: NonEmptyString
     adapter_version: NonEmptyString
@@ -76,8 +76,8 @@ class CaptureWindow(StrictModel):
         return not ((until := self.until) and occurred_at >= until)
 
 
-class CaptureEvent(StrictModel):
-    """Normalized boundary object emitted by adapters and consumed by core."""
+class InternalItem(StrictModel):
+    """Canonical Adapter -> Pipeline boundary object."""
 
     id: NonEmptyString
     source: SourceIdentity
@@ -89,21 +89,21 @@ class CaptureEvent(StrictModel):
 
 
 class ClassifyTask(StrictModel):
-    """Classify a capture event into one or more configured tags."""
+    """Classify an internal item into one or more configured tags."""
 
     type: Literal["classify"] = "classify"
     labels: tuple[NonEmptyString, ...]
 
 
 class ExtractTask(StrictModel):
-    """Extract structured information from a capture event."""
+    """Extract structured information from an internal item."""
 
     type: Literal["extract"] = "extract"
     schema_: dict[str, Any] = Field(alias="schema")
 
 
 class SummarizeTask(StrictModel):
-    """Summarize a capture event."""
+    """Summarize an internal item."""
 
     type: Literal["summarize"] = "summarize"
     max_tokens: int | None = Field(default=None, gt=0)
@@ -171,7 +171,7 @@ EventStatus = Literal["persisted", "enriched", "partially_enriched", "failed"]
 
 
 class EventRecord(StrictModel):
-    """Processing ledger record for one logical capture event."""
+    """Processing ledger record for one logical internal item."""
 
     event_id: NonEmptyString
     idempotency_key: NonEmptyString

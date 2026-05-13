@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from shiyi.domain.models import ArtifactWrite, CaptureEvent
+from shiyi.domain.models import ArtifactWrite, InternalItem
 
 
 class Normalizer(Protocol):
@@ -15,6 +15,6 @@ class Normalizer(Protocol):
         """Stable normalizer implementation name."""
         ...
 
-    async def normalize(self, event: CaptureEvent) -> ArtifactWrite | None:
+    async def normalize(self, event: InternalItem) -> ArtifactWrite | None:
         """Return a canonical artifact for an event, or None if no normalization is needed."""
         ...

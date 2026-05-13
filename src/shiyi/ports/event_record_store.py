@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from shiyi.domain.models import ArtifactRef, CaptureEvent, EnrichmentResult, EventRecord
+from shiyi.domain.models import ArtifactRef, EnrichmentResult, EventRecord, InternalItem
 
 
 class EventRecordStore(Protocol):
@@ -21,7 +21,7 @@ class EventRecordStore(Protocol):
 
     async def save_event(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         *,
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
@@ -31,13 +31,13 @@ class EventRecordStore(Protocol):
 
     async def save_enrichment(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord:
         """Record a validated enrichment result and its artifact reference."""
         ...
 
-    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+    async def mark_enriched(self, event: InternalItem) -> EventRecord:
         """Mark an event fully enriched after all configured tasks succeed."""
         ...

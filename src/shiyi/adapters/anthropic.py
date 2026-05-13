@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 
 from selectolax.parser import HTMLParser
 
-from shiyi.domain.models import CaptureEvent, CaptureWindow, HtmlPayload, Provenance, SourceIdentity
+from shiyi.domain.models import CaptureWindow, HtmlPayload, InternalItem, Provenance, SourceIdentity
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import SitemapFetcher, WebFetcher
 
@@ -18,7 +18,7 @@ ANTHROPIC_NEWS_URL = "https://www.anthropic.com/news"
 
 
 class AnthropicNewsAdapter:
-    """Reads Anthropic's news index and emits events for linked article pages."""
+    """Reads Anthropic's news index and emits internal items for linked article pages."""
 
     name = "anthropic-news-index"
     version = "0.2.0"
@@ -40,7 +40,7 @@ class AnthropicNewsAdapter:
         self._sitemap_url = sitemap_url
         self._window = window or CaptureWindow(max_items=limit)
 
-    async def discover(self) -> AsyncIterator[CaptureEvent]:
+    async def discover(self) -> AsyncIterator[InternalItem]:
         """Fetch Anthropic news index and article pages."""
         index_result = await self._web_fetcher.fetch(self._index_url)
         sitemap_dates = await self._sitemap_dates()
@@ -56,7 +56,7 @@ class AnthropicNewsAdapter:
             if not self._window.includes(article_date):
                 continue
             article_id = _article_id(url)
-            yield CaptureEvent(
+            yield InternalItem(
                 id=f"anthropic-news:{article_id}",
                 source=SourceIdentity(kind="anthropic-news", uri=url),
                 occurred_at=occurred_at,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from markdownify import markdownify as markdownify_html
 from selectolax.parser import HTMLParser
 
-from shiyi.domain.models import ArtifactWrite, CaptureEvent
+from shiyi.domain.models import ArtifactWrite, InternalItem
 
 
 class HtmlMarkdownNormalizer:
@@ -13,7 +13,7 @@ class HtmlMarkdownNormalizer:
 
     name = "html-markdown-normalizer"
 
-    async def normalize(self, event: CaptureEvent) -> ArtifactWrite | None:
+    async def normalize(self, event: InternalItem) -> ArtifactWrite | None:
         """Normalize HTML payloads to Markdown and leave other payloads unchanged."""
         if event.payload.type != "html":
             return None

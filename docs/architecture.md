@@ -9,11 +9,11 @@ Shiyi defines a general capture and normalization pipeline where the core system
 ## 2. Architectural principles
 
 - **Core owns policy and orchestration, not integrations.** Integrations implement stable ports.
-- **Raw data is never silently discarded.** Every normalized record should retain provenance back to its source event.
+- **Raw data is never silently discarded.** Every normalized record should retain provenance back to its source item.
 - **Optional preprocessing is neutral.** AI-assisted work inside Shiyi must produce reusable facts or annotations, not business opinions.
-- **Idempotency is mandatory.** Replaying the same source event should not corrupt state or duplicate durable records.
+- **Idempotency is mandatory.** Replaying the same source item should not corrupt state or duplicate durable records.
 - **Observability is part of the contract.** Every pipeline run should expose trace IDs, structured logs, and measurable outcomes.
-- **Compatibility is explicit.** Public contracts must follow semantic versioning once stabilized.
+- **MVP evolution is direct.** Until public contracts are stabilized, rename boundaries directly instead of adding compatibility shims.
 
 ## 3. Domain model
 
@@ -23,17 +23,17 @@ An external system that can produce information: RSS, web pages, email, chat, do
 
 ### Adapter
 
-A user-provided component that reads from a source and emits `CaptureEvent` objects. Adapters are responsible for source authentication, pagination, rate limiting, and source-specific checkpoint hints.
+A user-provided component that reads from a source and emits `InternalItem` objects. Adapters are responsible for source authentication, pagination, rate limiting, and source-specific checkpoint hints.
 
-### Capture Event
+### Internal Item
 
 The normalized boundary object entering Shiyi core. It contains identity, payload, metadata, provenance, and optional attachments.
 
 ### Pipeline Run
 
-A single execution context that processes one or more capture events through validation, raw persistence, normalization, optional neutral preprocessing, event-record persistence, and telemetry.
+A single execution context that processes one or more internal items through validation, raw persistence, normalization, optional neutral preprocessing, event-record persistence, and telemetry.
 
-### Preprocessor / AI Provider
+### AI Provider
 
 An optional user-provided component for neutral preprocessing tasks such as language detection, neutral summaries, entity extraction, coarse topic annotation, deduplication assistance, quality signals, chunking, or embeddings. Product-specific insight generation belongs to downstream consumers, not Shiyi core.
 
@@ -44,8 +44,8 @@ Persistence is a family of user-provided storage components. The MVP separates a
 ## 4. Pipeline stages
 
 1. **Discover** — adapter discovers candidate source items.
-2. **Normalize** — adapter emits stable `CaptureEvent` objects.
-3. **Validate** — core validates event schema, size limits, provenance, and required fields.
+2. **Normalize** — adapter emits stable `InternalItem` objects.
+3. **Validate** — core validates item schema, size limits, provenance, and required fields.
 4. **Deduplicate** — MVP checks event idempotency keys; canonical content fingerprint/version semantics are a future spec.
 5. **Persist artifacts** — core stores raw and normalized artifacts through an artifact store.
 6. **Optional neutral preprocess** — core may invoke a preprocessor/AI provider for reusable annotations.
@@ -58,7 +58,7 @@ Persistence is a family of user-provided storage components. The MVP separates a
 Shiyi core exposes these primary ports:
 
 - `AdapterPort`
-- `PreprocessorPort` / transitional `AIProviderPort`
+- `AIProviderPort`
 - `ArtifactStorePort`
 - `EventRecordStorePort`
 
@@ -68,7 +68,7 @@ All ports should be asynchronous, cancellable, typed, and testable with contract
 flowchart TB
   Core[Shiyi Core]
   Core --> AdapterPort[Adapter Port]
-  Core --> AIProviderPort[Preprocessor / AI Provider Port]
+  Core --> AIProviderPort[AI Provider Port]
   Core --> ArtifactStorePort[Artifact Store Port]
   Core --> EventRecordStorePort[Event Record Store Port]
   AdapterPort --> CustomAdapter[Custom Adapter]

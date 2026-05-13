@@ -9,7 +9,7 @@ from shiyi.adapters.anthropic import (
     AnthropicNewsAdapter,
     anthropic_news_adapter,
 )
-from shiyi.domain.models import CaptureEvent, CaptureWindow
+from shiyi.domain.models import CaptureWindow, InternalItem
 from shiyi.ports.fetcher import FetchResult
 
 
@@ -82,7 +82,7 @@ def test_anthropic_news_adapter_filters_by_article_date_window() -> None:
     assert [event.idempotency_key for event in events] == ["anthropic-news:inside"]
 
 
-async def _collect_anthropic_events(*, limit: int) -> list[CaptureEvent]:
+async def _collect_anthropic_events(*, limit: int) -> list[InternalItem]:
     adapter = anthropic_news_adapter(limit=limit)
     return [event async for event in adapter.discover()]
 
@@ -96,5 +96,5 @@ def _article(title: str, published: str) -> str:
     """
 
 
-async def _collect_events(adapter: AnthropicNewsAdapter) -> list[CaptureEvent]:
+async def _collect_events(adapter: AnthropicNewsAdapter) -> list[InternalItem]:
     return [event async for event in adapter.discover()]

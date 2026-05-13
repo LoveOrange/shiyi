@@ -13,7 +13,7 @@ A successful MVP run must:
 5. Store event records and optional neutral annotation references in SQLite.
 6. Produce deterministic CLI summaries.
 7. Skip already-complete records on re-run using idempotency keys.
-8. List captured event records from the CLI.
+8. List captured records from the CLI.
 9. Pass local and CI quality gates.
 
 ## Included in MVP
@@ -24,7 +24,7 @@ A successful MVP run must:
 - HTML-to-Markdown normalizer.
 - OpenAI RSS adapter.
 - Anthropic news index adapter.
-- Transitional local heuristic annotation provider. Neutral preprocessing is optional in the product scope and should not be required for P0 capture correctness.
+- Local heuristic AI provider for neutral annotations. This remains product-neutral and must not become downstream insight/ranking logic.
 - One-shot CLI capture command.
 - README quickstart.
 - Metadata listing CLI.
@@ -89,4 +89,4 @@ Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
 Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
 ```
 
-For P0, Shiyi should focus on capture, raw artifacts, normalized/canonical artifacts, event records, and idempotency. Neutral preprocessing can remain optional and lightweight. Business-specific enrichment such as trend analysis, opportunity scoring, ranking, or weekly-report selection belongs to downstream products.
+For P0, Shiyi should focus on capture, raw artifacts, normalized/canonical artifacts, event records, and idempotency. Neutral annotation should remain lightweight and product-neutral. Business-specific enrichment such as trend analysis, opportunity scoring, ranking, or weekly-report selection belongs to downstream products.

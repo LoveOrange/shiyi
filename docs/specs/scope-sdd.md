@@ -157,22 +157,17 @@ P2 should make it easy for product consumers to use Shiyi output:
 
 `Enrichment` is a dangerous name for Shiyi core because it suggests business insight.
 
-Preferred future terms:
-
-- `PreprocessTask` for neutral transformations before consumer-specific pipelines;
-- `AnnotationTask` for metadata-like labels/entities/summaries;
-- `ExtractionTask` for structured facts extracted from canonical content.
-
-Current code still contains `EnrichmentTask` and `EnrichmentResult` as an MVP implementation artifact. Specs should treat that naming as transitional and should not expand its business meaning.
+`EnrichmentTask` and `EnrichmentResult` are the MVP names for neutral, reusable annotation work. Specs must not expand their meaning into product-specific insight generation.
 
 ## 7. Pipeline implication
 
-The pipeline should support two valid modes:
+The pipeline MVP uses one direct mode:
 
-1. **Capture-only mode**: raw + normalized artifacts are persisted and the event reaches a terminal captured/complete state without AI preprocessing.
-2. **Capture + neutral preprocess mode**: raw + normalized artifacts are persisted, optional neutral preprocess tasks run, and the event reaches a terminal state only after required preprocess tasks succeed.
+1. Raw + normalized artifacts are persisted first.
+2. Configured neutral annotation tasks run next.
+3. The item reaches terminal `enriched` state only after every configured annotation task succeeds.
 
-Spec target: capture-only runs finish as `captured`; capture + neutral preprocess runs finish as `preprocessed`. Current implementation still uses enrichment naming (`enriched`, `mark_enriched`) as transitional compatibility. The implementation must converge on these target completion semantics before broader preprocess naming migration.
+MVP status semantics stay direct: `persisted` means raw/normalized artifacts were written, `enriched` means all configured neutral annotation tasks completed, and `failed` means the run needs inspection or retry. Rename status concepts directly only when a task explicitly changes the implemented state model.
 
 ## 8. Acceptance criteria
 

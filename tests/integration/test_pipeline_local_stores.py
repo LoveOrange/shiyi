@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from shiyi import (
-    CaptureEvent,
     CapturePipeline,
     EnrichmentResult,
     HtmlPayload,
+    InternalItem,
     ModelIdentity,
     Provenance,
     SourceIdentity,
@@ -24,8 +24,8 @@ class SingleEventAdapter:
     name = "single-event"
     version = "0.1.0"
 
-    async def discover(self) -> AsyncIterator[CaptureEvent]:
-        yield CaptureEvent(
+    async def discover(self) -> AsyncIterator[InternalItem]:
+        yield InternalItem(
             id="evt_1",
             source=SourceIdentity(kind="blog"),
             occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
@@ -42,7 +42,7 @@ class SingleEventAdapter:
 class FakeAIProvider:
     name = "fake-ai"
 
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult:
+    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult:
         return EnrichmentResult(
             task_type=task.type,
             output={"event_id": event.id},

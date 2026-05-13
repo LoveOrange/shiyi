@@ -38,11 +38,11 @@ Fetcher fetches lightweight listing/index/feed
 -> Fetcher fetches full item with source + raw_key
    -> cache hit: read local raw.html, skip remote full fetch
    -> cache miss: fetch remote full content, save raw.html
--> Adapter emits CaptureEvent with event-level raw payload
+-> Adapter emits InternalItem with event-level raw payload
 -> Pipeline persists raw artifact, normalizes, persists event records, enriches
 ```
 
-For feeds where the entry already contains enough event-level raw content, the adapter may emit a `CaptureEvent` directly without a second full-page fetch.
+For feeds where the entry already contains enough event-level raw content, the adapter may emit a `InternalItem` directly without a second full-page fetch.
 
 ## 4. Boundaries
 
@@ -58,13 +58,13 @@ For feeds where the entry already contains enough event-level raw content, the a
 - Choose which fetcher(s) to call.
 - Parse source-specific structures.
 - Define `raw_key` from entry-level metadata.
-- Construct `CaptureEvent` payloads and source metadata.
+- Construct `InternalItem` payloads and source metadata without leaking third-party DTOs into the pipeline.
 - Apply source-specific date/window filtering.
 
 ### Pipeline responsibilities
 
 - Check processing idempotency through event record store.
-- Persist raw artifacts from `CaptureEvent.payload`.
+- Persist raw artifacts from `InternalItem.payload`.
 - Normalize content.
 - Persist normalized artifacts and event records.
 - Run optional neutral preprocessing.
@@ -75,7 +75,7 @@ For feeds where the entry already contains enough event-level raw content, the a
 The fetcher layer must not:
 
 - Query SQLite event records.
-- Decide whether an event is normalized, preprocessed, or complete.
+- Decide whether an item is normalized, enriched, or complete.
 - Know about normalized Markdown, semantic input, model versions, tags, summaries, annotations, or preprocess outputs.
 - Compute semantic fingerprints.
 - Own source-level snapshot persistence.
@@ -195,7 +195,7 @@ Current flow:
 2. Extract article URLs.
 3. Compute adapter-defined `raw_key` from entry-level metadata.
 4. Fetch each article page through `WebFetcher.fetch(url, source="anthropic-news", raw_key=...)`.
-5. Emit `CaptureEvent` with article HTML as event-level raw payload.
+5. Emit `InternalItem` with article HTML as event-level raw payload.
 
 Current raw key:
 
@@ -211,7 +211,7 @@ Current flow:
 
 1. Fetch `https://openai.com/news/rss.xml` as a feed/listing document.
 2. Parse entries.
-3. Emit `CaptureEvent` from RSS entry content/summary.
+3. Emit `InternalItem` from RSS entry content/summary.
 
 OpenAI currently does not use full-page raw cache because the RSS entry already provides event-level raw content for the MVP flow.
 

@@ -16,11 +16,11 @@ from typing import Any, Literal, cast
 from shiyi.adapters.anthropic import anthropic_news_adapter
 from shiyi.adapters.rss import openai_news_adapter
 from shiyi.domain.models import (
-    CaptureEvent,
     CaptureWindow,
     ClassifyTask,
     EnrichmentResult,
     EnrichmentTask,
+    InternalItem,
     ModelIdentity,
     SummarizeTask,
 )
@@ -49,7 +49,7 @@ class CaptureSummary:
 
 @dataclass(frozen=True, slots=True)
 class EventSummary:
-    """Compact processing-record summary for one captured event."""
+    """Compact processing-record summary for one captured record."""
 
     event_id: str
     idempotency_key: str
@@ -64,7 +64,7 @@ class LocalHeuristicAIProvider:
 
     name = "local-heuristic"
 
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult:
+    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult:
         """Return simple structured enrichment without external AI calls."""
         title = str(event.metadata.get("title", ""))
         if task.type == "classify":
@@ -129,7 +129,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exclusive UTC date/time, e.g. 2026-05-13",
     )
 
-    list_events = subcommands.add_parser("list", help="List captured event records")
+    list_events = subcommands.add_parser("list", help="List captured records")
     list_events.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     list_events.add_argument("--limit", type=int, default=20)
     return parser
@@ -206,7 +206,7 @@ def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> 
 
 
 def list_events(*, workspace: Path, limit: int) -> list[EventSummary]:
-    """List captured event records from a workspace."""
+    """List captured records from a workspace."""
     metadata_path = workspace / "event-records.sqlite"
     if not metadata_path.exists():
         return []

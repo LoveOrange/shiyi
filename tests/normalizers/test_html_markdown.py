@@ -1,13 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
 
-from shiyi.domain.models import CaptureEvent, HtmlPayload, Provenance, SourceIdentity, TextPayload
+from shiyi.domain.models import HtmlPayload, InternalItem, Provenance, SourceIdentity, TextPayload
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 
 
 def test_html_markdown_normalizer_extracts_article_markdown() -> None:
     normalizer = HtmlMarkdownNormalizer()
-    event = CaptureEvent(
+    event = InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
         occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
@@ -33,7 +33,7 @@ def test_html_markdown_normalizer_extracts_article_markdown() -> None:
 
 def test_html_markdown_normalizer_ignores_non_html_payloads() -> None:
     normalizer = HtmlMarkdownNormalizer()
-    event = CaptureEvent(
+    event = InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
         occurred_at=datetime(2026, 5, 12, tzinfo=UTC),

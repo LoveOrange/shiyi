@@ -9,13 +9,13 @@ from shiyi import (
     ArtifactRef,
     ArtifactStore,
     ArtifactWrite,
-    CaptureEvent,
     CapturePipeline,
     ClassifyTask,
     EnrichmentResult,
     EventRecord,
     EventRecordStore,
     HtmlPayload,
+    InternalItem,
     ModelIdentity,
     Provenance,
     SourceIdentity,
@@ -28,8 +28,8 @@ class FakeAdapter:
     name = "fake"
     version = "0.1.0"
 
-    async def discover(self) -> AsyncIterator[CaptureEvent]:
-        yield CaptureEvent(
+    async def discover(self) -> AsyncIterator[InternalItem]:
+        yield InternalItem(
             id="evt_1",
             source=SourceIdentity(kind="test"),
             occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
@@ -46,7 +46,7 @@ class FakeAdapter:
 class FakeAIProvider:
     name = "fake-ai"
 
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult:
+    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult:
         return EnrichmentResult(
             task_type=task.type,
             output={"event_id": event.id},
@@ -92,7 +92,7 @@ class FakeEventRecordStore:
 
     async def save_event(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         *,
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
@@ -109,7 +109,7 @@ class FakeEventRecordStore:
 
     async def save_enrichment(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord:
@@ -117,7 +117,7 @@ class FakeEventRecordStore:
         self.enrichment_count += 1
         return self.records[event.idempotency_key]
 
-    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+    async def mark_enriched(self, event: InternalItem) -> EventRecord:
         self.mark_enriched_count += 1
         existing = self.records[event.idempotency_key]
         record = EventRecord(

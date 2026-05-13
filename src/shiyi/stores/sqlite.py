@@ -6,7 +6,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from shiyi.domain.models import ArtifactRef, CaptureEvent, EnrichmentResult, EventRecord
+from shiyi.domain.models import ArtifactRef, EnrichmentResult, EventRecord, InternalItem
 
 
 class SQLiteEventRecordStore:
@@ -38,7 +38,7 @@ class SQLiteEventRecordStore:
 
     async def save_event(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         *,
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
@@ -82,7 +82,7 @@ class SQLiteEventRecordStore:
 
     async def save_enrichment(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord:
@@ -110,7 +110,7 @@ class SQLiteEventRecordStore:
             raise RuntimeError(msg)
         return record
 
-    async def mark_enriched(self, event: CaptureEvent) -> EventRecord:
+    async def mark_enriched(self, event: InternalItem) -> EventRecord:
         """Mark an event fully enriched after all configured tasks succeed."""
         now = _utc_now()
         with self._connect() as connection:

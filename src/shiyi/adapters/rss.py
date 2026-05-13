@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from shiyi.domain.models import (
-    CaptureEvent,
     CaptureWindow,
     HtmlPayload,
+    InternalItem,
     Provenance,
     SourceIdentity,
     TextPayload,
@@ -17,7 +17,7 @@ from shiyi.ports.fetcher import RssFetcher
 
 
 class RssFeedAdapter:
-    """Reads RSS/Atom feeds and emits capture events for feed entries."""
+    """Reads RSS/Atom feeds and emits internal items for feed entries."""
 
     version = "0.2.0"
 
@@ -43,8 +43,8 @@ class RssFeedAdapter:
         """Stable adapter name."""
         return self._name
 
-    async def discover(self) -> AsyncIterator[CaptureEvent]:
-        """Fetch and parse the feed into capture events."""
+    async def discover(self) -> AsyncIterator[InternalItem]:
+        """Fetch and parse the feed into Adapter -> Pipeline internal items."""
         feed = await self._rss_fetcher.fetch(self._feed_url)
         emitted = 0
         for entry in feed.entries:
@@ -56,7 +56,7 @@ class RssFeedAdapter:
                 if entry.html
                 else TextPayload(text=entry.title or entry.entry_id)
             )
-            yield CaptureEvent(
+            yield InternalItem(
                 id=f"{self._source_kind}:{entry.entry_id}",
                 source=SourceIdentity(kind=self._source_kind, uri=self._feed_url),
                 occurred_at=occurred_at,

@@ -4,9 +4,9 @@ from pathlib import Path
 
 from shiyi.domain.models import (
     ArtifactRef,
-    CaptureEvent,
     EnrichmentResult,
     HtmlPayload,
+    InternalItem,
     ModelIdentity,
     Provenance,
     SourceIdentity,
@@ -51,8 +51,8 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
     assert enriched.status == "enriched"
 
 
-def _event() -> CaptureEvent:
-    return CaptureEvent(
+def _event() -> InternalItem:
+    return InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
         occurred_at=datetime(2026, 5, 12, tzinfo=UTC),

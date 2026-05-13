@@ -5,7 +5,7 @@ import httpx
 import respx
 
 from shiyi.adapters.rss import RssFeedAdapter, openai_news_adapter
-from shiyi.domain.models import CaptureEvent, CaptureWindow
+from shiyi.domain.models import CaptureWindow, InternalItem
 from shiyi.ports.fetcher import RssEntry, RssFeed
 
 
@@ -79,10 +79,10 @@ def test_openai_news_adapter_filters_by_capture_window() -> None:
     assert [event.idempotency_key for event in events] == ["openai-news:in-window"]
 
 
-async def _collect_openai_events() -> list[CaptureEvent]:
+async def _collect_openai_events() -> list[InternalItem]:
     adapter = openai_news_adapter()
     return [event async for event in adapter.discover()]
 
 
-async def _collect_events(adapter: RssFeedAdapter) -> list[CaptureEvent]:
+async def _collect_events(adapter: RssFeedAdapter) -> list[InternalItem]:
     return [event async for event in adapter.discover()]

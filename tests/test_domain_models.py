@@ -4,11 +4,11 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from shiyi import CaptureEvent, Provenance, SourceIdentity, TextPayload
+from shiyi import InternalItem, Provenance, SourceIdentity, TextPayload
 
 
-def test_capture_event_accepts_text_payload() -> None:
-    event = CaptureEvent(
+def test_internal_item_accepts_text_payload() -> None:
+    event = InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="rss"),
         occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
@@ -25,7 +25,7 @@ def test_capture_event_accepts_text_payload() -> None:
     assert event.idempotency_key == "rss:evt_1"
 
 
-def test_capture_event_rejects_unknown_fields() -> None:
+def test_internal_item_rejects_unknown_fields() -> None:
     payload: dict[str, Any] = {
         "id": "evt_1",
         "source": SourceIdentity(kind="rss"),
@@ -41,4 +41,4 @@ def test_capture_event_rejects_unknown_fields() -> None:
     }
 
     with pytest.raises(ValidationError):
-        CaptureEvent.model_validate(payload)
+        InternalItem.model_validate(payload)

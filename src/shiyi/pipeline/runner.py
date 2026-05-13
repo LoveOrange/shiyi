@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from shiyi.domain.models import ArtifactWrite, CaptureEvent, EnrichmentTask
+from shiyi.domain.models import ArtifactWrite, EnrichmentTask, InternalItem
 from shiyi.ports.adapter import Adapter
 from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
@@ -76,8 +76,8 @@ class CapturePipeline:
         return processed
 
 
-def _raw_artifact_from_event(event: CaptureEvent) -> ArtifactWrite:
-    """Convert a capture event payload into its raw artifact representation."""
+def _raw_artifact_from_event(event: InternalItem) -> ArtifactWrite:
+    """Convert an internal item payload into its raw artifact representation."""
     match event.payload.type:
         case "html":
             return ArtifactWrite(

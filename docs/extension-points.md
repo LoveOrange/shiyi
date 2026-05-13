@@ -17,7 +17,7 @@ Responsibilities:
 
 - Authenticate with the source.
 - Discover new or updated source items.
-- Convert source-specific data into `CaptureEvent`.
+- Convert source-specific data into `InternalItem`.
 - Provide checkpoint metadata for reliable resume.
 - Respect source rate limits and terms.
 
@@ -36,7 +36,7 @@ Responsibilities:
 
 Normalizers should not call model providers or decide business ranking.
 
-## Neutral Preprocessor / AI Provider
+## Neutral AI Provider
 
 Neutral preprocessors expose optional model-backed or heuristic capabilities behind stable contracts.
 
@@ -63,9 +63,9 @@ Out of scope:
 - ranking or editorial selection;
 - downstream-product-specific prompts.
 
-Current code still uses `AIProvider` / `EnrichmentTask` naming as a transitional MVP artifact. Future public contracts should prefer `PreprocessTask`, `AnnotationTask`, or `ExtractionTask` where appropriate.
+`AIProvider`, `EnrichmentTask`, and `EnrichmentResult` are the MVP neutral annotation boundary. Keep them neutral and reusable; do not turn them into product-specific insight generation.
 
-Neutral preprocessors should not persist final records directly.
+AI providers should not persist final records directly.
 
 ## Artifact Store
 
@@ -95,4 +95,4 @@ A dedicated Checkpoint Store is deferred for the MVP. Scheduled capture runs sho
 
 ## Contract testing
 
-Each extension point should eventually ship with a shared contract test suite. A third-party implementation should be able to run the suite and verify compatibility before publishing.
+Each extension point should eventually ship with a shared contract test suite. A third-party implementation should be able to run the suite and verify contract conformance before publishing.

@@ -17,7 +17,7 @@ Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Outp
 
 ## 2. MVP decision
 
-The MVP can ship without a real LLM provider. The existing `LocalHeuristicAIProvider` is a transitional local annotation helper, not a requirement for Shiyi's product scope.
+The MVP can ship without a real LLM provider. The existing `LocalHeuristicAIProvider` is the current deterministic local provider for neutral annotations.
 
 P0 correctness should depend on:
 
@@ -53,40 +53,18 @@ Provider-backed work is out of scope when it creates business opinions or produc
 - business conclusion generation;
 - prompts that only one downstream product understands.
 
-## 5. Naming direction
+## 5. MVP provider contract
 
-`EnrichmentTask` and `EnrichmentResult` are transitional implementation names from the local MVP.
-
-Preferred future names:
-
-- `PreprocessTask` for neutral transformations;
-- `AnnotationTask` for reusable metadata-like output;
-- `ExtractionTask` for structured facts extracted from canonical content;
-- `PreprocessResult` or `AnnotationResult` instead of `EnrichmentResult`.
-
-Do not expand `EnrichmentTask` with product-specific insight behavior. If a downstream product needs domain enrichment, it should run its own pipeline on Shiyi's normalized artifacts.
-
-## 6. Target provider contract
-
-The target provider should consume canonical content, not raw `CaptureEvent` as its main semantic input.
-
-Current transitional contract:
+`EnrichmentTask` and `EnrichmentResult` are the MVP names for neutral, reusable annotation work. Do not expand `EnrichmentTask` with product-specific insight behavior. If a downstream product needs domain enrichment, it should run its own pipeline on Shiyi's normalized artifacts.
 
 ```python
 class AIProvider(Protocol):
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult: ...
+    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult: ...
 ```
 
-Target contract direction:
+The provider may use `InternalItem` provenance and source metadata, but provider output must remain neutral and reusable.
 
-```python
-class PreprocessProvider(Protocol):
-    async def run(self, task: PreprocessTask, input: CanonicalContent) -> PreprocessResult: ...
-```
-
-`CaptureEvent` may still provide provenance and source metadata, but normalized/canonical content should be the semantic input.
-
-## 7. Design requirements before real provider implementation
+## 6. Design requirements before real provider implementation
 
 - Provider configuration must not hard-code secrets.
 - Model identity must be recorded in every result.
@@ -96,6 +74,6 @@ class PreprocessProvider(Protocol):
 - Rate limits and retry behavior must be explicit.
 - Every provider task must document why it is neutral and reusable.
 
-## 8. First real provider candidate
+## 7. First real provider candidate
 
 The first real provider can be a single OpenAI-compatible structured-output implementation, but it should implement neutral preprocessing only. Anthropic can follow once provider config, schema retry, and artifact storage policy are stable.

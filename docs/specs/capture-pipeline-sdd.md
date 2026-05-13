@@ -3,7 +3,7 @@
 - Status: Review
 - Owner: Shiyi contributors
 - Last updated: 2026-05-12
-- Scope: capture pipeline orchestration from adapter events to durable raw/normalized artifacts, event records, and optional neutral preprocessing artifacts
+- Scope: capture pipeline orchestration from adapter internal items to durable raw/normalized artifacts, event records, and optional neutral annotation artifacts
 
 ## 1. Purpose
 
@@ -13,13 +13,13 @@ We intentionally keep the pipeline stages in one document because the hard part 
 
 The pipeline coordinates these responsibilities:
 
-1. Consume `CaptureEvent` objects from an adapter.
-2. Use idempotency to skip already-complete logical events.
+1. Consume `InternalItem` objects from an adapter.
+2. Use idempotency to skip already-complete logical items.
 3. Persist raw source payloads as artifacts.
-4. Normalize event payloads into canonical artifacts when a normalizer is configured.
+4. Normalize item payloads into canonical artifacts when a normalizer is configured.
 5. Persist processing state in an `EventRecordStore`.
-6. Optionally run configured neutral preprocessing tasks through a transitional `AIProvider`.
-7. Persist validated neutral annotation/preprocess results as artifacts.
+6. Optionally run configured neutral enrichment tasks through an `AIProvider`.
+7. Persist validated neutral annotation results as artifacts.
 8. Update event records with status and artifact references.
 
 ## 2. Non-goals
@@ -36,19 +36,19 @@ The pipeline must not own these responsibilities:
 
 ## 3. Core terms
 
-### 3.1 CaptureEvent
+### 3.1 InternalItem
 
-`CaptureEvent` is the normalized input boundary emitted by adapters and consumed by the pipeline.
+`InternalItem` is the normalized Adapter -> Pipeline input boundary emitted by adapters and consumed by the pipeline.
 
 Required semantics:
 
-- `id`: stable event ID inside Shiyi.
+- `id`: stable item ID inside Shiyi.
 - `source`: source identity.
-- `occurred_at`: source event timestamp when available, otherwise discovery/fetch time.
-- `payload`: typed raw-ish event payload (`html`, `text`, or `binary`).
+- `occurred_at`: source item timestamp when available, otherwise discovery/fetch time.
+- `payload`: typed raw-ish item payload (`html`, `text`, or `binary`).
 - `provenance`: adapter name/version, source item ID, and fetch timestamp.
 - `idempotency_key`: stable logical identity for replay safety.
-- `metadata`: source/event descriptive metadata. This is not pipeline processing state.
+- `metadata`: source/item descriptive metadata. This is not pipeline processing state.
 
 ### 3.2 Artifact
 
@@ -56,13 +56,13 @@ An artifact is durable content stored outside event-record storage.
 
 Pipeline-created artifact kinds:
 
-- `raw`: original payload material from the event.
+- `raw`: original payload material from the item.
 - `normalized`: canonical Markdown/text or other normalized form.
-- `enrichment`: transitional artifact kind for validated neutral annotation/preprocess JSON.
+- `enrichment`: artifact kind for validated neutral annotation JSON.
 
 ### 3.3 EventRecord
 
-`EventRecord` is the pipeline processing ledger for one logical capture event.
+`EventRecord` is the pipeline processing ledger for one logical internal item.
 
 It tracks:
 
@@ -72,13 +72,13 @@ It tracks:
 - raw artifact reference;
 - normalized artifact reference;
 - last error when applicable;
-- annotation/preprocess artifact references through the store implementation.
+- annotation artifact references through the store implementation.
 
-`EventRecord` is deliberately not called metadata because `CaptureEvent.metadata` already means source/event descriptive metadata.
+`EventRecord` is deliberately not called metadata because `InternalItem.metadata` already means source/item descriptive metadata.
 
-### 3.4 Neutral annotation / transitional EnrichmentResult
+### 3.4 Neutral annotation / EnrichmentResult
 
-`EnrichmentResult` is the current transitional implementation name for a neutral preprocessing/annotation result. It may represent reusable facts such as neutral summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
+`EnrichmentResult` is the MVP result model for a neutral annotation. It may represent reusable facts such as neutral summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
 
 The pipeline treats provider output as untrusted until it has been parsed into the domain model and persisted as an annotation artifact. Product-specific insight output is out of scope.
 
@@ -92,10 +92,10 @@ class Adapter(Protocol):
     def name(self) -> str: ...
     @property
     def version(self) -> str: ...
-    def discover(self) -> AsyncIterator[CaptureEvent]: ...
+    def discover(self) -> AsyncIterator[InternalItem]: ...
 
 class Normalizer(Protocol):
-    async def normalize(self, event: CaptureEvent) -> ArtifactWrite | None: ...
+    async def normalize(self, event: InternalItem) -> ArtifactWrite | None: ...
 
 class ArtifactStore(Protocol):
     async def put(self, artifact: ArtifactWrite) -> ArtifactRef: ...
@@ -106,57 +106,50 @@ class EventRecordStore(Protocol):
     async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None: ...
     async def save_event(
         self,
-        event: CaptureEvent,
+        event: InternalItem,
         *,
         raw_artifact: ArtifactRef | None,
         normalized_artifact: ArtifactRef | None,
     ) -> EventRecord: ...
-    async def save_annotation(
+    async def save_enrichment(
         self,
-        event: CaptureEvent,
-        result: AnnotationResult,
+        event: InternalItem,
+        result: EnrichmentResult,
         artifact: ArtifactRef,
     ) -> EventRecord: ...
-    async def mark_captured(self, event: CaptureEvent) -> EventRecord: ...
-    async def mark_preprocessed(self, event: CaptureEvent) -> EventRecord: ...
+    async def mark_enriched(self, event: InternalItem) -> EventRecord: ...
 
-# Current implementation compatibility names:
-# save_enrichment ~= save_annotation
-# mark_enriched ~= mark_preprocessed
 
 class AIProvider(Protocol):
     @property
     def name(self) -> str: ...
-    async def run(self, task: EnrichmentTask, event: CaptureEvent) -> EnrichmentResult: ...
+    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult: ...
 ```
 
 ## 5. End-to-end flow
 
-The target pipeline flow is:
+The MVP pipeline flow is:
 
 ```text
 Adapter.discover()
-  -> CaptureEvent
+  -> InternalItem
   -> find existing EventRecord by idempotency_key
-  -> count already-complete and skip if existing.status in {captured, preprocessed}
-  -> convert CaptureEvent.payload to raw ArtifactWrite
+  -> skip if an existing record is already `enriched`
+  -> convert InternalItem.payload to raw ArtifactWrite
   -> ArtifactStore.put(raw)
   -> Normalizer.normalize(event) when configured
   -> ArtifactStore.put(normalized) when normalizer returns content
   -> EventRecordStore.save_event(..., status=persisted)
-  -> if neutral preprocess tasks are configured:
-       for each transitional EnrichmentTask / future PreprocessTask:
-         AIProvider.run(task, event)  # MVP temporary input shape
-         serialize result as annotation ArtifactWrite
-         ArtifactStore.put(annotation)
-         EventRecordStore.save_enrichment(...)  # append annotation ref only
-       EventRecordStore.mark_preprocessed(...) after all configured tasks succeed
-  -> if no neutral preprocess tasks are configured:
-       EventRecordStore.mark_captured(...) after raw + normalized persistence
+  -> for each configured EnrichmentTask:
+       AIProvider.run(task, event)
+       serialize result as enrichment ArtifactWrite
+       ArtifactStore.put(enrichment)
+       EventRecordStore.save_enrichment(...)
+  -> EventRecordStore.mark_enriched(...) after all configured tasks succeed
   -> return processed event count
 ```
 
-Target flow adds explicit failure status and retry metadata without changing the boundary shape:
+Future retry handling can add explicit failure metadata without changing the boundary shape:
 
 ```text
 for event in adapter.discover():
@@ -171,15 +164,11 @@ for event in adapter.discover():
     raw_ref = persist_raw(event)
     normalized_ref = normalize_and_persist(event)
     event_record_store.save_event(event, raw_ref, normalized_ref)
-    if preprocess_tasks:
-      for task in preprocess_tasks:
-        canonical_input = load_normalized_or_raw_content(event, normalized_ref, raw_ref)
-        result = preprocess_provider.run(task, canonical_input)
-        annotation_ref = persist_annotation(event, task, result)
-        event_record_store.save_annotation(event, result, annotation_ref)
-      event_record_store.mark_preprocessed(event)
-    else:
-      event_record_store.mark_captured(event)
+    for task in enrichment_tasks:
+      result = ai_provider.run(task, event)
+      enrichment_ref = persist_enrichment(event, task, result)
+      event_record_store.save_enrichment(event, result, enrichment_ref)
+    event_record_store.mark_enriched(event)
   except retryable_error as error:
     event_record_store.save_failure(event, error, retryable=True)
   except fatal_error as error:
@@ -192,7 +181,7 @@ for event in adapter.discover():
 
 Input: `Adapter`.
 
-Output: async stream of `CaptureEvent` objects.
+Output: async stream of `InternalItem` objects.
 
 Rules:
 
@@ -202,36 +191,36 @@ Rules:
 
 ### 6.2 Validate stage
 
-Input: `CaptureEvent`.
+Input: `InternalItem`.
 
-Output: valid event or failure.
+Output: valid item or failure.
 
 Rules:
 
 - Pydantic model construction validates structural fields.
 - The pipeline may add semantic validation later: payload size, required provenance, supported content type.
-- Invalid events must not produce durable artifacts unless explicitly stored for debugging under policy.
+- Invalid items must not produce durable artifacts unless explicitly stored for debugging under policy.
 
 Current status: model validation exists; explicit pipeline semantic validation is still minimal.
 
 ### 6.3 Dedupe/resume stage
 
-Input: `event.idempotency_key`.
+Input: `item.idempotency_key`.
 
 Output: process, skip, or resume decision.
 
 Rules:
 
 - `EventRecordStore.find_by_idempotency_key` is the only pipeline-level idempotency lookup.
-- If an existing record is `captured` or `preprocessed`, the event is complete and should be skipped.
-- If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key.
+- If an existing record is `enriched`, the item is complete and should be skipped.
+- If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key in a future retry task.
 - The pipeline must not consult fetch raw cache for processing idempotency. Fetch cache only avoids repeated full-page downloads.
 
-Target status rule: records with status `captured` or `preprocessed` are skipped as already complete; other statuses are candidates for resume/retry. Current implementation still treats `enriched` as the transitional complete status.
+MVP status rule: records with status `enriched` are skipped as already complete; other statuses are candidates for reprocessing.
 
 ### 6.4 Raw artifact stage
 
-Input: `CaptureEvent.payload`.
+Input: `InternalItem.payload`.
 
 Output: raw `ArtifactRef`.
 
@@ -244,14 +233,14 @@ Rules:
 
 ### 6.5 Normalize stage
 
-Input: `CaptureEvent` and optional `Normalizer`.
+Input: `InternalItem` and optional `Normalizer`.
 
 Output: normalized `ArtifactRef | None`.
 
 Rules:
 
 - Normalization is optional.
-- If no normalizer is configured, the pipeline still persists raw and event record state.
+- If no normalizer is configured, the pipeline still persists raw and event-record state.
 - If the normalizer returns `None`, no normalized artifact is written.
 - Normalizers must not write event records directly.
 
@@ -265,41 +254,39 @@ Output: `EventRecord`.
 
 Rules:
 
-- Saving an event record records that the event payload and available normalized artifact have been persisted.
-- MVP status after this stage is `persisted`. `persisted` means raw and optional normalized artifacts are durable and referenced; it does not mean optional preprocessing or semantic annotation is complete.
+- Saving an event record records that the item payload and available normalized artifact have been persisted.
+- MVP status after this stage is `persisted`. `persisted` means raw and optional normalized artifacts are durable and referenced; it does not mean configured enrichment or semantic annotation is complete.
 - This stage must not embed artifact blobs; it stores references.
-- `CaptureEvent.metadata` may be stored in a future schema if needed, but it remains source/event descriptive metadata, not pipeline state.
+- `InternalItem.metadata` may be stored in a future schema if needed, but it remains source/item descriptive metadata, not pipeline state.
 
-### 6.7 Optional neutral preprocessing stage
+### 6.7 Optional neutral annotation stage
 
-Input: optional configured neutral preprocessing task list plus canonical content from the normalized artifact when available.
+Input: configured `EnrichmentTask` list plus the `InternalItem`.
 
-Output: one neutral annotation/preprocess result per task.
+Output: one neutral annotation result per task.
 
 Rules:
 
-- Neutral preprocessing tasks are explicit pipeline configuration and must be disableable.
-- Target behavior: preprocessing should operate on normalized/canonical content, with the event used only for provenance and source/event descriptive metadata.
-- Current MVP behavior: the provider contract is still `AIProvider.run(task, event)` and task classes are still named `EnrichmentTask`. This is a temporary compatibility shape, not the long-term semantic target.
+- Neutral annotation tasks are explicit pipeline configuration.
 - Providers must not persist final records directly.
-- The pipeline must not let preprocessing bypass normalization indefinitely; otherwise normalized artifacts become decorative instead of canonical.
+- The pipeline must not let annotation work bypass normalization indefinitely once canonical-content provider input is introduced; otherwise normalized artifacts become decorative instead of canonical.
 - Product-specific insight prompts, ranking, or business opinions are out of scope.
 
-Current MVP tasks are local heuristic annotations only. Future specs should rename them toward `PreprocessTask`, `AnnotationTask`, or `ExtractionTask`.
+Current MVP tasks are local heuristic annotations only.
 
-### 6.8 Persist annotation/preprocess stage
+### 6.8 Persist enrichment artifact stage
 
-Input: neutral annotation/preprocess result.
+Input: neutral annotation result.
 
-Output: annotation `ArtifactRef` and updated `EventRecord`.
+Output: enrichment `ArtifactRef` and updated `EventRecord`.
 
 Rules:
 
-- Neutral annotation results are serialized as JSON artifacts.
-- Current `save_enrichment` naming is transitional; semantically it records an annotation/preprocess artifact reference only.
-- The pipeline should mark a preprocess-complete terminal state only after every configured required preprocess task succeeds.
-- If task 1 succeeds and task 2 fails, the event must not be marked complete for that mode; otherwise replay would incorrectly skip an incomplete event.
-- If no preprocess tasks are configured, target behavior should mark the event `captured` after raw and normalized artifacts are persisted. The current implementation still needs a follow-up completion state/name cleanup for this mode.
+- Neutral annotation results are serialized as JSON enrichment artifacts.
+- `save_enrichment` records the enrichment artifact reference.
+- The pipeline marks `enriched` only after every configured task succeeds.
+- If task 1 succeeds and task 2 fails, the item must not be marked `enriched`; otherwise replay would incorrectly skip an incomplete item.
+- The CLI MVP configures enrichment tasks, so `enriched` is the terminal complete state used for replay skipping.
 
 ### 6.9 Observe stage
 
@@ -309,61 +296,41 @@ Output: CLI summary, logs, and future metrics/traces.
 
 Rules:
 
-- The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, captured, preprocessed.
-- Current `run_once` returns only processed count. CLI derives additional counts from the local store.
-- P1 should add explicit outcome fields when pipeline exposes them.
-- Outcome definitions: `already_complete` means an existing event record is already in a terminal completion state (`captured` or `preprocessed`; transitional implementation may still use `enriched`); `duplicate` means the same idempotency key appeared more than once in a single run; `skipped` means a policy decision intentionally skipped an event.
+- The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, enriched.
+- Current `run_once` returns processed count. CLI derives total item count, enriched item count, enrichment row count, and artifact count from the local store.
+- Future summary work may add explicit already-complete, duplicate, skipped, and failure fields when needed by daily operation.
 
 ## 7. State model
 
-Target persisted `EventRecord.status` values:
+MVP persisted `EventRecord.status` values:
 
 ```text
 persisted
-  raw and optional normalized artifacts have been persisted;
-  optional preprocessing is not guaranteed complete.
+  raw and optional normalized artifacts have been persisted; configured enrichment tasks are not guaranteed complete.
 
-captured
-  raw and optional normalized artifacts have been persisted, and no required neutral preprocess tasks are configured. This is a terminal completion state for capture-only runs.
+enriched
+  all configured neutral annotation tasks completed and their enrichment artifacts were recorded. This is the MVP terminal completion state used for replay skipping.
 
-preprocessed
-  configured required neutral preprocessing work has completed successfully for the event. This is a terminal completion state for capture + neutral preprocess runs. Current implementation may still spell this as `enriched`; that name is transitional and should not imply business insight.
-
-partially_preprocessed
-  some preprocessing work completed, but at least one required task remains missing or failed. Current implementation may still use `partially_enriched` if introduced before naming migration.
+partially_enriched
+  reserved for future partial-task recovery; not required by the current happy path.
 
 failed
-  processing failed and should be inspected or retried according to retry metadata.
+  reserved for future explicit failure persistence; current unhandled exceptions fail the run.
 ```
 
-Target MVP transitions:
+MVP transitions:
 
 ```text
-new -> persisted
-persisted -> captured when no required neutral preprocess tasks are configured
-persisted -> preprocessed only after all configured required neutral preprocess tasks succeed
-existing captured or preprocessed -> already_complete run outcome without writing a new record
-```
-
-Near-term retry/partial-processing transitions:
-
-```text
-new -> persisted -> captured when no required neutral preprocess tasks are configured
-new -> persisted -> preprocessed when all configured required preprocess tasks succeed
-new -> failed
-persisted -> partially_preprocessed when at least one required task succeeds and another remains missing/failed
-partially_preprocessed -> preprocessed only after all required tasks complete
-failed -> persisted -> captured or preprocessed according to configured mode
-existing captured or preprocessed -> already_complete/skipped run summary outcome
+new -> persisted -> enriched
+existing enriched -> already complete, skip without writing a new record
 ```
 
 Rules:
 
 - Status transitions belong to `EventRecordStore`; adapters do not set pipeline processing status.
-- Fetch raw cache hits do not imply `persisted`, `captured`, or `preprocessed`.
-- Event records are the source of truth for pipeline resume behavior in MVP.
-- `preprocessed` means all configured required neutral preprocessing tasks completed successfully, not merely that one annotation artifact exists. Transitional `enriched` status should be treated as an implementation alias until migration.
-- `skipped` is a run outcome or summary counter, not a persisted event-record status for replaying an already-complete event.
+- Fetch raw cache hits do not imply `persisted` or `enriched`.
+- Event records are the source of truth for pipeline replay behavior in MVP.
+- `skipped` is a run outcome or summary counter, not a persisted event-record status.
 
 ## 8. Idempotency and replay
 
@@ -378,7 +345,7 @@ Adapters provide `idempotency_key`. Recommended shape:
 Rules:
 
 - The same logical source item must produce the same idempotency key across overlapping runs.
-- The pipeline must not create duplicate logical event records for the same key.
+- The pipeline must not create duplicate logical item records for the same key.
 - SQLite enforces uniqueness for MVP local storage.
 
 ### 8.2 Overlapping capture windows
@@ -415,7 +382,7 @@ Artifact store owns:
 
 - raw HTML/text/reference payloads;
 - normalized Markdown/text;
-- annotation/preprocess JSON;
+- annotation/enrichment JSON;
 - content digest and size;
 - backend-specific URI layout.
 
@@ -426,29 +393,27 @@ Event record store owns:
 - idempotency key lookup;
 - status transitions;
 - artifact references;
-- annotation/preprocess references;
-- last error and retry metadata in target behavior.
+- annotation/enrichment references;
+- last error and retry metadata when retry persistence is introduced.
 
-### 9.3 CaptureEvent.metadata remains descriptive
+### 9.3 InternalItem.metadata remains descriptive
 
-`CaptureEvent.metadata` may include source-level facts such as title, author, URL, tags from the source, feed fields, or adapter-specific hints.
+`InternalItem.metadata` may include source-level facts such as title, author, URL, tags from the source, feed fields, or adapter-specific hints.
 
 It must not become the pipeline status ledger. That belongs to `EventRecord`.
 
 ## 10. Failure behavior
 
-Current MVP behavior is intentionally simple: unhandled exceptions fail the run. This is acceptable for local MVP but not enough for daily operation.
+MVP failure behavior is intentionally simple: unhandled exceptions fail the run. This is acceptable for local MVP. Future daily-operation hardening can add:
 
-Target behavior:
-
-- Raw persistence failure: mark event failed if possible; do not continue to normalization/preprocessing.
+- Raw persistence failure: mark event failed if possible; do not continue to normalization/enrichment.
 - Normalization failure: keep raw artifact, mark failed with the raw artifact reference when possible.
 - Event record write failure: fail fast; do not continue because resume state is unreliable.
-- Preprocess provider failure: preserve already-written raw/normalized artifacts; mark failed or partially preprocessed when that state exists.
-- Annotation artifact failure: do not mark the preprocess task successful.
+- AI provider failure: preserve already-written raw/normalized artifacts; mark failed or partially enriched when that state exists.
+- Annotation artifact failure: do not mark the enrichment task successful.
 - Parse/fetch failures inside adapters should become explicit failures in adapter results or typed exceptions in a future adapter contract revision.
 
-Retry metadata target fields:
+Possible retry metadata fields when the retry task exists:
 
 - `last_error`;
 - `retry_count`;
@@ -456,11 +421,11 @@ Retry metadata target fields:
 - `next_retry_at | None`;
 - `retryable`.
 
-These are P1 and should be added only when needed by daily capture operations. Do not add unused fields just to make the schema look complete.
+Add these only when needed by daily capture operations. Do not add unused fields just to make the schema look complete.
 
 ## 11. Observability and summaries
 
-Pipeline/run summaries should eventually include:
+Future pipeline/run summaries may include:
 
 - source;
 - workspace;
@@ -468,8 +433,8 @@ Pipeline/run summaries should eventually include:
 - processed count;
 - skipped/already-complete count;
 - failed count;
-- captured/preprocessed event count;
-- annotation/preprocess row count;
+- enriched event count;
+- annotation/enrichment row count;
 - artifact count;
 - raw-cache hit count when fetchers expose it;
 - run duration.
@@ -480,11 +445,9 @@ Current CLI summary includes:
 - workspace;
 - processed;
 - total events;
-- `enriched_events` as the transitional implementation spelling for preprocessed/completed events;
-- enrichment/annotation rows;
+- enriched events;
+- enrichment rows;
 - artifact count.
-
-P1 should add already_complete/duplicate/skipped/failure fields after pipeline exposes those outcomes directly.
 
 ## 12. Testing requirements
 
@@ -497,7 +460,7 @@ The MVP must keep tests for:
 - duplicate already-complete record skip;
 - raw artifact persistence;
 - normalized artifact persistence;
-- annotation/preprocess artifact persistence;
+- annotation/enrichment artifact persistence;
 - filesystem artifact store;
 - SQLite event record store;
 - CLI capture/list behavior;
@@ -508,10 +471,10 @@ The MVP must keep tests for:
 P1 should add tests for:
 
 - already_complete/duplicate/skipped summary counts;
-- multi-task preprocessing does not mark the event complete until all configured required tasks succeed;
+- multi-task enrichment does not mark the item complete until all configured required tasks succeed;
 - failure status persistence;
 - retry metadata updates;
-- partial preprocessing behavior;
+- partial enrichment behavior;
 - normalizer failure behavior;
 - AI provider failure behavior;
 - overlapping daily capture window idempotency at pipeline summary level.
@@ -520,14 +483,14 @@ P1 should add tests for:
 
 A pipeline change is acceptable only if:
 
-1. The main flow remains simple: adapter -> pipeline -> artifact store + event record store + optional neutral preprocessor.
+1. The main flow remains simple: adapter -> pipeline -> artifact store + event record store + optional neutral enrichment.
 2. Fetcher concerns do not leak into pipeline state decisions.
 3. Source metadata and pipeline event records remain distinct.
-4. Replaying the same completed event does not duplicate logical records.
+4. Replaying the same completed item does not duplicate logical records.
 5. Raw and normalized artifacts are inspectable and referenced by event records.
-6. Neutral preprocessing results are persisted as artifacts before being recorded as successful.
-7. The terminal preprocess-complete status is written only after every configured required preprocess task succeeds.
-8. Capture-only mode has a defined terminal completion state and does not require AI preprocessing.
+6. Neutral enrichment results are persisted as artifacts before being recorded as successful.
+7. The terminal `enriched` status is written only after every configured enrichment task succeeds.
+8. Completion and failure states remain explicit; no hidden partial-success terminal state.
 9. Failure behavior is explicit when introduced; no hidden infinite retries.
 10. Tests pass locally and in CI.
 
@@ -545,7 +508,7 @@ Split a stage into its own SDD only when at least one is true:
 Likely future split candidates:
 
 - failure/retry SDD;
-- neutral preprocessing orchestration SDD;
+- neutral enrichment orchestration SDD;
 - event versioning/fingerprint SDD;
 - pipeline observability/run-summary SDD.
 
