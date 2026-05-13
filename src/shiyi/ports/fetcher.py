@@ -3,10 +3,37 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, HttpUrl
+
+
+class FetchErrorKind(StrEnum):
+    """Portable fetch failure categories exposed by fetcher implementations."""
+
+    TIMEOUT = "timeout"
+    TRANSPORT = "transport"
+    HTTP_STATUS = "http_status"
+
+
+class FetcherError(Exception):
+    """Fetcher-level error mapped from transport/provider-specific failures."""
+
+    def __init__(
+        self,
+        *,
+        url: str,
+        kind: FetchErrorKind,
+        message: str,
+        status_code: int | None = None,
+    ) -> None:
+        """Create a fetcher error with stable adapter-facing fields."""
+        super().__init__(message)
+        self.url = url
+        self.kind = kind
+        self.status_code = status_code
 
 
 class FetchResult(BaseModel):

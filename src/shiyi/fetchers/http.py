@@ -13,7 +13,15 @@ import feedparser  # type: ignore[import-untyped]
 import httpx
 from defusedxml import ElementTree
 
-from shiyi.ports.fetcher import FetchResult, RssEntry, RssFeed, Sitemap, SitemapEntry
+from shiyi.ports.fetcher import (
+    FetcherError,
+    FetchErrorKind,
+    FetchResult,
+    RssEntry,
+    RssFeed,
+    Sitemap,
+    SitemapEntry,
+)
 
 DEFAULT_USER_AGENT = "Shiyi/0.1 (+https://github.com/LoveOrange/shiyi)"
 
@@ -87,7 +95,7 @@ class HttpWebFetcher:
             except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as error:
                 last_error = error
                 if attempt == attempts - 1 or not _is_retryable(error):
-                    raise
+                    raise _to_fetcher_error(error, url=url) from error
                 await asyncio.sleep(0.2 * (attempt + 1))
             else:
                 return response
@@ -97,7 +105,12 @@ class HttpWebFetcher:
     async def _request(self, url: str) -> httpx.Response:
         headers = {"user-agent": self._user_agent}
         if self._client is not None:
-            return await self._client.get(url, headers=headers)
+            return await self._client.get(
+                url,
+                headers=headers,
+                timeout=self._timeout_seconds,
+                follow_redirects=True,
+            )
         async with httpx.AsyncClient(
             timeout=self._timeout_seconds,
             follow_redirects=True,
@@ -210,3 +223,20 @@ def _is_retryable(error: Exception) -> bool:
     if isinstance(error, httpx.HTTPStatusError):
         return error.response.status_code in {408, 429, 500, 502, 503, 504}
     return True
+
+
+def _to_fetcher_error(error: Exception, *, url: str) -> FetcherError:
+    if isinstance(error, httpx.TimeoutException):
+        message = f"Timed out while fetching {url}"
+        return FetcherError(url=url, kind=FetchErrorKind.TIMEOUT, message=message)
+    if isinstance(error, httpx.HTTPStatusError):
+        status_code = error.response.status_code
+        message = f"HTTP {status_code} while fetching {url}"
+        return FetcherError(
+            url=url,
+            kind=FetchErrorKind.HTTP_STATUS,
+            message=message,
+            status_code=status_code,
+        )
+    message = f"Transport error while fetching {url}"
+    return FetcherError(url=url, kind=FetchErrorKind.TRANSPORT, message=message)

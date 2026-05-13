@@ -2,9 +2,12 @@ import asyncio
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
+from shiyi.fetchers.fake import FakeWebFetcher
 from shiyi.fetchers.http import HttpRssFetcher, HttpSitemapFetcher, HttpWebFetcher
+from shiyi.ports.fetcher import FetcherError, FetchErrorKind
 
 
 def test_http_web_fetcher_returns_fetch_result() -> None:
@@ -78,3 +81,57 @@ def test_http_sitemap_fetcher_parses_lastmod() -> None:
     assert len(result.entries) == 1
     assert str(result.entries[0].loc) == "https://example.com/a"
     assert result.entries[0].lastmod is not None
+
+
+def test_http_web_fetcher_retries_transient_status() -> None:
+    expected_call_count = 2
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, text="temporarily unavailable")
+        return httpx.Response(200, text="ok")
+
+    with respx.mock:
+        respx.get("https://example.com/retry").mock(side_effect=handler)
+        result = asyncio.run(HttpWebFetcher(retries=1).fetch("https://example.com/retry"))
+
+    assert result.content == "ok"
+    assert calls == expected_call_count
+
+
+def test_http_web_fetcher_maps_non_retryable_status_error() -> None:
+    not_found = 404
+    with respx.mock:
+        respx.get("https://example.com/missing").mock(return_value=httpx.Response(not_found))
+
+        with pytest.raises(FetcherError) as error_info:
+            asyncio.run(HttpWebFetcher(retries=1).fetch("https://example.com/missing"))
+
+    assert error_info.value.kind is FetchErrorKind.HTTP_STATUS
+    assert error_info.value.status_code == not_found
+    assert error_info.value.url == "https://example.com/missing"
+
+
+def test_http_web_fetcher_maps_timeout_error() -> None:
+    with respx.mock:
+        respx.get("https://example.com/slow").mock(side_effect=httpx.TimeoutException("boom"))
+
+        with pytest.raises(FetcherError) as error_info:
+            asyncio.run(HttpWebFetcher(retries=0).fetch("https://example.com/slow"))
+
+    assert error_info.value.kind is FetchErrorKind.TIMEOUT
+    assert error_info.value.status_code is None
+
+
+def test_fake_web_fetcher_records_adapter_call_shape() -> None:
+    fetcher = FakeWebFetcher({"https://example.com/a": "alpha"})
+
+    result = asyncio.run(fetcher.fetch("https://example.com/a", source="example", raw_key="abc"))
+
+    assert result.content == "alpha"
+    assert fetcher.calls[0].url == "https://example.com/a"
+    assert fetcher.calls[0].source == "example"
+    assert fetcher.calls[0].raw_key == "abc"

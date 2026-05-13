@@ -14,6 +14,7 @@ It exists to keep network concerns out of adapters:
 - timeout
 - redirects
 - retry for transient failures
+- error mapping into stable `FetcherError` categories
 - user-agent
 - safe XML parsing for sitemap-like documents
 - simple event-level raw cache for full item fetches
@@ -104,6 +105,16 @@ async def fetch(feed_url: str) -> RssFeed
 ```
 
 Fetches a feed and exposes normalized RSS/Atom entries. It does not apply event-level raw caching by default because the feed is a listing/source document, not a full event raw item.
+
+### Fetch errors
+
+Fetcher implementations should map provider-specific failures to `FetcherError` so adapters do not depend on a concrete HTTP client. Current categories are:
+
+- `timeout`
+- `transport`
+- `http_status` with optional `status_code`
+
+Adapters may catch these errors for source-specific diagnostics, but they should not reach below the fetcher to catch `httpx` or SDK exceptions directly.
 
 ### `SitemapFetcher`
 
@@ -237,5 +248,5 @@ The fetcher design is covered by:
 - Raw cache hit/miss test proving the second full fetch skips the remote request.
 - RSS parser test.
 - Sitemap parser test.
-- Adapter tests using fake fetchers.
+- Adapter tests using fake fetchers, including `FakeWebFetcher` for deterministic adapter call-shape checks.
 - End-to-end capture smoke test proving raw cache files are created and pipeline idempotency still works.
