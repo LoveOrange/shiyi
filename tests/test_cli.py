@@ -13,6 +13,7 @@ from shiyi.cli import (
     list_events,
     main,
 )
+from shiyi.export import ExportedItem
 
 
 def test_format_summary_outputs_json_line() -> None:
@@ -170,3 +171,53 @@ def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path:
     payload = json.loads(capsys.readouterr().out)
     assert payload[0]["event_id"] == "evt_1"
     assert payload[0]["has_normalized_artifact"] is False
+
+
+def test_main_export_prints_normalized_items(
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    def fake_export_items(**kwargs: object) -> list[ExportedItem]:
+        assert kwargs["workspace"] == tmp_path
+        assert kwargs["since"] is not None
+        assert kwargs["until"] is not None
+        assert kwargs["sources"] == ("blog",)
+        assert kwargs["limit"] == 1
+        return [
+            ExportedItem(
+                event_id="evt_1",
+                idempotency_key="blog:evt_1",
+                status="enriched",
+                source={"kind": "blog"},
+                captured_at="2026-05-12T00:00:00+00:00",
+                content_hash="abc",
+                adapter_name="test",
+                adapter_version="0.1.0",
+                normalized_artifact_uri="normalized/ab/abc",
+                normalized_media_type="text/markdown",
+                normalized_content="# Hello\n",
+            )
+        ]
+
+    monkeypatch.setattr("shiyi.cli.export_items", fake_export_items)
+
+    main(
+        [
+            "export",
+            "--workspace",
+            str(tmp_path),
+            "--since",
+            "2026-05-12",
+            "--until",
+            "2026-05-13",
+            "--source",
+            "blog",
+            "--limit",
+            "1",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["event_id"] == "evt_1"
+    assert payload[0]["normalized_content"] == "# Hello\n"

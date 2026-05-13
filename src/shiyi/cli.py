@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from pydantic import BaseModel
+
 from shiyi.adapters.anthropic import anthropic_news_adapter
 from shiyi.adapters.rss import openai_news_adapter
 from shiyi.domain.models import (
@@ -24,6 +26,7 @@ from shiyi.domain.models import (
     ModelIdentity,
     SummarizeTask,
 )
+from shiyi.export import export_items
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline
@@ -102,8 +105,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         sys.stdout.write(_format_summary(summary))
     elif args.command == "list":
-        events = list_events(workspace=args.workspace, limit=args.limit)
-        sys.stdout.write(_format_json(events))
+        listed_events = list_events(workspace=args.workspace, limit=args.limit)
+        sys.stdout.write(_format_json(listed_events))
+    elif args.command == "export":
+        exported_events = export_items(
+            workspace=args.workspace,
+            since=args.since,
+            until=args.until,
+            sources=tuple(args.source),
+            limit=args.limit,
+        )
+        sys.stdout.write(_format_json(exported_events))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -132,6 +144,28 @@ def _build_parser() -> argparse.ArgumentParser:
     list_events = subcommands.add_parser("list", help="List captured records")
     list_events.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     list_events.add_argument("--limit", type=int, default=20)
+
+    export = subcommands.add_parser("export", help="Export normalized captured items")
+    export.add_argument("--workspace", type=Path, default=Path(".shiyi"))
+    export.add_argument(
+        "--since",
+        type=_parse_datetime_arg,
+        default=None,
+        help="Inclusive UTC captured_at date/time, e.g. 2026-05-12",
+    )
+    export.add_argument(
+        "--until",
+        type=_parse_datetime_arg,
+        default=None,
+        help="Exclusive UTC captured_at date/time, e.g. 2026-05-13",
+    )
+    export.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help="Source kind filter; repeat for OR semantics",
+    )
+    export.add_argument("--limit", type=int, default=20)
     return parser
 
 
@@ -251,6 +285,8 @@ def _format_json(payload: object) -> str:
 def _jsonable(value: object) -> object:
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(cast(Any, value))
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
     return value
 
 

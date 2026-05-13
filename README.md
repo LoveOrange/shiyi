@@ -98,6 +98,14 @@ List captured records with the CLI:
 uv run shiyi list --workspace .shiyi/openai
 ```
 
+Export normalized content for upstream consumers by captured time and source kind:
+
+```bash
+uv run shiyi export --workspace .shiyi/openai --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
+```
+
+The export output is JSON and contains Shiyi trace fields plus `normalized_content`; consumers do not need third-party source DTOs.
+
 Or inspect metadata directly with SQLite:
 
 ```bash

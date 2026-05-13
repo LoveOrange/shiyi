@@ -41,6 +41,7 @@ The MVP local storage implementation must support deterministic local capture ru
 - Store minimal trace fields needed to audit pipeline writes: source, captured_at, content_hash, idempotency_key, adapter_name, and adapter_version.
 - Store optional annotation/preprocess artifact references as JSON rows.
 - Support idempotent re-runs by returning existing complete records.
+- Support MVP upstream export by reading event records with normalized artifact content filtered by `captured_at` and source kind.
 
 ### Minimal schema
 
@@ -72,7 +73,17 @@ CREATE TABLE enrichments (
 );
 ```
 
-## 4. MVP constraints
+## 4. Upstream export
+
+The MVP exposes local export as a pull-based read over the SQLite event ledger and filesystem artifacts:
+
+```bash
+shiyi export --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
+```
+
+Output is a JSON array of `shiyi-export-item.v1` objects containing Shiyi trace fields plus `normalized_content`. It deliberately does not expose third-party adapter DTOs to consumers.
+
+## 5. MVP constraints
 
 - No checkpoint tables yet.
 - No external database server.

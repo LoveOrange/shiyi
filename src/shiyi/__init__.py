@@ -22,6 +22,7 @@ from shiyi.domain.models import (
     TokenUsage,
     payload_content_hash,
 )
+from shiyi.export import ExportedItem, export_items
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline
 from shiyi.ports.adapter import Adapter
@@ -45,6 +46,7 @@ __all__ = [
     "EnrichmentResult",
     "EventRecord",
     "EventRecordStore",
+    "ExportedItem",
     "ExtractTask",
     "HtmlMarkdownNormalizer",
     "HtmlPayload",
@@ -58,6 +60,7 @@ __all__ = [
     "TextPayload",
     "TokenUsage",
     "anthropic_news_adapter",
+    "export_items",
     "openai_news_adapter",
     "payload_content_hash",
 ]
