@@ -40,15 +40,20 @@ The pipeline must not own these responsibilities:
 
 `InternalItem` is the normalized Adapter -> Pipeline input boundary emitted by adapters and consumed by the pipeline.
 
-Required semantics:
+Required v1 schema semantics:
 
+- `schema_version`: fixed schema marker. MVP value is `internal-item.v1`; change this only when the Adapter -> Pipeline contract intentionally changes.
 - `id`: stable item ID inside Shiyi.
 - `source`: source identity.
+- `captured_at`: time Shiyi captured or fetched the item payload.
 - `occurred_at`: source item timestamp when available, otherwise discovery/fetch time.
 - `payload`: typed raw-ish item payload (`html`, `text`, or `binary`).
+- `content_hash`: deterministic SHA-256 over normalized payload material. It is for traceability/change detection, not source dedupe.
 - `provenance`: adapter name/version, source item ID, and fetch timestamp.
-- `idempotency_key`: stable logical identity for replay safety.
+- `idempotency_key`: stable logical dedupe key for replay safety.
 - `metadata`: source/item descriptive metadata. This is not pipeline processing state.
+
+Version policy: because Shiyi is still MVP, breaking schema changes rename/update the v1 contract directly across code, tests, and docs. Add a new schema version only when a real external consumer needs two versions to coexist.
 
 ### 3.2 Artifact
 
@@ -240,9 +245,12 @@ Output: normalized `ArtifactRef | None`.
 Rules:
 
 - Normalization is optional.
+- Normalizer input is the validated `InternalItem`; normalizers must not depend on third-party feed/page structures.
+- A normalized output is an `ArtifactWrite` with `kind="normalized"`, canonical media type, bytes content, and optional normalizer metadata.
 - If no normalizer is configured, the pipeline still persists raw and event-record state.
-- If the normalizer returns `None`, no normalized artifact is written.
-- Normalizers must not write event records directly.
+- If the normalizer returns `None`, no normalized artifact is written; this means the payload is unsupported or already canonical, not failure.
+- Normalizers must not write artifacts or event records directly.
+- MVP error handling is fail-fast: an exception from `normalize` fails the current run instead of being hidden as partial success. Future retry work can persist typed failure state.
 
 Current MVP normalizer: HTML to Markdown/text artifact.
 

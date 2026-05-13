@@ -20,6 +20,7 @@ from shiyi.domain.models import (
     SummarizeTask,
     TextPayload,
     TokenUsage,
+    payload_content_hash,
 )
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline
@@ -58,4 +59,5 @@ __all__ = [
     "TokenUsage",
     "anthropic_news_adapter",
     "openai_news_adapter",
+    "payload_content_hash",
 ]

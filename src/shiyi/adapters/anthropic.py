@@ -10,7 +10,14 @@ from urllib.parse import urljoin, urlparse
 
 from selectolax.parser import HTMLParser
 
-from shiyi.domain.models import CaptureWindow, HtmlPayload, InternalItem, Provenance, SourceIdentity
+from shiyi.domain.models import (
+    CaptureWindow,
+    HtmlPayload,
+    InternalItem,
+    Provenance,
+    SourceIdentity,
+    payload_content_hash,
+)
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import SitemapFetcher, WebFetcher
 
@@ -56,11 +63,14 @@ class AnthropicNewsAdapter:
             if not self._window.includes(article_date):
                 continue
             article_id = _article_id(url)
+            payload = HtmlPayload(html=article_result.content, url=url)
             yield InternalItem(
                 id=f"anthropic-news:{article_id}",
                 source=SourceIdentity(kind="anthropic-news", uri=url),
+                captured_at=article_result.fetched_at,
                 occurred_at=occurred_at,
-                payload=HtmlPayload(html=article_result.content, url=url),
+                payload=payload,
+                content_hash=payload_content_hash(payload),
                 provenance=Provenance(
                     adapter_name=self.name,
                     adapter_version=self.version,

@@ -1,7 +1,14 @@
 import asyncio
 from datetime import UTC, datetime
 
-from shiyi import Adapter, CaptureWindow, HtmlPayload, InternalItem, openai_news_adapter
+from shiyi import (
+    Adapter,
+    CaptureWindow,
+    HtmlPayload,
+    InternalItem,
+    openai_news_adapter,
+    payload_content_hash,
+)
 from shiyi.fetchers.fake import FakeRssFetcher
 from shiyi.ports.fetcher import RssEntry, RssFeed
 
@@ -35,9 +42,12 @@ def test_openai_rss_adapter_maps_feed_entry_to_internal_item() -> None:
     assert item.idempotency_key == "openai-news:running-codex-safely"
     assert item.source.kind == "openai-news"
     assert str(item.source.uri) == OPENAI_RSS_URL
+    assert item.schema_version == "internal-item.v1"
+    assert item.captured_at == datetime(2026, 5, 13, 1, 30, tzinfo=UTC)
     assert item.occurred_at == datetime(2026, 5, 8, 10, tzinfo=UTC)
     assert isinstance(item.payload, HtmlPayload)
     assert item.payload.html == "<article><h1>Running Codex safely</h1></article>"
+    assert item.content_hash == payload_content_hash(item.payload)
     assert item.provenance.adapter_name == "openai-news-rss"
     assert item.provenance.adapter_version == "0.2.0"
     assert item.provenance.fetched_at == datetime(2026, 5, 13, 1, 30, tzinfo=UTC)

@@ -13,6 +13,7 @@ from shiyi import (
     Provenance,
     SourceIdentity,
     SummarizeTask,
+    payload_content_hash,
 )
 from shiyi.domain.models import EnrichmentTask
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
@@ -25,11 +26,14 @@ class SingleEventAdapter:
     version = "0.1.0"
 
     async def discover(self) -> AsyncIterator[InternalItem]:
+        payload = HtmlPayload(html="<article><h1>Hello</h1><p>World</p></article>")
         yield InternalItem(
             id="evt_1",
             source=SourceIdentity(kind="blog"),
+            captured_at=datetime(2026, 5, 12, tzinfo=UTC),
             occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-            payload=HtmlPayload(html="<article><h1>Hello</h1><p>World</p></article>"),
+            payload=payload,
+            content_hash=payload_content_hash(payload),
             provenance=Provenance(
                 adapter_name=self.name,
                 adapter_version=self.version,

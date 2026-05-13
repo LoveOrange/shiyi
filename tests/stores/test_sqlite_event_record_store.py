@@ -10,6 +10,7 @@ from shiyi.domain.models import (
     ModelIdentity,
     Provenance,
     SourceIdentity,
+    payload_content_hash,
 )
 from shiyi.stores.sqlite import SQLiteEventRecordStore
 
@@ -52,11 +53,14 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
 
 
 def _event() -> InternalItem:
+    payload = HtmlPayload(html="<article>hello</article>")
     return InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
+        captured_at=datetime(2026, 5, 12, tzinfo=UTC),
         occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-        payload=HtmlPayload(html="<article>hello</article>"),
+        payload=payload,
+        content_hash=payload_content_hash(payload),
         provenance=Provenance(
             adapter_name="test",
             adapter_version="0.1.0",

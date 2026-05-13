@@ -11,6 +11,7 @@ from shiyi.domain.models import (
     Provenance,
     SourceIdentity,
     TextPayload,
+    payload_content_hash,
 )
 from shiyi.fetchers.http import HttpRssFetcher, HttpWebFetcher
 from shiyi.ports.fetcher import RssFetcher
@@ -59,8 +60,10 @@ class RssFeedAdapter:
             yield InternalItem(
                 id=f"{self._source_kind}:{entry.entry_id}",
                 source=SourceIdentity(kind=self._source_kind, uri=self._feed_url),
+                captured_at=feed.fetched_at,
                 occurred_at=occurred_at,
                 payload=payload,
+                content_hash=payload_content_hash(payload),
                 provenance=Provenance(
                     adapter_name=self.name,
                     adapter_version=self.version,

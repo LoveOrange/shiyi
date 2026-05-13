@@ -8,7 +8,12 @@ from shiyi.domain.models import ArtifactWrite, InternalItem
 
 
 class Normalizer(Protocol):
-    """Converts raw capture payloads into canonical artifacts for AI processing."""
+    """Converts an InternalItem payload into an optional canonical artifact.
+
+    Implementations return a normalized ArtifactWrite when they can produce
+    canonical content, return None for unsupported/already-canonical payloads,
+    and raise exceptions for real normalization failures.
+    """
 
     @property
     def name(self) -> str:

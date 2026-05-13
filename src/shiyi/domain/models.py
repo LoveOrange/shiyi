@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
@@ -60,6 +61,17 @@ class BinaryPayload(StrictModel):
 CapturePayload = Annotated[TextPayload | HtmlPayload | BinaryPayload, Field(discriminator="type")]
 
 
+def payload_content_hash(payload: CapturePayload) -> str:
+    """Return a deterministic SHA-256 hash for an internal item payload."""
+    if isinstance(payload, TextPayload):
+        material = f"text\0{payload.content_type}\0{payload.text}"
+    elif isinstance(payload, HtmlPayload):
+        material = f"html\0{payload.html}"
+    else:
+        material = f"binary\0{payload.media_type}\0{payload.bytes_ref}"
+    return sha256(material.encode()).hexdigest()
+
+
 class CaptureWindow(StrictModel):
     """Optional time and count window for source discovery."""
 
@@ -79,10 +91,13 @@ class CaptureWindow(StrictModel):
 class InternalItem(StrictModel):
     """Canonical Adapter -> Pipeline boundary object."""
 
+    schema_version: Literal["internal-item.v1"] = "internal-item.v1"
     id: NonEmptyString
     source: SourceIdentity
+    captured_at: datetime
     occurred_at: datetime
     payload: CapturePayload
+    content_hash: NonEmptyString
     provenance: Provenance
     idempotency_key: NonEmptyString
     metadata: dict[str, Any] = Field(default_factory=dict)
