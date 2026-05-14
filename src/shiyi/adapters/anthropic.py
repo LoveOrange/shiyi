@@ -63,6 +63,7 @@ class AnthropicNewsAdapter:
             if not self._window.includes(article_date):
                 continue
             article_id = _article_id(url)
+            title = _require_title(_extract_title(article_result.content), url=url)
             payload = HtmlPayload(html=article_result.content, url=url)
             yield InternalItem(
                 id=f"anthropic-news:{article_id}",
@@ -78,7 +79,7 @@ class AnthropicNewsAdapter:
                     source_item_id=article_id,
                 ),
                 idempotency_key=f"anthropic-news:{article_id}",
-                metadata={"title": _extract_title(article_result.content), "link": url},
+                metadata={"title": title, "link": url},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -152,6 +153,13 @@ def _extract_title(html: str) -> str:
             if text:
                 return text
     return ""
+
+
+def _require_title(title: str, *, url: str) -> str:
+    if title:
+        return title
+    msg = f"Anthropic article missing required title: {url}"
+    raise ValueError(msg)
 
 
 def _extract_article_date(html: str) -> datetime | None:

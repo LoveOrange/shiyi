@@ -52,13 +52,16 @@ class RssFeedAdapter:
             occurred_at = entry.published_at or feed.fetched_at
             if not self._window.includes(occurred_at):
                 continue
+            entry_id = _required_entry_field(entry.entry_id, field="entry_id")
+            title = _required_entry_field(entry.title, field="title", entry_id=entry_id)
             payload = (
                 HtmlPayload(html=entry.html, url=entry.link)
                 if entry.html
-                else TextPayload(text=entry.title or entry.entry_id)
+                else TextPayload(text=title)
             )
+            item_id = f"{self._source_kind}:{entry_id}"
             yield InternalItem(
-                id=f"{self._source_kind}:{entry.entry_id}",
+                id=item_id,
                 source=SourceIdentity(kind=self._source_kind, uri=self._feed_url),
                 captured_at=feed.fetched_at,
                 occurred_at=occurred_at,
@@ -68,14 +71,23 @@ class RssFeedAdapter:
                     adapter_name=self.name,
                     adapter_version=self.version,
                     fetched_at=feed.fetched_at,
-                    source_item_id=entry.entry_id,
+                    source_item_id=entry_id,
                 ),
-                idempotency_key=f"{self._source_kind}:{entry.entry_id}",
-                metadata={"title": entry.title, "link": entry.link},
+                idempotency_key=item_id,
+                metadata={"title": title, "link": entry.link},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
                 break
+
+
+def _required_entry_field(value: str, *, field: str, entry_id: str | None = None) -> str:
+    stripped = value.strip()
+    if stripped:
+        return stripped
+    context = f" for RSS entry {entry_id}" if entry_id else ""
+    msg = f"RSS entry missing required {field}{context}"
+    raise ValueError(msg)
 
 
 def openai_news_adapter(
