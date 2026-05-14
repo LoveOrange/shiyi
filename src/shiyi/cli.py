@@ -29,7 +29,7 @@ from shiyi.domain.models import (
 from shiyi.export import export_items
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
-from shiyi.pipeline.runner import CapturePipeline
+from shiyi.pipeline.runner import CapturePipeline, PipelineRunSummary
 from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteEventRecordStore
 
@@ -48,6 +48,9 @@ class CaptureSummary:
     enriched_events: int
     enrichments: int
     artifacts: int
+    skipped: int = 0
+    failed: int = 0
+    errors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,11 +206,20 @@ async def run_capture(  # noqa: PLR0913
             ClassifyTask(labels=("model", "product", "safety", "research", "company")),
         ],
     )
-    processed = await pipeline.run_once()
-    return _capture_summary(source=source, workspace=workspace, processed=processed)
+    run_summary = await pipeline.run_once()
+    return _capture_summary(source=source, workspace=workspace, run_summary=run_summary)
 
 
-def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> CaptureSummary:
+def _capture_summary(  # noqa: PLR0913
+    *,
+    source: SourceName,
+    workspace: Path,
+    run_summary: PipelineRunSummary | None = None,
+    processed: int | None = None,
+    skipped: int = 0,
+    failed: int = 0,
+    errors: Sequence[str] = (),
+) -> CaptureSummary:
     metadata_path = workspace / "event-records.sqlite"
     total_events = 0
     enriched_events = 0
@@ -228,14 +240,28 @@ def _capture_summary(*, source: SourceName, workspace: Path, processed: int) -> 
         if artifacts_root.exists()
         else 0
     )
+    if run_summary is not None:
+        processed_count = run_summary.processed
+        skipped_count = run_summary.skipped
+        failed_count = run_summary.failed
+        error_messages = tuple(error.message for error in run_summary.errors)
+    else:
+        processed_count = processed or 0
+        skipped_count = skipped
+        failed_count = failed
+        error_messages = tuple(errors)
+
     return CaptureSummary(
         source=source,
         workspace=str(workspace),
-        processed=processed,
+        processed=processed_count,
         total_events=total_events,
         enriched_events=enriched_events,
         enrichments=enrichments,
         artifacts=artifacts,
+        skipped=skipped_count,
+        failed=failed_count,
+        errors=error_messages,
     )
 
 

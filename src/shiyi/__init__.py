@@ -24,7 +24,7 @@ from shiyi.domain.models import (
 )
 from shiyi.export import ExportedItem, export_items
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
-from shiyi.pipeline.runner import CapturePipeline
+from shiyi.pipeline.runner import CapturePipeline, PipelineRunError, PipelineRunSummary
 from shiyi.ports.adapter import Adapter
 from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
@@ -53,6 +53,8 @@ __all__ = [
     "InternalItem",
     "ModelIdentity",
     "Normalizer",
+    "PipelineRunError",
+    "PipelineRunSummary",
     "Provenance",
     "RssFeedAdapter",
     "SourceIdentity",

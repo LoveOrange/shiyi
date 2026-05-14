@@ -33,10 +33,10 @@ def test_fixture_backed_ingest_persist_export_matches_golden(tmp_path: Path) -> 
     adapter = openai_news_adapter(rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}))
     pipeline = _pipeline(adapter=adapter, workspace=tmp_path)
 
-    processed = asyncio.run(pipeline.run_once())
+    summary = asyncio.run(pipeline.run_once())
     exported = [item.model_dump(mode="json") for item in export_items(workspace=tmp_path, limit=10)]
 
-    assert processed == 1
+    assert summary.processed == 1
     assert _stable_dump(exported) == _read_json(
         FIXTURE_ROOT / "export" / "running-codex-safely.json"
     )
@@ -52,10 +52,16 @@ def test_pipeline_rerun_and_duplicate_batch_do_not_duplicate_durable_events(tmp_
         workspace=tmp_path,
     )
 
-    asyncio.run(pipeline.run_once())
-    asyncio.run(pipeline.run_once())
+    first_summary = asyncio.run(pipeline.run_once())
+    second_summary = asyncio.run(pipeline.run_once())
     exported = export_items(workspace=tmp_path, limit=10)
 
+    duplicate_item_count = 2
+
+    assert first_summary.processed == 1
+    assert first_summary.skipped == 1
+    assert second_summary.processed == 0
+    assert second_summary.skipped == duplicate_item_count
     assert [item.idempotency_key for item in exported] == ["openai-news:running-codex-safely"]
 
 

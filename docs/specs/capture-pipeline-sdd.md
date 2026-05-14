@@ -139,7 +139,8 @@ The MVP pipeline flow is:
 Adapter.discover()
   -> InternalItem
   -> find existing EventRecord by idempotency_key
-  -> skip if an existing record is already `enriched`
+  -> skip duplicate idempotency keys seen in the same run
+  -> skip if an existing record is already complete for the configured pipeline
   -> convert InternalItem.payload to raw ArtifactWrite
   -> ArtifactStore.put(raw)
   -> Normalizer.normalize(event) when configured
@@ -151,10 +152,10 @@ Adapter.discover()
        ArtifactStore.put(enrichment)
        EventRecordStore.save_enrichment(...)
   -> EventRecordStore.mark_enriched(...) after all configured tasks succeed
-  -> return processed event count
+  -> return PipelineRunSummary with processed/skipped/failed/artifact/error counts
 ```
 
-Future retry handling can add explicit failure metadata without changing the boundary shape:
+Item-level failure handling records explicit failure metadata without turning the whole run into a mystery E2E failure:
 
 ```text
 for event in adapter.discover():
@@ -174,10 +175,9 @@ for event in adapter.discover():
       enrichment_ref = persist_enrichment(event, task, result)
       event_record_store.save_enrichment(event, result, enrichment_ref)
     event_record_store.mark_enriched(event)
-  except retryable_error as error:
-    event_record_store.save_failure(event, error, retryable=True)
-  except fatal_error as error:
-    event_record_store.save_failure(event, error, retryable=False)
+  except item_error as error:
+    event_record_store.save_failure(event, available_artifact_refs, error_context)
+    record failed run outcome and continue with the next item
 ```
 
 ## 6. Stage specifications
@@ -217,11 +217,13 @@ Output: process, skip, or resume decision.
 Rules:
 
 - `EventRecordStore.find_by_idempotency_key` is the only pipeline-level idempotency lookup.
-- If an existing record is `enriched`, the item is complete and should be skipped.
-- If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key in a future retry task.
+- Duplicate idempotency keys inside one run are skipped after the first attempt.
+- If enrichment tasks are configured, an existing `enriched` record is complete and should be skipped.
+- If no enrichment tasks are configured, an existing `persisted` or `enriched` record is complete and should be skipped.
+- If an existing record is incomplete or failed, the pipeline may resume/retry using the same idempotency key.
 - The pipeline must not consult fetch raw cache for processing idempotency. Fetch cache only avoids repeated full-page downloads.
 
-MVP status rule: records with status `enriched` are skipped as already complete; other statuses are candidates for reprocessing.
+MVP status rule: `failed` records are candidates for reprocessing; `persisted` records are complete only for pipelines without configured enrichment tasks.
 
 ### 6.4 Raw artifact stage
 
@@ -250,7 +252,7 @@ Rules:
 - If no normalizer is configured, the pipeline still persists raw and event-record state.
 - If the normalizer returns `None`, no normalized artifact is written; this means the payload is unsupported or already canonical, not failure.
 - Normalizers must not write artifacts or event records directly.
-- MVP error handling is fail-fast: an exception from `normalize` fails the current run instead of being hidden as partial success. Future retry work can persist typed failure state.
+- Normalizer exceptions fail the current item, not unrelated processable items. The pipeline records a `failed` event record with available artifact context and continues.
 
 Current MVP normalizer: HTML to Markdown/text artifact.
 
@@ -295,6 +297,7 @@ Rules:
 - `save_enrichment` records the enrichment artifact reference.
 - The pipeline marks `enriched` only after every configured task succeeds.
 - If task 1 succeeds and task 2 fails, the item must not be marked `enriched`; otherwise replay would incorrectly skip an incomplete item.
+- P2-04 hardens raw/normalization failure persistence and retry behavior; enrichment-row dedupe and partial-enrichment resume are future hardening, not part of the P2-04 exit gate.
 - The CLI MVP configures enrichment tasks, so `enriched` is the terminal complete state used for replay skipping.
 
 ### 6.9 Observe stage
@@ -306,8 +309,8 @@ Output: CLI summary, logs, and future metrics/traces.
 Rules:
 
 - The pipeline should expose enough counts for daily operation: discovered, processed, already_complete, duplicate, skipped, failed, enriched.
-- Current `run_once` returns processed count. CLI derives total item count, enriched item count, enrichment row count, and artifact count from the local store.
-- Future summary work may add explicit already-complete, duplicate, skipped, and failure fields when needed by daily operation.
+- Current `run_once` returns `PipelineRunSummary` with processed, skipped, failed, artifact-write count, and structured item errors.
+- CLI summary derives total item count, enriched item count, enrichment row count, and persisted artifact count from the local store, and includes run skipped/failed/error fields.
 
 ## 7. State model
 
@@ -324,14 +327,15 @@ partially_enriched
   reserved for future partial-task recovery; not required by the current happy path.
 
 failed
-  reserved for future explicit failure persistence; current unhandled exceptions fail the run.
+  the item attempt failed after the pipeline had enough `InternalItem` context to record diagnostics. `last_error` stores the boundary/stage context.
 ```
 
 MVP transitions:
 
 ```text
 new -> persisted -> enriched
-existing enriched -> already complete, skip without writing a new record
+new -> failed -> persisted
+existing complete -> skip without writing a new record
 ```
 
 Rules:
@@ -413,12 +417,12 @@ It must not become the pipeline status ledger. That belongs to `EventRecord`.
 
 ## 10. Failure behavior
 
-MVP failure behavior is intentionally simple: unhandled exceptions fail the run. This is acceptable for local MVP. Future daily-operation hardening can add:
+MVP item-level failure behavior is intentionally simple and explicit:
 
 - Raw persistence failure: mark event failed if possible; do not continue to normalization/enrichment.
-- Normalization failure: keep raw artifact, mark failed with the raw artifact reference when possible.
-- Event record write failure: fail fast; do not continue because resume state is unreliable.
-- AI provider failure: preserve already-written raw/normalized artifacts; mark failed or partially enriched when that state exists.
+- Normalization failure: keep raw artifact, mark failed with the raw artifact reference when possible, and continue with later items.
+- Event record write failure: fail fast if failure state cannot be recorded; resume state is unreliable.
+- AI provider failure: preserve already-written raw/normalized artifacts and mark the event failed instead of marking it enriched.
 - Annotation artifact failure: do not mark the enrichment task successful.
 - Parse/fetch failures inside adapters should become explicit failures in adapter results or typed exceptions in a future adapter contract revision.
 
@@ -434,7 +438,7 @@ Add these only when needed by daily capture operations. Do not add unused fields
 
 ## 11. Observability and summaries
 
-Future pipeline/run summaries may include:
+Pipeline/run summaries include:
 
 - source;
 - workspace;
@@ -453,6 +457,9 @@ Current CLI summary includes:
 - source;
 - workspace;
 - processed;
+- skipped;
+- failed;
+- errors;
 - total events;
 - enriched events;
 - enrichment rows;
@@ -477,14 +484,10 @@ The MVP must keep tests for:
 
 ### 12.2 Required next tests
 
-P1 should add tests for:
+Later hardening should add tests for:
 
-- already_complete/duplicate/skipped summary counts;
-- multi-task enrichment does not mark the item complete until all configured required tasks succeed;
-- failure status persistence;
-- retry metadata updates;
-- partial enrichment behavior;
-- normalizer failure behavior;
+- retry metadata updates beyond `last_error`;
+- enrichment-row dedupe and partial-enrichment resume behavior;
 - AI provider failure behavior;
 - overlapping daily capture window idempotency at pipeline summary level.
 

@@ -39,6 +39,7 @@ The MVP local storage implementation must support deterministic local capture ru
 - Track event status.
 - Store raw and normalized artifact references as JSON.
 - Store minimal trace fields needed to audit pipeline writes: source, captured_at, content_hash, idempotency_key, adapter_name, and adapter_version.
+- Store item failure context in `last_error` when the pipeline can record a failed attempt.
 - Store optional annotation/preprocess artifact references as JSON rows.
 - Support idempotent re-runs by returning existing complete records.
 - Support MVP upstream export by reading event records with normalized artifact content filtered by `captured_at` and source kind.

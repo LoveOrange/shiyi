@@ -38,6 +38,17 @@ class EventRecordStore(Protocol):
         """Record a validated enrichment result and its artifact reference."""
         ...
 
+    async def save_failure(
+        self,
+        event: InternalItem,
+        *,
+        raw_artifact: ArtifactRef | None,
+        normalized_artifact: ArtifactRef | None,
+        error: str,
+    ) -> EventRecord:
+        """Record a failed item attempt with available artifact context."""
+        ...
+
     async def mark_enriched(self, event: InternalItem) -> EventRecord:
         """Mark an event fully enriched after all configured tasks succeed."""
         ...

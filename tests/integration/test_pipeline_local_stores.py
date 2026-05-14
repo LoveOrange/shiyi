@@ -66,9 +66,11 @@ def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path:
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
-    processed = asyncio.run(pipeline.run_once())
+    summary = asyncio.run(pipeline.run_once())
 
-    assert processed == 1
+    assert summary.processed == 1
+    assert summary.skipped == 0
+    assert summary.failed == 0
     with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
         event_count = connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         enrichment_count = connection.execute("SELECT COUNT(*) FROM enrichments").fetchone()[0]
@@ -95,6 +97,7 @@ def test_pipeline_writes_raw_normalized_enrichment_and_sqlite_metadata(tmp_path:
     assert row[7] == "0.1.0"
     assert row[8] == "blog:evt_1"
 
-    processed_again = asyncio.run(pipeline.run_once())
+    summary_again = asyncio.run(pipeline.run_once())
 
-    assert processed_again == 0
+    assert summary_again.processed == 0
+    assert summary_again.skipped == 1

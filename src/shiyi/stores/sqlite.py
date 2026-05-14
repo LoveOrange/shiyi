@@ -99,6 +99,63 @@ class SQLiteEventRecordStore:
             raise RuntimeError(msg)
         return record
 
+    async def save_failure(
+        self,
+        event: InternalItem,
+        *,
+        raw_artifact: ArtifactRef | None,
+        normalized_artifact: ArtifactRef | None,
+        error: str,
+    ) -> EventRecord:
+        """Create or update an event processing record as failed."""
+        now = _utc_now()
+        raw_json = raw_artifact.model_dump_json() if raw_artifact else None
+        normalized_json = normalized_artifact.model_dump_json() if normalized_artifact else None
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO events (
+                  event_id, idempotency_key, status, raw_artifact_json,
+                  normalized_artifact_json, source_json, captured_at,
+                  content_hash, adapter_name, adapter_version, last_error,
+                  created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(idempotency_key) DO UPDATE SET
+                  event_id = excluded.event_id,
+                  status = excluded.status,
+                  raw_artifact_json = excluded.raw_artifact_json,
+                  normalized_artifact_json = excluded.normalized_artifact_json,
+                  source_json = excluded.source_json,
+                  captured_at = excluded.captured_at,
+                  content_hash = excluded.content_hash,
+                  adapter_name = excluded.adapter_name,
+                  adapter_version = excluded.adapter_version,
+                  last_error = excluded.last_error,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    event.id,
+                    event.idempotency_key,
+                    "failed",
+                    raw_json,
+                    normalized_json,
+                    event.source.model_dump_json(),
+                    event.captured_at.isoformat(),
+                    event.content_hash,
+                    event.provenance.adapter_name,
+                    event.provenance.adapter_version,
+                    error,
+                    now,
+                    now,
+                ),
+            )
+        record = await self.find_by_idempotency_key(event.idempotency_key)
+        if record is None:
+            msg = "event failure record was not persisted"
+            raise RuntimeError(msg)
+        return record
+
     async def save_enrichment(
         self,
         event: InternalItem,

@@ -121,6 +121,25 @@ class FakeEventRecordStore:
         self.enrichment_count += 1
         return self.records[event.idempotency_key]
 
+    async def save_failure(
+        self,
+        event: InternalItem,
+        *,
+        raw_artifact: ArtifactRef | None,
+        normalized_artifact: ArtifactRef | None,
+        error: str,
+    ) -> EventRecord:
+        record = EventRecord(
+            event_id=event.id,
+            idempotency_key=event.idempotency_key,
+            status="failed",
+            raw_artifact=raw_artifact,
+            normalized_artifact=normalized_artifact,
+            last_error=error,
+        )
+        self.records[event.idempotency_key] = record
+        return record
+
     async def mark_enriched(self, event: InternalItem) -> EventRecord:
         self.mark_enriched_count += 1
         existing = self.records[event.idempotency_key]
@@ -146,9 +165,11 @@ def test_pipeline_runs_adapter_ai_and_stores() -> None:
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
-    processed = asyncio.run(pipeline.run_once())
+    summary = asyncio.run(pipeline.run_once())
 
-    assert processed == 1
+    assert summary.processed == 1
+    assert summary.skipped == 0
+    assert summary.failed == 0
     expected_artifact_count = 2
     assert len(artifact_store.artifacts) == expected_artifact_count
     assert event_record_store.enrichment_count == 1
@@ -170,11 +191,11 @@ def test_pipeline_marks_enriched_only_after_all_tasks_succeed() -> None:
         ],
     )
 
-    processed = asyncio.run(pipeline.run_once())
+    summary = asyncio.run(pipeline.run_once())
 
     expected_task_count = 2
 
-    assert processed == 1
+    assert summary.processed == 1
     assert event_record_store.enrichment_count == expected_task_count
     assert event_record_store.mark_enriched_count == 1
     assert event_record_store.records["test:evt_1"].status == "enriched"
@@ -196,9 +217,10 @@ def test_pipeline_skips_already_enriched_event() -> None:
         enrichment_tasks=[SummarizeTask(max_tokens=100)],
     )
 
-    processed = asyncio.run(pipeline.run_once())
+    summary = asyncio.run(pipeline.run_once())
 
-    assert processed == 0
+    assert summary.processed == 0
+    assert summary.skipped == 1
     assert artifact_store.artifacts == {}
 
 
