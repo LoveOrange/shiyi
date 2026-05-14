@@ -1,7 +1,7 @@
 # Shiyi Fetcher SDD
 
 - Status: Accepted for v0.2
-- Last updated: 2026-05-12
+- Last updated: 2026-05-14
 - Scope: shared web/RSS/sitemap fetching infrastructure and event-level raw fetch cache
 
 ## 1. Purpose
@@ -114,6 +114,8 @@ Fetcher implementations should map provider-specific failures to `FetcherError` 
 - `transport`
 - `http_status` with optional `status_code`
 
+`FetcherError` must include the attempted URL. When the caller supplied `source`, it should also preserve that source context so adapter diagnostics can identify which source boundary failed without catching `httpx` or SDK exceptions directly.
+
 Adapters may catch these errors for source-specific diagnostics, but they should not reach below the fetcher to catch `httpx` or SDK exceptions directly.
 
 ### `SitemapFetcher`
@@ -149,7 +151,20 @@ Fetches a sitemap and exposes URL entries plus optional `lastmod` values. XML pa
 - `loc`
 - `lastmod`
 
-## 8. Event-level raw cache
+## 8. Cursor, checkpoint, and time-window scope
+
+The current built-in fetcher ports do not accept pagination cursors, durable checkpoints, `since`, or `until` arguments.
+
+That is deliberate for v0.2:
+
+- RSS and sitemap fetchers return the complete parsed collection supplied by the fetched document.
+- Web fetcher returns one text resource.
+- Source-specific pagination, cursor interpretation, and capture-window filtering belong to adapters when a source needs them.
+- Durable checkpoint/progress commits belong to the pipeline or a future explicit source-state port, not to generic fetchers.
+
+Fetcher contract tests therefore cover multi-entry and empty parsed collections, retry/error classification, raw payload provenance, cache behavior, and timestamp preservation. If a future fetcher grows cursor/checkpoint or time-window parameters, it must add contract tests proving cursor input is honored, progress advances only after the successful fetch boundary, and `since` is inclusive while `until` is exclusive.
+
+## 9. Event-level raw cache
 
 The raw cache is a fetcher-level optimization for avoiding repeated full item fetches.
 
@@ -185,7 +200,7 @@ Cache behavior:
 
 This cache only saves network calls. It does not mean the event has been normalized, persisted, or marked complete.
 
-## 9. Current source usage
+## 10. Current source usage
 
 ### Anthropic news
 
@@ -215,7 +230,7 @@ Current flow:
 
 OpenAI currently does not use full-page raw cache because the RSS entry already provides event-level raw content for the MVP flow.
 
-## 10. HTTP policy
+## 11. HTTP policy
 
 `HttpWebFetcher` must provide:
 
@@ -233,20 +248,22 @@ Retryable failures include:
 
 Rate limiting remains simple for v0.2. A richer token-bucket policy can be added later if source pressure requires it.
 
-## 11. Safety and correctness notes
+## 12. Safety and correctness notes
 
 - Sitemap/XML parsing must use `defusedxml` or another safe XML parser.
 - Cache paths must be derived from adapter-provided hash-like keys, not arbitrary URLs.
 - Cache hits should not bypass pipeline event records checks.
 - Listing/feed fetches should not be cached as event-level raw unless an adapter explicitly treats them as an event item.
 
-## 12. Test requirements
+## 13. Test requirements
 
-The fetcher design is covered by:
+The fetcher design is covered by contract tests that localize failures to the retrieval boundary:
 
-- Web fetch result test.
-- Raw cache hit/miss test proving the second full fetch skips the remote request.
-- RSS parser test.
-- Sitemap parser test.
+- Web fetch result test, including URL, status, content type, fetched time, cache flag, and raw cache path provenance.
+- Raw cache hit/miss test proving the second full fetch skips the remote request while preserving the adapter-defined cache path.
+- RSS parser tests for multiple entries and empty feeds.
+- Sitemap parser tests for multiple entries and empty sitemaps.
+- Retry/error policy tests proving transient status failures are retried, exhausted retryable failures become `FetcherError`, permanent status failures are not retried, and timeout/transport errors use stable error kinds with URL/source context.
 - Adapter tests using fake fetchers, including `FakeWebFetcher` for deterministic adapter call-shape checks.
+- Domain/adapter tests, not fetcher tests, own half-open capture-window filtering until a fetcher port explicitly accepts `since`/`until`.
 - End-to-end capture smoke test proving raw cache files are created and pipeline idempotency still works.

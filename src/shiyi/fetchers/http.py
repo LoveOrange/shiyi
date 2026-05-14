@@ -66,7 +66,7 @@ class HttpWebFetcher:
                 raw_cache_path=raw_cache_path,
             )
 
-        response = await self._get(url)
+        response = await self._get(url, source=source)
         content = response.text
         if raw_cache_path is not None:
             raw_cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +85,7 @@ class HttpWebFetcher:
             return None
         return self._raw_cache_root / source / raw_key / "raw.html"
 
-    async def _get(self, url: str) -> httpx.Response:
+    async def _get(self, url: str, *, source: str | None = None) -> httpx.Response:
         attempts = self._retries + 1
         last_error: Exception | None = None
         for attempt in range(attempts):
@@ -95,7 +95,7 @@ class HttpWebFetcher:
             except (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError) as error:
                 last_error = error
                 if attempt == attempts - 1 or not _is_retryable(error):
-                    raise _to_fetcher_error(error, url=url) from error
+                    raise _to_fetcher_error(error, url=url, source=source) from error
                 await asyncio.sleep(0.2 * (attempt + 1))
             else:
                 return response
@@ -225,10 +225,10 @@ def _is_retryable(error: Exception) -> bool:
     return True
 
 
-def _to_fetcher_error(error: Exception, *, url: str) -> FetcherError:
+def _to_fetcher_error(error: Exception, *, url: str, source: str | None = None) -> FetcherError:
     if isinstance(error, httpx.TimeoutException):
         message = f"Timed out while fetching {url}"
-        return FetcherError(url=url, kind=FetchErrorKind.TIMEOUT, message=message)
+        return FetcherError(url=url, kind=FetchErrorKind.TIMEOUT, message=message, source=source)
     if isinstance(error, httpx.HTTPStatusError):
         status_code = error.response.status_code
         message = f"HTTP {status_code} while fetching {url}"
@@ -237,6 +237,7 @@ def _to_fetcher_error(error: Exception, *, url: str) -> FetcherError:
             kind=FetchErrorKind.HTTP_STATUS,
             message=message,
             status_code=status_code,
+            source=source,
         )
     message = f"Transport error while fetching {url}"
-    return FetcherError(url=url, kind=FetchErrorKind.TRANSPORT, message=message)
+    return FetcherError(url=url, kind=FetchErrorKind.TRANSPORT, message=message, source=source)

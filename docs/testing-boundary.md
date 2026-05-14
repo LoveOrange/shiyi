@@ -159,16 +159,18 @@ Cases:
 
 Fetcher tests prove raw/source retrieval behavior without silently doing business normalization.
 
+Current built-in fetchers do not expose pagination cursors, durable checkpoints, `since`, or `until` parameters. Their P2-02 contract therefore proves that they return complete parsed collections, preserve timestamps/provenance for adapters, classify retryable/permanent failures, and do not advance business progress. If a future fetcher adds cursor/checkpoint or time-window parameters, the same task must add explicit contract tests for those semantics.
+
 Must cover:
 
 1. Happy path with one page of source data.
-2. Pagination or multiple discovered items without duplicates or missing records.
+2. Pagination or multiple discovered items without duplicates or missing records; for current RSS/sitemap fetchers, this means all parsed entries are returned exactly once from the fetched document.
 3. Empty source result returns an empty collection, not a business failure.
 4. Retryable source error is classified or retried according to the current policy.
 5. Permanent source error is not swallowed and includes source/context.
 6. Cursor/checkpoint input is honored when the implementation supports it.
 7. Progress state advances only after the successful boundary, when checkpointing exists.
-8. Time window filtering follows inclusive `since` and exclusive `until` semantics where applicable.
+8. Time window filtering follows inclusive `since` and exclusive `until` semantics where applicable; current fetchers preserve source timestamps and leave filtering to adapter/domain tests.
 9. Raw payload keeps enough fields for Adapter conversion and provenance.
 
 ### P2-03 Adapter and `InternalItem` contract tests

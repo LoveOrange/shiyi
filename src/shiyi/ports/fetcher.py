@@ -28,12 +28,14 @@ class FetcherError(Exception):
         kind: FetchErrorKind,
         message: str,
         status_code: int | None = None,
+        source: str | None = None,
     ) -> None:
         """Create a fetcher error with stable adapter-facing fields."""
         super().__init__(message)
         self.url = url
         self.kind = kind
         self.status_code = status_code
+        self.source = source
 
 
 class FetchResult(BaseModel):

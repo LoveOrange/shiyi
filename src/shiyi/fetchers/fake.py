@@ -49,7 +49,12 @@ class FakeWebFetcher:
         value = self._pages.get(url)
         if value is None:
             message = f"No fake response configured for {url}"
-            raise FetcherError(url=url, kind=FetchErrorKind.TRANSPORT, message=message)
+            raise FetcherError(
+                url=url,
+                kind=FetchErrorKind.TRANSPORT,
+                message=message,
+                source=source,
+            )
         if isinstance(value, FetchResult):
             return value
         return FetchResult(url=url, status_code=200, content=value, fetched_at=self._fetched_at)
