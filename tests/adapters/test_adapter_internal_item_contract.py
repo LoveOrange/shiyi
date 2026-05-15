@@ -7,7 +7,14 @@ from typing import NamedTuple, get_args
 
 import pytest
 
-from shiyi import Adapter, InternalItem, anthropic_news_adapter, openai_news_adapter
+from shiyi import (
+    Adapter,
+    InternalItem,
+    anthropic_news_adapter,
+    google_research_blog_adapter,
+    huggingface_blog_adapter,
+    openai_news_adapter,
+)
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
 from shiyi.cli import SourceName
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
@@ -16,8 +23,12 @@ from shiyi.ports.fetcher import RssEntry, RssFeed
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_FIXTURE_ROOT = FIXTURE_ROOT / "openai-news"
+HUGGINGFACE_FIXTURE_ROOT = FIXTURE_ROOT / "huggingface-blog"
+GOOGLE_RESEARCH_FIXTURE_ROOT = FIXTURE_ROOT / "google-research-blog"
 ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
+HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
+GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
 CLAUDE_DESIGN_URL = "https://www.anthropic.com/news/claude-design-anthropic-labs"
 ANTHROPIC_MINIMAL_URL = "https://www.anthropic.com/news/minimal-contract"
 ANTHROPIC_SECOND_URL = "https://www.anthropic.com/news/second-contract"
@@ -29,6 +40,14 @@ class ContractCase(NamedTuple):
     source_name: SourceName
     build_adapter: Callable[[], Adapter]
     expected_paths: tuple[Path, ...]
+
+
+class RssBuiltinCase(NamedTuple):
+    source_name: SourceName
+    feed_url: str
+    source_kind: str
+    adapter_name: str
+    build_adapter: Callable[[RssFeed, CaptureWindow | None], Adapter]
 
 
 CONTRACT_CASES = (
@@ -44,6 +63,34 @@ CONTRACT_CASES = (
             )
         ),
         expected_paths=(OPENAI_FIXTURE_ROOT / "internal-item" / "running-codex-safely.json",),
+    ),
+    ContractCase(
+        source_name="huggingface-blog",
+        build_adapter=lambda: huggingface_blog_adapter(
+            rss_fetcher=FakeRssFetcher(
+                {
+                    HUGGINGFACE_RSS_URL: RssFeed.model_validate_json(
+                        (HUGGINGFACE_FIXTURE_ROOT / "raw" / "feed.json").read_text()
+                    )
+                }
+            )
+        ),
+        expected_paths=(HUGGINGFACE_FIXTURE_ROOT / "internal-item" / "open-r1.json",),
+    ),
+    ContractCase(
+        source_name="google-research-blog",
+        build_adapter=lambda: google_research_blog_adapter(
+            rss_fetcher=FakeRssFetcher(
+                {
+                    GOOGLE_RESEARCH_RSS_URL: RssFeed.model_validate_json(
+                        (GOOGLE_RESEARCH_FIXTURE_ROOT / "raw" / "feed.json").read_text()
+                    )
+                }
+            )
+        ),
+        expected_paths=(
+            GOOGLE_RESEARCH_FIXTURE_ROOT / "internal-item" / "catalyzing-scientific-impact.json",
+        ),
     ),
     ContractCase(
         source_name="anthropic",
@@ -65,6 +112,36 @@ CONTRACT_CASES = (
     ),
 )
 
+RSS_BUILTIN_CASES = (
+    RssBuiltinCase(
+        source_name="openai",
+        feed_url=OPENAI_RSS_URL,
+        source_kind="openai-news",
+        adapter_name="openai-news-rss",
+        build_adapter=lambda feed, window: openai_news_adapter(
+            rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}), window=window
+        ),
+    ),
+    RssBuiltinCase(
+        source_name="huggingface-blog",
+        feed_url=HUGGINGFACE_RSS_URL,
+        source_kind="huggingface-blog",
+        adapter_name="huggingface-blog-rss",
+        build_adapter=lambda feed, window: huggingface_blog_adapter(
+            rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}), window=window
+        ),
+    ),
+    RssBuiltinCase(
+        source_name="google-research-blog",
+        feed_url=GOOGLE_RESEARCH_RSS_URL,
+        source_kind="google-research-blog",
+        adapter_name="google-research-blog-rss",
+        build_adapter=lambda feed, window: google_research_blog_adapter(
+            rss_fetcher=FakeRssFetcher({GOOGLE_RESEARCH_RSS_URL: feed}), window=window
+        ),
+    ),
+)
+
 
 def test_every_builtin_source_has_executable_contract_case() -> None:
     assert {case.source_name for case in CONTRACT_CASES} == set(get_args(SourceName))
@@ -81,8 +158,12 @@ def test_builtin_source_raw_fixture_matches_internal_item_golden(case: ContractC
         InternalItem.model_validate(item.model_dump(mode="json"))
 
 
-def test_openai_rss_minimal_raw_payload_maps_to_valid_internal_item() -> None:
+@pytest.mark.parametrize("case", RSS_BUILTIN_CASES, ids=lambda case: case.source_name)
+def test_rss_builtin_minimal_raw_payload_maps_to_valid_internal_item(
+    case: RssBuiltinCase,
+) -> None:
     feed = _rss_feed(
+        feed_url=case.feed_url,
         entries=(
             RssEntry(
                 entry_id="minimal-rss-entry",
@@ -91,27 +172,27 @@ def test_openai_rss_minimal_raw_payload_maps_to_valid_internal_item() -> None:
                 html="",
                 published_at=None,
             ),
-        )
+        ),
     )
-    adapter = openai_news_adapter(rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}))
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(case.build_adapter(feed, None).discover()))
 
     assert len(items) == 1
     item = InternalItem.model_validate(items[0].model_dump(mode="json"))
-    assert item.id == "openai-news:minimal-rss-entry"
-    assert item.source.kind == "openai-news"
-    assert item.source.uri is not None
+    assert item.id == f"{case.source_kind}:minimal-rss-entry"
+    assert item.source.kind == case.source_kind
+    assert str(item.source.uri) == case.feed_url
     assert item.source.account_id is None
     assert item.captured_at == FETCHED_AT
     assert item.occurred_at == FETCHED_AT
     assert item.provenance.source_item_id == "minimal-rss-entry"
-    assert item.provenance.adapter_name == "openai-news-rss"
+    assert item.provenance.adapter_name == case.adapter_name
     assert item.metadata == {"title": "Minimal RSS Entry", "link": None}
     assert item.payload == TextPayload(text="Minimal RSS Entry")
     assert _dump_for_leak_check(item).isdisjoint({"raw_payload", "rss_guid", "feedparser"})
 
 
+@pytest.mark.parametrize("case", RSS_BUILTIN_CASES, ids=lambda case: case.source_name)
 @pytest.mark.parametrize(
     ("entry", "message"),
     [
@@ -119,7 +200,7 @@ def test_openai_rss_minimal_raw_payload_maps_to_valid_internal_item() -> None:
             RssEntry(
                 entry_id="",
                 title="Missing external id",
-                link="https://openai.com/missing-id",
+                link="https://example.com/missing-id",
                 html="<p>body</p>",
                 published_at=FETCHED_AT,
             ),
@@ -129,7 +210,7 @@ def test_openai_rss_minimal_raw_payload_maps_to_valid_internal_item() -> None:
             RssEntry(
                 entry_id="missing-title",
                 title="",
-                link="https://openai.com/missing-title",
+                link="https://example.com/missing-title",
                 html="<p>body</p>",
                 published_at=FETCHED_AT,
             ),
@@ -137,55 +218,26 @@ def test_openai_rss_minimal_raw_payload_maps_to_valid_internal_item() -> None:
         ),
     ],
 )
-def test_openai_rss_missing_required_fields_fail_clearly(
+def test_rss_builtin_missing_required_fields_fail_clearly(
+    case: RssBuiltinCase,
     entry: RssEntry,
     message: str,
 ) -> None:
-    feed = _rss_feed(entries=(entry,))
-    adapter = openai_news_adapter(rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}))
+    feed = _rss_feed(feed_url=case.feed_url, entries=(entry,))
 
     with pytest.raises(ValueError, match=message):
-        asyncio.run(_collect_items(adapter.discover()))
+        asyncio.run(_collect_items(case.build_adapter(feed, None).discover()))
 
 
-def test_openai_rss_filters_out_of_window_entries_before_required_field_validation() -> None:
-    feed = _rss_feed(
-        entries=(
-            RssEntry(
-                entry_id="old-invalid-entry",
-                title="",
-                link="https://openai.com/old-invalid-entry",
-                html="<article>old invalid body</article>",
-                published_at=datetime(2026, 5, 11, tzinfo=UTC),
-            ),
-            RssEntry(
-                entry_id="valid-in-window",
-                title="Valid In Window",
-                link="https://openai.com/valid-in-window",
-                html="<article>valid body</article>",
-                published_at=datetime(2026, 5, 12, 12, tzinfo=UTC),
-            ),
-        )
-    )
-    adapter = openai_news_adapter(
-        rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}),
-        window=CaptureWindow(
-            since=datetime(2026, 5, 12, tzinfo=UTC),
-            until=datetime(2026, 5, 13, tzinfo=UTC),
-        ),
-    )
-
-    items = asyncio.run(_collect_items(adapter.discover()))
-
-    assert [item.idempotency_key for item in items] == ["openai-news:valid-in-window"]
-
-
-def test_openai_rss_timestamp_and_idempotency_contract_is_stable() -> None:
+@pytest.mark.parametrize("case", RSS_BUILTIN_CASES, ids=lambda case: case.source_name)
+def test_rss_builtin_timestamp_and_idempotency_contract_is_stable(
+    case: RssBuiltinCase,
+) -> None:
     occurred_at = datetime(2026, 5, 12, 18, 45, 0, 123000, tzinfo=timezone(timedelta(hours=8)))
     first = RssEntry(
         entry_id="timezone-entry",
         title="Timezone Entry",
-        link="https://openai.com/timezone-entry",
+        link="https://example.com/timezone-entry",
         html="<article>timezone body</article>",
         published_at=occurred_at,
     )
@@ -193,24 +245,59 @@ def test_openai_rss_timestamp_and_idempotency_contract_is_stable() -> None:
         update={
             "entry_id": "distinct-entry",
             "title": "Distinct Entry",
-            "link": "https://openai.com/distinct-entry",
+            "link": "https://example.com/distinct-entry",
             "html": "<article>distinct body</article>",
         }
     )
-    feed = _rss_feed(entries=(first, second))
-    adapter = openai_news_adapter(rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}))
+    feed = _rss_feed(feed_url=case.feed_url, entries=(first, second))
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(case.build_adapter(feed, None).discover()))
 
     expected_count = 2
     assert len(items) == expected_count
     assert items[0].occurred_at == occurred_at
-    assert items[0].idempotency_key == "openai-news:timezone-entry"
-    assert items[1].idempotency_key == "openai-news:distinct-entry"
+    assert items[0].idempotency_key == f"{case.source_kind}:timezone-entry"
+    assert items[1].idempotency_key == f"{case.source_kind}:distinct-entry"
     assert items[0].idempotency_key != items[1].idempotency_key
     assert items[0].content_hash != items[1].content_hash
     assert isinstance(items[0].payload, HtmlPayload)
-    assert str(items[0].payload.url) == "https://openai.com/timezone-entry"
+    assert str(items[0].payload.url) == "https://example.com/timezone-entry"
+
+
+@pytest.mark.parametrize("case", RSS_BUILTIN_CASES, ids=lambda case: case.source_name)
+def test_rss_builtin_filters_out_of_window_entries_before_required_field_validation(
+    case: RssBuiltinCase,
+) -> None:
+    feed = _rss_feed(
+        feed_url=case.feed_url,
+        entries=(
+            RssEntry(
+                entry_id="old-invalid-entry",
+                title="",
+                link="https://example.com/old-invalid-entry",
+                html="<article>old invalid body</article>",
+                published_at=datetime(2026, 5, 11, tzinfo=UTC),
+            ),
+            RssEntry(
+                entry_id="valid-in-window",
+                title="Valid In Window",
+                link="https://example.com/valid-in-window",
+                html="<article>valid body</article>",
+                published_at=datetime(2026, 5, 12, 12, tzinfo=UTC),
+            ),
+        ),
+    )
+    adapter = case.build_adapter(
+        feed,
+        CaptureWindow(
+            since=datetime(2026, 5, 12, tzinfo=UTC),
+            until=datetime(2026, 5, 13, tzinfo=UTC),
+        ),
+    )
+
+    items = asyncio.run(_collect_items(adapter.discover()))
+
+    assert [item.idempotency_key for item in items] == [f"{case.source_kind}:valid-in-window"]
 
 
 def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:
@@ -306,8 +393,8 @@ def test_anthropic_timestamp_parsing_handles_timezone_milliseconds_and_invalid_v
     assert len({item.idempotency_key for item in items}) == expected_count
 
 
-def _rss_feed(*, entries: tuple[RssEntry, ...]) -> RssFeed:
-    return RssFeed(url=OPENAI_RSS_URL, fetched_at=FETCHED_AT, entries=entries)
+def _rss_feed(*, entries: tuple[RssEntry, ...], feed_url: str = OPENAI_RSS_URL) -> RssFeed:
+    return RssFeed(url=feed_url, fetched_at=FETCHED_AT, entries=entries)
 
 
 async def _collect_items(events: AsyncIterator[InternalItem]) -> list[InternalItem]:

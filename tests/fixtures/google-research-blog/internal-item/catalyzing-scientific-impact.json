@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-05-13T01:30:00Z",
+  "content_hash": "f92dd950fa6bfbf965c185092676805c738ec7476d7a7e98a513a0692db407ce",
+  "id": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
+  "idempotency_key": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
+  "metadata": {
+    "link": "https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
+    "title": "Catalyzing scientific impact through global partnerships and open resources"
+  },
+  "occurred_at": "2026-05-01T16:37:00Z",
+  "payload": {
+    "html": "<article><h1>Catalyzing scientific impact through global partnerships and open resources</h1>Data Mining & Modeling<p>Canonical link: <a href=\"https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/\">https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/</a></p></article>",
+    "type": "html",
+    "url": "https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/"
+  },
+  "provenance": {
+    "adapter_name": "google-research-blog-rss",
+    "adapter_version": "0.2.0",
+    "fetched_at": "2026-05-13T01:30:00Z",
+    "source_item_id": "https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/"
+  },
+  "schema_version": "internal-item.v1",
+  "source": {
+    "account_id": null,
+    "kind": "google-research-blog",
+    "uri": "https://research.google/blog/rss/"
+  }
+}

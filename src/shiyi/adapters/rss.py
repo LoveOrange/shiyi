@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
+from html import escape, unescape
 
 from shiyi.domain.models import (
     CaptureWindow,
@@ -54,11 +56,7 @@ class RssFeedAdapter:
                 continue
             entry_id = _required_entry_field(entry.entry_id, field="entry_id")
             title = _required_entry_field(entry.title, field="title", entry_id=entry_id)
-            payload = (
-                HtmlPayload(html=entry.html, url=entry.link)
-                if entry.html
-                else TextPayload(text=title)
-            )
+            payload = _rss_payload(title=title, link=entry.link, html=entry.html)
             item_id = f"{self._source_kind}:{entry_id}"
             yield InternalItem(
                 id=item_id,
@@ -81,6 +79,36 @@ class RssFeedAdapter:
                 break
 
 
+_HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+
+
+def _rss_payload(*, title: str, link: str | None, html: str) -> HtmlPayload | TextPayload:
+    if not html:
+        return _fallback_text_payload(title=title, link=link)
+
+    parts: list[str] = []
+    if not _html_contains_text(html, title):
+        parts.append(f"<h1>{escape(title)}</h1>")
+    parts.append(html)
+    if link is not None and link not in html:
+        escaped_link = escape(link, quote=True)
+        parts.append(f'<p>Canonical link: <a href="{escaped_link}">{escape(link)}</a></p>')
+    return HtmlPayload(html=f"<article>{''.join(parts)}</article>", url=link)
+
+
+def _fallback_text_payload(*, title: str, link: str | None) -> TextPayload:
+    if link is None:
+        return TextPayload(text=title)
+    return TextPayload(text=f"{title}\n\nCanonical link: {link}")
+
+
+def _html_contains_text(html: str, text: str) -> bool:
+    plain_html = unescape(_HTML_TAG_PATTERN.sub(" ", html))
+    normalized_haystack = " ".join(plain_html.casefold().split())
+    normalized_needle = " ".join(text.casefold().split())
+    return normalized_needle in normalized_haystack
+
+
 def _required_entry_field(value: str, *, field: str, entry_id: str | None = None) -> str:
     stripped = value.strip()
     if stripped:
@@ -101,6 +129,40 @@ def openai_news_adapter(
         name="openai-news-rss",
         feed_url="https://openai.com/news/rss.xml",
         source_kind="openai-news",
+        limit=limit,
+        window=window,
+        rss_fetcher=rss_fetcher,
+    )
+
+
+def huggingface_blog_adapter(
+    *,
+    limit: int | None = None,
+    window: CaptureWindow | None = None,
+    rss_fetcher: RssFetcher | None = None,
+) -> RssFeedAdapter:
+    """Create the default Hugging Face blog RSS adapter."""
+    return RssFeedAdapter(
+        name="huggingface-blog-rss",
+        feed_url="https://huggingface.co/blog/feed.xml",
+        source_kind="huggingface-blog",
+        limit=limit,
+        window=window,
+        rss_fetcher=rss_fetcher,
+    )
+
+
+def google_research_blog_adapter(
+    *,
+    limit: int | None = None,
+    window: CaptureWindow | None = None,
+    rss_fetcher: RssFetcher | None = None,
+) -> RssFeedAdapter:
+    """Create the default Google Research blog RSS adapter."""
+    return RssFeedAdapter(
+        name="google-research-blog-rss",
+        feed_url="https://research.google/blog/rss/",
+        source_kind="google-research-blog",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,

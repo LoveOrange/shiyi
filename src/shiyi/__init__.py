@@ -1,7 +1,12 @@
 """Shiyi public API."""
 
 from shiyi.adapters.anthropic import AnthropicNewsAdapter, anthropic_news_adapter
-from shiyi.adapters.rss import RssFeedAdapter, openai_news_adapter
+from shiyi.adapters.rss import (
+    RssFeedAdapter,
+    google_research_blog_adapter,
+    huggingface_blog_adapter,
+    openai_news_adapter,
+)
 from shiyi.domain.models import (
     ArtifactRead,
     ArtifactRef,
@@ -63,6 +68,8 @@ __all__ = [
     "TokenUsage",
     "anthropic_news_adapter",
     "export_items",
+    "google_research_blog_adapter",
+    "huggingface_blog_adapter",
     "openai_news_adapter",
     "payload_content_hash",
 ]

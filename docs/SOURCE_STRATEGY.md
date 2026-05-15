@@ -1,7 +1,7 @@
 # Shiyi Source Strategy
 
 - Status: Canonical source expansion strategy
-- Last updated: 2026-05-14
+- Last updated: 2026-05-15
 - Owners: Lin, Kana, Kurisu
 
 Shiyi's long-term goal is broad source coverage. The strategy is to add many sources through stable adapter families and readiness gates, not through fragile one-off scrapers.
@@ -48,7 +48,8 @@ This should become the fastest source expansion path. Many official blogs should
 Examples:
 
 - OpenAI news RSS — implemented;
-- Hugging Face Blog, if feed is stable;
+- Hugging Face Blog RSS — implemented in the first P2.5 RSS-first slice;
+- Google Research Blog RSS — implemented in the first P2.5 RSS-first slice;
 - provider/company blogs with RSS or Atom feeds.
 
 ### 3.2 Sitemap + article page sources
@@ -106,9 +107,12 @@ For Shiyi, these should remain neutral captured source material. Clustering, tre
 Current built-ins:
 
 - `openai` — OpenAI news RSS feed;
-- `anthropic` — Anthropic news index parser.
+- `anthropic` — Anthropic news index parser;
+- `huggingface-blog` — Hugging Face Blog RSS feed;
+- `google-research-blog` — Google Research Blog RSS feed.
 
-These provide the first two patterns: feed and index/page capture.
+These provide the first two patterns: reusable feed capture and index/page capture.
+The first P2.5 RSS-first slice intentionally keeps the implementation hand-wired; source registry/config belongs to P3.
 
 ## 5. Recommended expansion batches
 
@@ -118,10 +122,10 @@ Goal: improve AI Weekly source coverage with low-noise official sources.
 
 Recommended candidates:
 
-1. Google DeepMind / Google AI / Gemini official updates;
-2. Meta AI official updates;
-3. Microsoft AI / Azure AI official updates;
-4. Hugging Face Blog;
+1. Google Research Blog / Google DeepMind / Gemini official updates;
+2. Hugging Face Blog;
+3. Meta AI official updates;
+4. Microsoft AI / Azure AI official updates;
 5. Mistral official updates;
 6. Cohere official updates.
 
@@ -182,7 +186,9 @@ Examples:
 - `openai-news` for canonical source kind;
 - CLI alias may remain `openai` for convenience;
 - `anthropic-news` for Anthropic news content;
-- future IDs should use provider or organization plus feed type, e.g. `huggingface-blog`.
+- `huggingface-blog` for Hugging Face Blog RSS content;
+- `google-research-blog` for Google Research Blog RSS content;
+- future IDs should use provider or organization plus feed type.
 
 The stable replay identity field is `idempotency_key`. Do not introduce `dedupe_key` in source contracts.
 

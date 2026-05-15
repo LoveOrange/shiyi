@@ -1,4 +1,4 @@
-"""HTML to Markdown normalizer."""
+"""HTML/text to canonical Markdown normalizer."""
 
 from __future__ import annotations
 
@@ -9,12 +9,20 @@ from shiyi.domain.models import ArtifactWrite, InternalItem
 
 
 class HtmlMarkdownNormalizer:
-    """Converts HTML capture payloads into canonical Markdown artifacts."""
+    """Converts HTML and text capture payloads into canonical Markdown artifacts."""
 
     name = "html-markdown-normalizer"
 
     async def normalize(self, event: InternalItem) -> ArtifactWrite | None:
-        """Normalize HTML payloads to Markdown and leave other payloads unchanged."""
+        """Normalize text-like payloads to Markdown and leave binary payloads unchanged."""
+        if event.payload.type == "text":
+            return ArtifactWrite(
+                kind="normalized",
+                media_type="text/markdown",
+                content=f"{event.payload.text.strip()}\n".encode(),
+                suggested_name=f"{event.id}.md",
+                metadata={"normalizer": self.name},
+            )
         if event.payload.type != "html":
             return None
 

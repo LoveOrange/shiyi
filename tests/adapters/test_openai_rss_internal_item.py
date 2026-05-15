@@ -46,7 +46,8 @@ def test_openai_rss_adapter_maps_feed_entry_to_internal_item() -> None:
     assert item.captured_at == datetime(2026, 5, 13, 1, 30, tzinfo=UTC)
     assert item.occurred_at == datetime(2026, 5, 8, 10, tzinfo=UTC)
     assert isinstance(item.payload, HtmlPayload)
-    assert item.payload.html == "<article><h1>Running Codex safely</h1></article>"
+    assert "<h1>Running Codex safely</h1>" in item.payload.html
+    assert "https://openai.com/index/running-codex-safely/" in item.payload.html
     assert item.content_hash == payload_content_hash(item.payload)
     assert item.provenance.adapter_name == "openai-news-rss"
     assert item.provenance.adapter_version == "0.2.0"

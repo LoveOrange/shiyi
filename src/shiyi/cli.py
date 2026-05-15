@@ -16,7 +16,11 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel
 
 from shiyi.adapters.anthropic import anthropic_news_adapter
-from shiyi.adapters.rss import openai_news_adapter
+from shiyi.adapters.rss import (
+    google_research_blog_adapter,
+    huggingface_blog_adapter,
+    openai_news_adapter,
+)
 from shiyi.domain.models import (
     CaptureWindow,
     ClassifyTask,
@@ -30,10 +34,11 @@ from shiyi.export import export_items
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline, PipelineRunSummary
+from shiyi.ports.adapter import Adapter
 from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteEventRecordStore
 
-SourceName = Literal["openai", "anthropic"]
+SourceName = Literal["openai", "anthropic", "huggingface-blog", "google-research-blog"]
 DATE_ONLY_LENGTH = 10
 
 
@@ -125,7 +130,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="shiyi")
     subcommands = parser.add_subparsers(dest="command", required=True)
     capture = subcommands.add_parser("capture", help="Run a local capture once")
-    capture.add_argument("--source", choices=["openai", "anthropic"], required=True)
+    capture.add_argument(
+        "--source",
+        choices=["openai", "anthropic", "huggingface-blog", "google-research-blog"],
+        required=True,
+    )
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
     capture.add_argument("--limit", type=int, default=None, help="Deprecated debug item cap")
     capture.add_argument(
@@ -187,14 +196,18 @@ async def run_capture(  # noqa: PLR0913
     item_cap = max_items if max_items is not None else limit
     window = CaptureWindow(since=since, until=until, max_items=item_cap or 5)
     raw_cache_root = workspace / "data" / "raw"
-    adapter = (
-        openai_news_adapter(window=window)
-        if source == "openai"
-        else anthropic_news_adapter(
+    adapter: Adapter
+    if source == "openai":
+        adapter = openai_news_adapter(window=window)
+    elif source == "huggingface-blog":
+        adapter = huggingface_blog_adapter(window=window)
+    elif source == "google-research-blog":
+        adapter = google_research_blog_adapter(window=window)
+    else:
+        adapter = anthropic_news_adapter(
             window=window,
             web_fetcher=HttpWebFetcher(raw_cache_root=raw_cache_root),
         )
-    )
     pipeline = CapturePipeline(
         adapter=adapter,
         ai_provider=LocalHeuristicAIProvider(),

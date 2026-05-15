@@ -137,9 +137,12 @@ Shiyi should scale source coverage through batches, not through a broad crawler 
 Current built-in sources:
 
 - `openai` — OpenAI news RSS feed;
-- `anthropic` — Anthropic news index parser.
+- `anthropic` — Anthropic news index parser;
+- `huggingface-blog` — Hugging Face Blog RSS feed;
+- `google-research-blog` — Google Research Blog RSS feed.
 
-These prove the first two adapter patterns: feed-style capture and index-page/article capture.
+These prove the first two adapter patterns: reusable feed-style capture and index-page/article capture.
+The P2.5 RSS-first slice is still deliberately small; source registry/config and broader batch scale-out remain P3 work.
 
 ### 7.2 Near-term expansion policy
 
@@ -147,10 +150,10 @@ Start with official, low-noise, mostly RSS/API/blog sources. They improve AI Wee
 
 Recommended next batch:
 
-- Google DeepMind / Google AI / Gemini official updates;
+- Google Research Blog / Google DeepMind / Gemini official updates;
+- Hugging Face Blog;
 - Meta AI official updates;
 - Microsoft AI / Azure AI official updates;
-- Hugging Face Blog;
 - Mistral / Cohere official updates if stable feeds are available.
 
 Second batch:

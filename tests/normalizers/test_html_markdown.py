@@ -41,7 +41,7 @@ def test_html_markdown_normalizer_extracts_article_markdown() -> None:
     assert b"World" in artifact.content
 
 
-def test_html_markdown_normalizer_ignores_non_html_payloads() -> None:
+def test_html_markdown_normalizer_keeps_text_payloads_exportable() -> None:
     normalizer = HtmlMarkdownNormalizer()
     payload = TextPayload(text="hello")
     event = InternalItem(
@@ -59,4 +59,9 @@ def test_html_markdown_normalizer_ignores_non_html_payloads() -> None:
         idempotency_key="blog:evt_1",
     )
 
-    assert asyncio.run(normalizer.normalize(event)) is None
+    artifact = asyncio.run(normalizer.normalize(event))
+
+    assert artifact is not None
+    assert artifact.kind == "normalized"
+    assert artifact.media_type == "text/markdown"
+    assert artifact.content == b"hello\n"

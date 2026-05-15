@@ -93,16 +93,23 @@ Decision gate before leaving P2:
 
 ### P2.5 — Source expansion batch 1: official low-noise sources
 
-- Status: Next
+- Status: In progress
 - Goal: increase AI R&D source coverage with stable official sources while preserving P2 contracts.
 
 Recommended first batch:
 
-1. Google DeepMind / Google AI / Gemini official updates;
-2. Meta AI official updates;
-3. Microsoft AI / Azure AI official updates;
-4. Hugging Face Blog;
+1. Google Research Blog / Google DeepMind / Gemini official updates;
+2. Hugging Face Blog;
+3. Meta AI official updates;
+4. Microsoft AI / Azure AI official updates;
 5. optional: Mistral or Cohere official updates if stable feeds are available.
+
+Current RSS-first implementation slice:
+
+- `huggingface-blog` through the reusable RSS adapter path;
+- `google-research-blog` through the reusable RSS adapter path;
+- text-only RSS entries remain exportable through canonical Markdown normalization;
+- source registry/config remains deferred to P3.
 
 Acceptance:
 

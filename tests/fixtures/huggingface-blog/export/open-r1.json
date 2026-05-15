@@ -1,0 +1,20 @@
+[
+  {
+    "schema_version": "shiyi-export-item.v1",
+    "event_id": "huggingface-blog:https://huggingface.co/blog/open-r1",
+    "idempotency_key": "huggingface-blog:https://huggingface.co/blog/open-r1",
+    "status": "persisted",
+    "source": {
+      "kind": "huggingface-blog",
+      "uri": "https://huggingface.co/blog/feed.xml",
+      "account_id": null
+    },
+    "captured_at": "2026-05-13T01:30:00+00:00",
+    "content_hash": "e8e1df7e8dcae06a7addeb886c7e9fec020cee9dda3191d959957ad045167165",
+    "adapter_name": "huggingface-blog-rss",
+    "adapter_version": "0.2.0",
+    "normalized_artifact_uri": "normalized/4f/4f787f9508674b84091425147d921e8f25ddefe3843653241cf9f4dfaf1c3845",
+    "normalized_media_type": "text/markdown",
+    "normalized_content": "Open R1: a fully open reproduction of DeepSeek-R1\n\nCanonical link: https://huggingface.co/blog/open-r1\n"
+  }
+]
