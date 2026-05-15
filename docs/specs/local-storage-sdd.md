@@ -39,6 +39,7 @@ The MVP local storage implementation must support deterministic local capture ru
 - Track event status.
 - Store raw and normalized artifact references as JSON.
 - Store minimal trace fields needed to audit pipeline writes: source, captured_at, content_hash, idempotency_key, adapter_name, and adapter_version.
+- Persist `captured_at` as canonical UTC ISO-8601 text (`+00:00`) before any export filtering or ordering.
 - Store item failure context in `last_error` when the pipeline can record a failed attempt.
 - Store optional annotation/preprocess artifact references as JSON rows.
 - Support idempotent re-runs by returning existing complete records.
@@ -83,6 +84,11 @@ shiyi export --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
 ```
 
 Output is a JSON array of `shiyi-export-item.v1` objects containing Shiyi trace fields plus `normalized_content`. It deliberately does not expose third-party adapter DTOs to consumers.
+
+Export filters use a half-open `captured_at` window: `--since` is inclusive and `--until` is exclusive. Both stored `captured_at` values and filter bounds are compared as canonical UTC instants, so source timestamps with non-UTC offsets are first normalized to UTC.
+Repeated `--source` filters match canonical Shiyi `source.kind` values with OR semantics.
+Default ordering is stable and consumer-visible: newest `captured_at` first, with `event_id` ascending as the deterministic tie-breaker.
+Empty matches return `[]`.
 
 ## 5. MVP constraints
 

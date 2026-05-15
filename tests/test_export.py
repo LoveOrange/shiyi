@@ -1,5 +1,5 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from shiyi.domain.models import (
@@ -53,12 +53,130 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
 
     assert len(exported) == 1
     assert exported[0].event_id == "evt_1"
-    assert exported[0].source == {"kind": "blog", "uri": None, "account_id": None}
+    assert exported[0].source == SourceIdentity(kind="blog")
     assert exported[0].captured_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].normalized_media_type == "text/markdown"
     assert exported[0].normalized_content is not None
     assert "# evt\\_1" in exported[0].normalized_content
+    payload = exported[0].model_dump(mode="json")
+    assert set(payload) == {
+        "adapter_name",
+        "adapter_version",
+        "captured_at",
+        "content_hash",
+        "event_id",
+        "idempotency_key",
+        "normalized_artifact_uri",
+        "normalized_content",
+        "normalized_media_type",
+        "schema_version",
+        "source",
+        "status",
+    }
     assert "third-party" not in exported[0].model_dump_json()
+    assert "raw_payload" not in exported[0].model_dump_json()
+    assert "rss_guid" not in exported[0].model_dump_json()
+
+
+def test_export_items_uses_half_open_window_source_filter_and_stable_ordering(
+    tmp_path: Path,
+) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    events = (
+        _event("evt_until_boundary", "blog", datetime(2026, 5, 13, tzinfo=UTC)),
+        _event("evt_same_time_b", "blog", datetime(2026, 5, 12, 12, tzinfo=UTC)),
+        _event("evt_other_source", "rss", datetime(2026, 5, 12, 13, tzinfo=UTC)),
+        _event("evt_same_time_a", "blog", datetime(2026, 5, 12, 12, tzinfo=UTC)),
+        _event("evt_since_boundary", "blog", datetime(2026, 5, 12, tzinfo=UTC)),
+        _event("evt_before_window", "blog", datetime(2026, 5, 11, 23, 59, tzinfo=UTC)),
+    )
+
+    async def arrange() -> None:
+        for event in events:
+            await _save_event(
+                artifacts=artifacts,
+                records=records,
+                event=event,
+                normalized=True,
+            )
+
+    asyncio.run(arrange())
+
+    exported = export_items(
+        workspace=tmp_path,
+        since=datetime(2026, 5, 12, tzinfo=UTC),
+        until=datetime(2026, 5, 13, tzinfo=UTC),
+        sources=("blog",),
+        limit=10,
+    )
+
+    assert [item.event_id for item in exported] == [
+        "evt_same_time_a",
+        "evt_same_time_b",
+        "evt_since_boundary",
+    ]
+
+
+def test_export_items_normalizes_non_utc_captured_at_before_window_filtering(
+    tmp_path: Path,
+) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    utc_plus_8 = timezone(timedelta(hours=8))
+    outside_window = _event(
+        "evt_offset_before_utc_window",
+        "blog",
+        datetime(2026, 5, 12, 0, 30, tzinfo=utc_plus_8),
+    )
+    inside_window = _event(
+        "evt_offset_inside_utc_window",
+        "blog",
+        datetime(2026, 5, 12, 8, 15, tzinfo=utc_plus_8),
+    )
+
+    async def arrange() -> None:
+        for event in (outside_window, inside_window):
+            await _save_event(
+                artifacts=artifacts,
+                records=records,
+                event=event,
+                normalized=True,
+            )
+
+    asyncio.run(arrange())
+
+    exported = export_items(
+        workspace=tmp_path,
+        since=datetime(2026, 5, 12, tzinfo=UTC),
+        until=datetime(2026, 5, 13, tzinfo=UTC),
+        sources=("blog",),
+        limit=10,
+    )
+
+    assert [item.event_id for item in exported] == ["evt_offset_inside_utc_window"]
+    assert exported[0].captured_at == "2026-05-12T00:15:00+00:00"
+
+
+def test_export_items_returns_stable_empty_result_when_filters_match_no_rows(
+    tmp_path: Path,
+) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event("evt_1", "blog", datetime(2026, 5, 12, 10, tzinfo=UTC))
+    asyncio.run(_save_event(artifacts=artifacts, records=records, event=event, normalized=True))
+
+    assert (
+        export_items(
+            workspace=tmp_path,
+            since=datetime(2026, 5, 13, tzinfo=UTC),
+            until=datetime(2026, 5, 14, tzinfo=UTC),
+            sources=("blog",),
+            limit=10,
+        )
+        == []
+    )
+    assert export_items(workspace=tmp_path, sources=("rss",), limit=10) == []
 
 
 def test_export_items_returns_empty_when_workspace_has_no_records(tmp_path: Path) -> None:

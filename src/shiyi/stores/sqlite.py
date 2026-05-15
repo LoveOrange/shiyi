@@ -6,6 +6,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from shiyi._time import datetime_from_isoformat, utc_isoformat
 from shiyi.domain.models import (
     ArtifactRef,
     EnrichmentResult,
@@ -84,7 +85,7 @@ class SQLiteEventRecordStore:
                     raw_json,
                     normalized_json,
                     event.source.model_dump_json(),
-                    event.captured_at.isoformat(),
+                    utc_isoformat(event.captured_at),
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
@@ -141,7 +142,7 @@ class SQLiteEventRecordStore:
                     raw_json,
                     normalized_json,
                     event.source.model_dump_json(),
-                    event.captured_at.isoformat(),
+                    utc_isoformat(event.captured_at),
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
@@ -290,8 +291,8 @@ def _source_from_json(value: str | None) -> SourceIdentity | None:
 def _datetime_from_json(value: str | None) -> datetime | None:
     if value is None:
         return None
-    return datetime.fromisoformat(value)
+    return datetime_from_isoformat(value)
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).isoformat()
+    return utc_isoformat(datetime.now(UTC))

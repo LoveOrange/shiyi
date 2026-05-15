@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from shiyi import (
@@ -34,7 +35,16 @@ def test_fixture_backed_ingest_persist_export_matches_golden(tmp_path: Path) -> 
     pipeline = _pipeline(adapter=adapter, workspace=tmp_path)
 
     summary = asyncio.run(pipeline.run_once())
-    exported = [item.model_dump(mode="json") for item in export_items(workspace=tmp_path, limit=10)]
+    exported = [
+        item.model_dump(mode="json")
+        for item in export_items(
+            workspace=tmp_path,
+            since=datetime(2026, 5, 13, tzinfo=UTC),
+            until=datetime(2026, 5, 14, tzinfo=UTC),
+            sources=("openai-news",),
+            limit=10,
+        )
+    ]
 
     assert summary.processed == 1
     assert _stable_dump(exported) == _read_json(

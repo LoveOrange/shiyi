@@ -90,11 +90,27 @@ def test_export_contract_rejects_raw_or_source_specific_dto_fields() -> None:
         "adapter_name": "openai-news-rss",
         "adapter_version": "0.2.0",
         "normalized_content": "# Hello\n",
-        "raw_payload": {"rss_guid": "item-1"},
     }
 
+    ExportedItem.model_validate(valid_export)
+
     with pytest.raises(ValidationError):
-        ExportedItem.model_validate(valid_export)
+        ExportedItem.model_validate(valid_export | {"schema_version": "third-party-rss.v1"})
+
+    with pytest.raises(ValidationError):
+        ExportedItem.model_validate(valid_export | {"raw_payload": {"rss_guid": "item-1"}})
+
+    with pytest.raises(ValidationError):
+        ExportedItem.model_validate(
+            valid_export
+            | {
+                "source": {
+                    "kind": "openai-news",
+                    "uri": "https://openai.com/news/rss.xml",
+                    "rss_guid": "item-1",
+                }
+            }
+        )
 
 
 def _item(*, entry_id: str, title: str) -> InternalItem:

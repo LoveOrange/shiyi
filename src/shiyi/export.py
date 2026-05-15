@@ -6,10 +6,11 @@ import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Literal
 
 from pydantic import Field
 
+from shiyi._time import utc_isoformat
 from shiyi.domain.models import ArtifactRef, SourceIdentity, StrictModel
 
 DEFAULT_EXPORT_LIMIT = 20
@@ -18,11 +19,11 @@ DEFAULT_EXPORT_LIMIT = 20
 class ExportedItem(StrictModel):
     """Standardized upstream view of one persisted capture item."""
 
-    schema_version: str = "shiyi-export-item.v1"
+    schema_version: Literal["shiyi-export-item.v1"] = "shiyi-export-item.v1"
     event_id: str
     idempotency_key: str
     status: str
-    source: dict[str, Any] | None
+    source: SourceIdentity | None
     captured_at: str | None
     content_hash: str | None
     adapter_name: str | None
@@ -43,8 +44,10 @@ def export_items(
     """Read persisted normalized items for upstream consumers.
 
     The MVP reads from the local SQLite event ledger plus normalized artifact files.
-    It intentionally returns Shiyi's canonical trace + normalized content, not third-party
-    adapter DTOs.
+    Time filters use a half-open captured_at window: since is inclusive and until is
+    exclusive. Default ordering is captured_at descending, with event_id ascending as
+    the deterministic tie-breaker. It intentionally returns Shiyi's canonical trace +
+    normalized content, not third-party adapter DTOs.
     """
     if limit <= 0:
         return []
@@ -67,7 +70,7 @@ def export_items(
                 event_id=str(row["event_id"]),
                 idempotency_key=str(row["idempotency_key"]),
                 status=str(row["status"]),
-                source=source.model_dump(mode="json") if source else None,
+                source=source,
                 captured_at=row["captured_at"],
                 content_hash=row["content_hash"],
                 adapter_name=row["adapter_name"],
@@ -87,9 +90,9 @@ def _read_rows(
 ) -> list[sqlite3.Row]:
     params: list[str] = []
     if since is not None:
-        params.append(since.isoformat())
+        params.append(utc_isoformat(since))
     if until is not None:
-        params.append(until.isoformat())
+        params.append(utc_isoformat(until))
 
     query = _export_query(has_since=since is not None, has_until=until is not None)
     with sqlite3.connect(metadata_path) as connection:

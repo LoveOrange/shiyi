@@ -14,6 +14,7 @@ from shiyi.cli import (
     list_events,
     main,
 )
+from shiyi.domain.models import SourceIdentity
 from shiyi.export import ExportedItem
 
 
@@ -195,7 +196,7 @@ def test_main_export_prints_normalized_items(
                 event_id="evt_1",
                 idempotency_key="blog:evt_1",
                 status="enriched",
-                source={"kind": "blog"},
+                source=SourceIdentity(kind="blog"),
                 captured_at="2026-05-12T00:00:00+00:00",
                 content_hash="abc",
                 adapter_name="test",
