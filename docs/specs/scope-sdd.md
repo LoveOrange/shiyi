@@ -116,6 +116,8 @@ Those belong to consumers that subscribe to Shiyi's normalized artifacts and eve
 
 ## 5. Milestone scope
 
+This section defines logical product scope. The current execution milestone plan lives in [`../MILESTONES.md`](../MILESTONES.md) and is the canonical milestone source of truth.
+
 ### P0: Capture + normalize infrastructure
 
 P0 should prove:

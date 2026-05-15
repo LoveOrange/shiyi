@@ -48,13 +48,19 @@ flowchart LR
 
 Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
-See [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), [`docs/mvp.md`](docs/mvp.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md) for the current design, MVP boundary, and P2 test boundary.
+Repository docs are the source of truth for product and design decisions. Notion may track tasks, owners, dates, and status, but should not be the canonical product spec.
+
+Start with [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/SOURCE_STRATEGY.md`](docs/SOURCE_STRATEGY.md), [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), [`docs/mvp.md`](docs/mvp.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md) for the current design, milestone plan, MVP boundary, and P2 test boundary.
 
 ## Repository layout
 
 ```text
 .
 ├── docs/
+│   ├── PRODUCT_SPEC.md
+│   ├── MILESTONES.md
+│   ├── SOURCE_STRATEGY.md
+│   ├── PROGRESS_2026-05-14.md
 │   ├── architecture.md
 │   ├── extension-points.md
 │   └── adr/
