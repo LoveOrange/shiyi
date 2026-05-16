@@ -50,7 +50,7 @@ Shiyi core owns orchestration and contracts. Integrations live behind ports.
 
 Repository docs are the source of truth for product and design decisions. Notion may track tasks, owners, dates, and status, but should not be the canonical product spec.
 
-Start with [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/SOURCE_STRATEGY.md`](docs/SOURCE_STRATEGY.md), [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), [`docs/specs/capture-pipeline-sdd.md`](docs/specs/capture-pipeline-sdd.md), [`docs/mvp.md`](docs/mvp.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md) for the current design, milestone plan, MVP boundary, and P2 test boundary.
+Start with the project-level docs first: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/SOURCE_STRATEGY.md`](docs/SOURCE_STRATEGY.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md). Use [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), and [`docs/specs/*.md`](docs/specs/) for implementation-facing details. Dated progress reviews and process notes should be distilled into these docs, then removed from tracked repository docs.
 
 ## Repository layout
 
@@ -60,9 +60,9 @@ Start with [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md), [`docs/MILESTONES.md`
 │   ├── PRODUCT_SPEC.md
 │   ├── MILESTONES.md
 │   ├── SOURCE_STRATEGY.md
-│   ├── PROGRESS_2026-05-14.md
 │   ├── architecture.md
 │   ├── extension-points.md
+│   ├── specs/
 │   └── adr/
 ├── src/
 │   └── shiyi/

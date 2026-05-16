@@ -171,14 +171,25 @@ Detailed source expansion policy lives in `docs/SOURCE_STRATEGY.md`.
 
 ## 8. Repository information architecture
 
-Canonical product docs:
+Project-level canonical docs:
 
-- `docs/PRODUCT_SPEC.md` — product mission, boundary, principles, progress assessment;
+- `docs/PRODUCT_SPEC.md` — product mission, boundary, and principles;
 - `docs/MILESTONES.md` — milestone plan and acceptance gates;
 - `docs/SOURCE_STRATEGY.md` — source categories, batches, and readiness gate;
-- `docs/testing-boundary.md` — engineering test and source-readiness gate;
-- `docs/specs/*.md` — implementation-facing SDDs;
-- `docs/architecture.md` — architecture overview.
+- `docs/testing-boundary.md` — engineering test and source-readiness gate.
+
+Implementation-facing docs:
+
+- `docs/architecture.md` — architecture overview;
+- `docs/extension-points.md` — port/extension reference;
+- `docs/specs/*.md` — component-level SDDs.
+
+Historical/process docs:
+
+- dated progress reviews, handoffs, and process notes should not remain as tracked repository docs
+  after durable decisions are folded into project-level canonical docs;
+- use issues, PRs, Discord handoffs, or git history for historical trace instead of expanding the
+  active `docs/` surface.
 
 Notion should contain only:
 
