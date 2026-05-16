@@ -17,11 +17,12 @@ Responsibilities:
 
 - Authenticate with the source.
 - Discover new or updated source items.
+- Resolve canonical article/detail content when a feed/index/changelog entry is only a teaser or summary.
 - Convert source-specific data into `InternalItem`.
 - Provide checkpoint metadata for reliable resume.
 - Respect source rate limits and terms.
 
-Adapters should not decide final storage schema or silently mutate provider results.
+Adapters should not decide final storage schema or silently mutate provider results. If only partial or summary content is available, adapters should mark that source-neutrally instead of presenting it as full article content.
 
 ## Normalizer
 

@@ -42,7 +42,7 @@ Fetcher fetches lightweight listing/index/feed
 -> Pipeline persists raw artifact, normalizes, persists event records, enriches
 ```
 
-For feeds where the entry already contains enough event-level raw content, the adapter may emit a `InternalItem` directly without a second full-page fetch.
+P2.5 content-depth decision: RSS/index/changelog entries are discovery metadata by default. Unless an entry demonstrably contains the full article body, the adapter must fetch the canonical article/detail URL or official structured detail payload before emitting a decision-grade `InternalItem`. Summary-only content may still be emitted as a degraded fallback, but it must be marked with source-neutral `content_depth` (`summary_only`, `partial`, or `blocked`) and must not count as source-ready for AI Weekly.
 
 ## 4. Boundaries
 
@@ -228,7 +228,7 @@ Current flow:
 2. Parse entries.
 3. Emit `InternalItem` from RSS entry content/summary.
 
-OpenAI currently does not use full-page raw cache because the RSS entry already provides event-level raw content for the MVP flow.
+OpenAI used the RSS entry directly in the MVP flow. For P2.5 and later, this is no longer sufficient unless the feed entry contains the full article body. The adapter should fetch and cache the canonical detail page when available, normalize the full page content, and mark any summary-only fallback explicitly with `content_depth=summary_only`.
 
 ## 11. HTTP policy
 

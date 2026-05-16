@@ -1,7 +1,7 @@
 # Shiyi Product Spec
 
 - Status: Canonical product source of truth
-- Last updated: 2026-05-15
+- Last updated: 2026-05-16
 - Owners: Lin, Kana, Kurisu
 - Repository: `shiyi`
 
@@ -44,6 +44,7 @@ Shiyi owns reusable capture infrastructure:
 - fetchers and source-specific adapters;
 - source windows for daily and backfill capture;
 - stable adapter-to-core contracts;
+- complete source-page/detail acquisition for built-in adapters when the source exposes canonical article pages or official structured detail payloads;
 - raw source artifact persistence;
 - source-independent normalization into canonical text/Markdown/artifacts;
 - provenance, event records, statuses, and idempotency;
@@ -65,7 +66,7 @@ Those belong to consumer repositories such as `briefly-ai-weekly`.
 
 ## 4. Current progress assessment
 
-As of 2026-05-15, Shiyi has moved from product/architecture exploration into a usable early infrastructure base with its P2 contract hardening gate complete.
+As of 2026-05-16, Shiyi has moved from product/architecture exploration into a usable early infrastructure base with its P2 contract hardening gate complete and P2.5 full-content source readiness under active implementation.
 
 ### 4.1 Completed foundation
 
@@ -89,7 +90,7 @@ As of 2026-05-15, Shiyi has moved from product/architecture exploration into a u
 
 P2 test-boundary work is complete. The repository has a contract-oriented testing boundary in `docs/testing-boundary.md`, plus green fixture-backed coverage for fetchers, adapters, `InternalItem`, pipeline-to-persistence behavior, and export/read contracts.
 
-The active next milestone is P2.5: add a small slice of official, low-noise sources without weakening the P2 readiness gate.
+The active next milestone is P2.5: add a small slice of official, low-noise sources without weakening the P2 readiness gate. Lin's current priority for P2.5 is the full-content gate: every built-in adapter must capture the complete article/detail page when available, not merely RSS/index summaries.
 
 ### 4.3 Main risk
 
@@ -106,11 +107,13 @@ contract gate complete -> low-noise source expansion -> registry/ops -> higher-n
 1. **Stable substrate before feature breadth.** Source expansion is essential, but every new source must preserve traceability, idempotency, and export safety.
 2. **Adapters are replaceable.** Source-specific logic belongs behind adapter boundaries; core should not depend on third-party DTOs.
 3. **Raw capture is first-class.** Raw payloads, fetch metadata, and provenance must remain auditable.
-4. **Normalized content is consumer-safe.** Downstream products should read stable Shiyi output without knowing source-specific DTOs.
-5. **Neutral preprocessing only.** Optional AI work inside Shiyi may summarize, extract entities, detect language, chunk, embed, or provide generic quality signals; it must not decide business importance.
-6. **Idempotency is product language.** The stable replay identity is `idempotency_key`; do not rename it to `dedupe_key`.
-7. **Local-first until contracts stabilize.** The MVP should stay easy to run locally, inspect, and test without services or credentials.
-8. **Notion is task management only.** Repository docs are the source of truth for product and design decisions.
+4. **Full content beats previews.** For source-ready built-in adapters, RSS/index/changelog snippets are discovery metadata by default. Shiyi should capture canonical article/detail content or official structured detail payloads before exposing an item as decision-grade.
+5. **Normalized content is consumer-safe.** Downstream products should read stable Shiyi output without knowing source-specific DTOs.
+6. **Partial content is explicit.** Summary-only or partial records may exist as degraded fallback, but they must be marked source-neutrally with `content_depth` and must not count as AI Weekly source-ready evidence. Allowed `content_depth` values are `full_page`, `feed_full_content`, `summary_only`, `partial`, and `blocked`; only the first two are decision-grade by default.
+7. **Neutral preprocessing only.** Optional AI work inside Shiyi may summarize, extract entities, detect language, chunk, embed, or provide generic quality signals; it must not decide business importance.
+8. **Idempotency is product language.** The stable replay identity is `idempotency_key`; do not rename it to `dedupe_key`.
+9. **Local-first until contracts stabilize.** The MVP should stay easy to run locally, inspect, and test without services or credentials.
+10. **Notion is task management only.** Repository docs are the source of truth for product and design decisions.
 
 ## 6. Core flow
 
@@ -139,10 +142,16 @@ Current built-in sources:
 - `openai` — OpenAI news RSS feed;
 - `anthropic` — Anthropic news index parser;
 - `huggingface-blog` — Hugging Face Blog RSS feed;
-- `google-research-blog` — Google Research Blog RSS feed.
+- `google-research-blog` — Google Research Blog RSS feed;
+- `deepseek-news` — DeepSeek official news article pages, discovered from the API docs updates page;
+- `z-ai-blog` — Z.ai / GLM official blog posts, discovered from the Mintlify release notes page;
+- `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
+- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata.
 
-These prove the first two adapter patterns: reusable feed-style capture and index-page/article capture.
-The P2.5 RSS-first slice is still deliberately small; source registry/config and broader batch scale-out remain P3 work.
+These prove three adapter patterns: reusable feed-style capture, index-page/article capture, and stable official changelog/embedded-data capture.
+The P2.5 slices are still deliberately small; source registry/config and broader batch scale-out remain P3 work.
+
+P2.5 source readiness now requires full-content capture. A built-in source is not ready for AI Weekly consumption if its normalized/exported content is only a feed summary, index excerpt, or changelog teaser while a canonical detail page or official detail payload exists.
 
 ### 7.2 Near-term expansion policy
 
@@ -150,11 +159,11 @@ Start with official, low-noise, mostly RSS/API/blog sources. They improve AI Wee
 
 Recommended next batch:
 
-- Google Research Blog / Google DeepMind / Gemini official updates;
-- Hugging Face Blog;
+- Google DeepMind / Gemini official updates beyond the Google Research RSS slice;
 - Meta AI official updates;
 - Microsoft AI / Azure AI official updates;
-- Mistral / Cohere official updates if stable feeds are available.
+- Mistral / Cohere official updates if stable feeds are available;
+- audited China-provider follow-ups such as `qwen-research` or `minimax-news` only after their JSON/API completeness and fixture boundaries are proven.
 
 Second batch:
 

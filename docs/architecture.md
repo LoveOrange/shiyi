@@ -10,6 +10,7 @@ Shiyi defines a general capture and normalization pipeline where the core system
 
 - **Core owns policy and orchestration, not integrations.** Integrations implement stable ports.
 - **Raw data is never silently discarded.** Every normalized record should retain provenance back to its source item.
+- **Full detail is the source-ready bar.** Built-in adapters should treat feeds/indexes/changelogs as discovery unless they contain the complete article body; source-ready records should preserve canonical article/detail content when available.
 - **Optional preprocessing is neutral.** AI-assisted work inside Shiyi must produce reusable facts or annotations, not business opinions.
 - **Idempotency is mandatory.** Replaying the same source item should not corrupt state or duplicate durable records.
 - **Observability is part of the contract.** Every pipeline run should expose trace IDs, structured logs, and measurable outcomes.
@@ -44,7 +45,7 @@ Persistence is a family of user-provided storage components. The MVP separates a
 ## 4. Pipeline stages
 
 1. **Discover** — adapter discovers candidate source items.
-2. **Normalize** — adapter emits stable `InternalItem` objects.
+2. **Normalize** — adapter emits stable `InternalItem` objects based on full article/detail content when available.
 3. **Validate** — core validates item schema, size limits, provenance, and required fields.
 4. **Deduplicate** — MVP checks event idempotency keys; canonical content fingerprint/version semantics are a future spec.
 5. **Persist artifacts** — core stores raw and normalized artifacts through an artifact store.

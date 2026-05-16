@@ -1,7 +1,7 @@
 # Shiyi Local Storage SDD
 
 - Status: Draft
-- Last updated: 2026-05-12
+- Last updated: 2026-05-16
 - Scope: MVP filesystem artifact store and SQLite event record store
 
 ## 1. Purpose
@@ -13,6 +13,7 @@ The MVP local storage implementation must support deterministic local capture ru
 ### Responsibilities
 
 - Store raw, normalized, and optional annotation/preprocess artifacts under a local root directory.
+- For P2.5 built-in adapters, raw artifacts must preserve the canonical article/detail payload used for normalization, not only the RSS/index/listing snippet.
 - Use content-addressed paths based on SHA-256.
 - Return stable `ArtifactRef` objects.
 - Prevent path traversal by never trusting user-provided names as final paths.
@@ -84,6 +85,8 @@ shiyi export --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
 ```
 
 Output is a JSON array of `shiyi-export-item.v1` objects containing Shiyi trace fields plus `normalized_content`. It deliberately does not expose third-party adapter DTOs to consumers.
+
+For P2.5 source-readiness review, export/read consumers must be able to distinguish full article/detail records from summary-only or partial degraded records. Export/read should expose a Shiyi-native `content_depth` field or equivalent source-neutral metadata with these values: `full_page`, `feed_full_content`, `summary_only`, `partial`, `blocked`. Only `full_page` and `feed_full_content` are source-ready by default. Do not leak adapter-specific raw DTO fields.
 
 Export filters use a half-open `captured_at` window: `--since` is inclusive and `--until` is exclusive. Both stored `captured_at` values and filter bounds are compared as canonical UTC instants, so source timestamps with non-UTC offsets are first normalized to UTC.
 Repeated `--source` filters match canonical Shiyi `source.kind` values with OR semantics.

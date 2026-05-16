@@ -2,7 +2,7 @@
 
 - Status: Review
 - Owner: Shiyi contributors
-- Last updated: 2026-05-12
+- Last updated: 2026-05-16
 - Scope: capture pipeline orchestration from adapter internal items to durable raw/normalized artifacts, event records, and optional neutral annotation artifacts
 
 ## 1. Purpose
@@ -47,11 +47,11 @@ Required v1 schema semantics:
 - `source`: source identity.
 - `captured_at`: time Shiyi captured or fetched the item payload.
 - `occurred_at`: source item timestamp when available, otherwise discovery/fetch time.
-- `payload`: typed raw-ish item payload (`html`, `text`, or `binary`).
+- `payload`: typed raw-ish item payload (`html`, `text`, or `binary`). For source-ready built-in adapters, this should be the event-level full article/detail payload when the source exposes one, not merely a listing/feed summary.
 - `content_hash`: deterministic SHA-256 over normalized payload material. It is for traceability/change detection, not source dedupe.
 - `provenance`: adapter name/version, source item ID, and fetch timestamp.
 - `idempotency_key`: stable logical dedupe key for replay safety.
-- `metadata`: source/item descriptive metadata. This is not pipeline processing state.
+- `metadata`: source/item descriptive metadata. This is not pipeline processing state. Source-neutral content-depth markers may live here until a dedicated content-quality model exists. Use `content_depth` with one of `full_page`, `feed_full_content`, `summary_only`, `partial`, or `blocked`; only `full_page` and `feed_full_content` are decision-grade by default.
 
 Version policy: because Shiyi is still MVP, breaking schema changes rename/update the v1 contract directly across code, tests, and docs. Add a new schema version only when a real external consumer needs two versions to coexist.
 
@@ -191,6 +191,7 @@ Output: async stream of `InternalItem` objects.
 Rules:
 
 - The adapter owns source-specific discovery, parsing, source metadata, and idempotency key construction.
+- For built-in source-ready adapters, discovery may start from RSS/index/changelog entries, but the adapter/fetcher boundary must resolve the canonical article/detail content before emitting a decision-grade `InternalItem`.
 - The pipeline must not know source-specific HTML/RSS/API structure.
 - Adapter failures should be surfaced as typed errors in future work; the pipeline should not silently drop items.
 
@@ -237,6 +238,7 @@ Rules:
 - `text` payload uses its declared content type.
 - `binary` payload records a reference payload as raw content until real binary handling is introduced.
 - The pipeline persists event-level raw artifacts even if fetcher-level raw cache was hit. Fetch cache and durable pipeline artifacts are separate concerns.
+- For P2.5 source-ready built-ins, the raw artifact should preserve the full article/detail payload used for normalization. Listing/feed summaries alone are degraded records and must be marked with `content_depth=summary_only` before they reach consumers.
 
 ### 6.5 Normalize stage
 
@@ -248,6 +250,7 @@ Rules:
 
 - Normalization is optional.
 - Normalizer input is the validated `InternalItem`; normalizers must not depend on third-party feed/page structures.
+- Normalized output for source-ready built-ins should reflect the full article/detail payload. If input is `summary_only`, `partial`, or `blocked`, the normalized artifact should not pretend to be decision-grade full content.
 - A normalized output is an `ArtifactWrite` with `kind="normalized"`, canonical media type, bytes content, and optional normalizer metadata.
 - If no normalizer is configured, the pipeline still persists raw and event-record state.
 - If the normalizer returns `None`, no normalized artifact is written; this means the payload is unsupported or already canonical, not failure.

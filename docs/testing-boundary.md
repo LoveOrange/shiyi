@@ -1,6 +1,6 @@
 # Shiyi Testing Boundary
 
-This document is the source of truth for Shiyi's P2 test boundary. It defines what must stay true across Fetchers, Adapters, `InternalItem`, the capture pipeline, persistence, and export/read surfaces before Shiyi adds more sources.
+This document is the source of truth for Shiyi's P2/P2.5 test boundary. It defines what must stay true across Fetchers, Adapters, `InternalItem`, the capture pipeline, persistence, and export/read surfaces before Shiyi adds more sources. P2.5 extends the gate with full article/detail content readiness.
 
 Notion tasks can track progress, but this repository document owns the engineering contract.
 
@@ -13,6 +13,7 @@ P2 is test-boundary-first. Before adding more adapters or sources, Shiyi must ha
 - `idempotency_key` stays stable across replay and rerun.
 - Pipeline writes are replay-safe and do not duplicate durable records.
 - Export/read surfaces expose Shiyi schema, not third-party raw payloads.
+- Source-ready built-in adapters expose full article/detail content when available, not merely RSS/index summaries.
 - Downstream consumers can rely on stable normalized content and trace fields.
 
 ## 2. Non-goals
@@ -49,6 +50,7 @@ Required coverage:
 - Fetcher input/output behavior
 - Adapter raw payload to `InternalItem` mapping
 - `InternalItem` schema and semantic invariants
+- full article/detail fixture coverage or explicit no-detail exemption for built-in sources
 - source fixture conversion snapshots or golden outputs
 
 ### Integration tests
@@ -124,7 +126,18 @@ Tests should catch:
 - normalized records losing trace fields needed to find raw provenance
 - raw source-only fields leaking into export output
 
-### 4.5 Export/read is a consumer contract
+### 4.5 Content depth is part of source readiness
+
+RSS/index/changelog snippets are discovery metadata by default. A built-in source should be source-ready only when Shiyi captures the canonical article/detail page or official structured detail payload when one exists.
+
+Tests should catch:
+
+- adapter fixtures that only exercise teaser/summary/listing content while a detail page exists
+- normalized content that is materially shorter or less informative than the source detail payload
+- records lacking source-neutral `content_depth` metadata when they are summary-only, partial, or blocked
+- AI Weekly readiness checks counting `summary_only`, `partial`, or `blocked` records as full source coverage
+
+### 4.6 Export/read is a consumer contract
 
 Export/read output is what downstream consumers depend on. It must be stable, typed, and source-neutral.
 
@@ -189,6 +202,7 @@ Must cover:
 8. Core fields such as source, source kind, external id, captured time, title/content URL, and normalized input remain stable.
 9. Adapter output passes `InternalItem` schema validation.
 10. Source-specific raw DTOs do not pass into pipeline tests as substitutes for `InternalItem`.
+11. For built-in source-ready adapters, representative fixtures prove the emitted item is based on full article/detail content or an official structured detail payload, not only listing/feed summary text.
 
 ### P2-04 Pipeline to persistence integration tests
 
@@ -220,6 +234,7 @@ Must cover:
 6. Empty result returns a stable empty output, not a crash.
 7. Fixture-backed E2E smoke runs ingest to persist to read/export.
 8. Golden export output changes only when the contract intentionally changes.
+9. Export/read output includes source-neutral `content_depth` metadata so consumers can exclude `summary_only`, `partial`, and `blocked` degraded records from decision-grade workflows.
 
 ## 6. Fixture and golden-output policy
 
@@ -262,13 +277,16 @@ Existing tests may keep their current names while moving toward this layout incr
 A new Adapter/source should not be merged until it has:
 
 - at least one sanitized raw fixture
+- sanitized raw detail/full-article fixture when the source exposes canonical detail content
 - Adapter contract tests from raw fixture to `InternalItem`
+- content-depth assertion proving the normalized/exported content is full article/detail content, or an explicit no-detail exemption
 - `idempotency_key` stability and non-collision tests
 - invalid/missing-required-field tests
 - time-window or captured-time boundary tests, if the source carries time fields
 - fake-source or mocked Fetcher contract coverage
 - fixture-backed pipeline integration smoke, when the source is part of built-in capture
 - export/read smoke proving downstream output does not expose third-party DTOs
+- export/read smoke proving `summary_only`, `partial`, and `blocked` degraded records are marked source-neutrally with `content_depth` and do not count as AI Weekly source-ready
 
 If a source cannot satisfy this gate yet, merge it behind an explicit experimental path and keep it out of default source lists.
 

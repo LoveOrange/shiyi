@@ -80,6 +80,7 @@ Run a local capture into filesystem artifacts plus SQLite event records:
 uv sync
 uv run shiyi capture --source openai --workspace .shiyi/openai --max-items 2
 uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --max-items 2
+uv run shiyi capture --source deepseek-news --workspace .shiyi/deepseek-news --max-items 2
 ```
 
 The CLI prints a JSON summary:
@@ -139,6 +140,12 @@ Current built-in sources:
 
 - `openai` — OpenAI news RSS feed.
 - `anthropic` — Anthropic news index parser.
+- `huggingface-blog` — Hugging Face Blog RSS feed.
+- `google-research-blog` — Google Research Blog RSS feed.
+- `deepseek-news` — DeepSeek official news article pages discovered from API docs updates.
+- `z-ai-blog` — Z.ai / GLM official blog posts discovered from release notes.
+- `moonshot-kimi-changelog` — Kimi Open Platform changelog.
+- `bytedance-seed-blog` — ByteDance Seed official blog, Chinese primary with English fallback metadata.
 
 ## Live smoke tests
 

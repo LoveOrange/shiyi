@@ -2,7 +2,7 @@
 
 - Status: Review
 - Owner: Shiyi contributors
-- Last updated: 2026-05-12
+- Last updated: 2026-05-16
 - Scope: product and architectural boundary for Shiyi as shared information capture infrastructure
 
 ## 1. Decision
@@ -40,13 +40,15 @@ Shiyi owns reusable source ingestion boundaries:
 - idempotency keys;
 - source metadata and provenance;
 - source-specific parsing behind adapters;
-- shared fetchers for network policy, timeout, retry, user-agent, and event-level raw cache.
+- shared fetchers for network policy, timeout, retry, user-agent, and event-level raw cache;
+- full article/detail retrieval for built-in source-ready adapters when a source exposes canonical detail content.
 
 ### 3.2 Raw capture
 
 Shiyi owns durable raw capture:
 
 - raw HTML/feed/API payload artifacts;
+- raw canonical article/detail payload artifacts for source-ready built-ins when available;
 - fetch/source provenance;
 - adapter name/version;
 - fetched time;
@@ -58,7 +60,7 @@ Shiyi owns durable raw capture:
 Shiyi owns canonical source-independent representations:
 
 - normalized Markdown/text artifacts;
-- basic article/body extraction;
+- basic article/body extraction from full detail content when available;
 - title/author/published time/link/content-type where available;
 - language and content metadata when source-neutral;
 - stable references from event records to raw and normalized artifacts.

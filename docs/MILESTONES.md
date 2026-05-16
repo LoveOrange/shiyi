@@ -1,7 +1,7 @@
 # Shiyi Milestones
 
 - Status: Canonical milestone plan
-- Last updated: 2026-05-15
+- Last updated: 2026-05-16
 - Owners: Lin, Kana, Kurisu
 
 Repository docs are the milestone source of truth. Notion task pages should reference these milestones and track execution only.
@@ -104,17 +104,25 @@ Recommended first batch:
 4. Microsoft AI / Azure AI official updates;
 5. optional: Mistral or Cohere official updates if stable feeds are available.
 
-Current RSS-first implementation slice:
+Current implementation slices:
 
 - `huggingface-blog` through the reusable RSS adapter path;
 - `google-research-blog` through the reusable RSS adapter path;
-- text-only RSS entries remain exportable through canonical Markdown normalization;
+- `deepseek-news` through an official news adapter with the updates page used only as a discovery index;
+- `z-ai-blog` through an official blog adapter with release notes used only as a discovery index;
+- `moonshot-kimi-changelog` through a static changelog-page adapter;
+- `bytedance-seed-blog` through official SSR embedded-data index plus article detail pages;
+- text-only RSS and changelog entries remain exportable through canonical Markdown normalization;
+- `qwen-research` and `minimax-news` are audited but deferred until JSON/API completeness and fixture boundaries are stronger;
 - source registry/config remains deferred to P3.
 
 Acceptance:
 
 - at least four additional official/low-noise sources are captured through reusable adapter patterns;
-- each source has raw fixture, adapter contract test, idempotency stability test, invalid-field test, and export/read smoke;
+- every built-in P2.5 adapter can read full article/detail content from the canonical article URL or an official structured detail payload when the source exposes one;
+- RSS/index/changelog snippets are treated as discovery metadata or degraded fallback only, not as sufficient decision-grade article content;
+- each source has raw detail fixture coverage, adapter contract test, idempotency stability test, invalid-field test, and export/read smoke;
+- normalized/exported content contains decision-grade detail content and not merely an RSS summary; summary-only/partial records must be explicitly marked and excluded from AI Weekly source-ready counts;
 - source-specific parsing does not leak into pipeline or export contracts;
 - source coverage improves AI Weekly candidate quality in a real 14-day export review;
 - no product-specific weekly-report ranking is added to Shiyi.
