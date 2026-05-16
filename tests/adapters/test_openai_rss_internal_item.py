@@ -56,6 +56,7 @@ def test_openai_rss_adapter_maps_feed_entry_to_internal_item() -> None:
     assert item.metadata == {
         "title": "Running Codex safely",
         "link": "https://openai.com/index/running-codex-safely/",
+        "content_depth": "summary_only",
     }
     assert "raw_payload" not in item.metadata
 

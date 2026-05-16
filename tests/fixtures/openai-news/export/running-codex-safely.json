@@ -1,20 +1,22 @@
 [
   {
-    "schema_version": "shiyi-export-item.v1",
-    "event_id": "openai-news:running-codex-safely",
-    "idempotency_key": "openai-news:running-codex-safely",
-    "status": "persisted",
-    "source": {
-      "kind": "openai-news",
-      "uri": "https://openai.com/news/rss.xml",
-      "account_id": null
-    },
-    "captured_at": "2026-05-13T01:30:00+00:00",
-    "content_hash": "ea94c1e44fd1cbc6634e006a857c0d2785b3d76a36bd9d162bf360f39031a521",
     "adapter_name": "openai-news-rss",
     "adapter_version": "0.2.0",
+    "captured_at": "2026-05-13T01:30:00+00:00",
+    "content_depth": "summary_only",
+    "content_hash": "ea94c1e44fd1cbc6634e006a857c0d2785b3d76a36bd9d162bf360f39031a521",
+    "event_id": "openai-news:running-codex-safely",
+    "idempotency_key": "openai-news:running-codex-safely",
     "normalized_artifact_uri": "normalized/43/432d9a81684b2f43336aaa99e73102d9dc3cabdcaaaffad972acb9bc223f502b",
+    "normalized_content": "# Running Codex safely\n\nSafety evals and sandboxing for coding agents.\n\nCanonical link: <https://openai.com/index/running-codex-safely/>\n",
     "normalized_media_type": "text/markdown",
-    "normalized_content": "# Running Codex safely\n\nSafety evals and sandboxing for coding agents.\n\nCanonical link: <https://openai.com/index/running-codex-safely/>\n"
+    "schema_version": "shiyi-export-item.v1",
+    "source": {
+      "account_id": null,
+      "kind": "openai-news",
+      "uri": "https://openai.com/news/rss.xml"
+    },
+    "source_ready": false,
+    "status": "persisted"
   }
 ]

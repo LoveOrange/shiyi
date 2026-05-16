@@ -4,6 +4,7 @@
   "id": "openai-news:running-codex-safely",
   "idempotency_key": "openai-news:running-codex-safely",
   "metadata": {
+    "content_depth": "summary_only",
     "link": "https://openai.com/index/running-codex-safely/",
     "title": "Running Codex safely"
   },

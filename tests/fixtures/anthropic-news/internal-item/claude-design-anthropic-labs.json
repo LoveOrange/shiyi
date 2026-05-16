@@ -4,6 +4,7 @@
   "id": "anthropic-news:claude-design-anthropic-labs",
   "idempotency_key": "anthropic-news:claude-design-anthropic-labs",
   "metadata": {
+    "content_depth": "full_page",
     "link": "https://www.anthropic.com/news/claude-design-anthropic-labs",
     "title": "Claude Design at Anthropic Labs"
   },

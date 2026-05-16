@@ -13,6 +13,7 @@ from shiyi.domain.models import (
     EventRecord,
     InternalItem,
     SourceIdentity,
+    content_depth_from_metadata,
 )
 
 
@@ -34,7 +35,7 @@ class SQLiteEventRecordStore:
                 """
                 SELECT event_id, idempotency_key, status, raw_artifact_json,
                        normalized_artifact_json, source_json, captured_at,
-                       content_hash, adapter_name, adapter_version, last_error
+                       content_hash, adapter_name, adapter_version, content_depth, last_error
                 FROM events
                 WHERE idempotency_key = ?
                 """,
@@ -55,16 +56,17 @@ class SQLiteEventRecordStore:
         now = _utc_now()
         raw_json = raw_artifact.model_dump_json() if raw_artifact else None
         normalized_json = normalized_artifact.model_dump_json() if normalized_artifact else None
+        content_depth = content_depth_from_metadata(event.metadata)
         with self._connect() as connection:
             connection.execute(
                 """
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
                   normalized_artifact_json, source_json, captured_at,
-                  content_hash, adapter_name, adapter_version, last_error,
+                  content_hash, adapter_name, adapter_version, content_depth, last_error,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -75,6 +77,7 @@ class SQLiteEventRecordStore:
                   content_hash = excluded.content_hash,
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
+                  content_depth = excluded.content_depth,
                   last_error = excluded.last_error,
                   updated_at = excluded.updated_at
                 """,
@@ -89,6 +92,7 @@ class SQLiteEventRecordStore:
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
+                    content_depth,
                     None,
                     now,
                     now,
@@ -112,16 +116,17 @@ class SQLiteEventRecordStore:
         now = _utc_now()
         raw_json = raw_artifact.model_dump_json() if raw_artifact else None
         normalized_json = normalized_artifact.model_dump_json() if normalized_artifact else None
+        content_depth = content_depth_from_metadata(event.metadata)
         with self._connect() as connection:
             connection.execute(
                 """
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
                   normalized_artifact_json, source_json, captured_at,
-                  content_hash, adapter_name, adapter_version, last_error,
+                  content_hash, adapter_name, adapter_version, content_depth, last_error,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -132,6 +137,7 @@ class SQLiteEventRecordStore:
                   content_hash = excluded.content_hash,
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
+                  content_depth = excluded.content_depth,
                   last_error = excluded.last_error,
                   updated_at = excluded.updated_at
                 """,
@@ -146,6 +152,7 @@ class SQLiteEventRecordStore:
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
+                    content_depth,
                     error,
                     now,
                     now,
@@ -221,6 +228,7 @@ class SQLiteEventRecordStore:
                   content_hash TEXT,
                   adapter_name TEXT,
                   adapter_version TEXT,
+                  content_depth TEXT,
                   last_error TEXT,
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL
@@ -252,6 +260,7 @@ def _ensure_events_columns(connection: sqlite3.Connection) -> None:
         "content_hash": "TEXT",
         "adapter_name": "TEXT",
         "adapter_version": "TEXT",
+        "content_depth": "TEXT",
     }.items():
         if column not in columns:
             connection.execute(f"ALTER TABLE events ADD COLUMN {column} {definition}")
@@ -272,6 +281,7 @@ def _row_to_event_record(row: sqlite3.Row) -> EventRecord:
         content_hash=row["content_hash"],
         adapter_name=row["adapter_name"],
         adapter_version=row["adapter_version"],
+        content_depth=row["content_depth"],
         last_error=row["last_error"],
     )
 

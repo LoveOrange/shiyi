@@ -11,9 +11,13 @@ from shiyi import (
     Adapter,
     InternalItem,
     anthropic_news_adapter,
+    bytedance_seed_blog_adapter,
+    deepseek_news_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
+    moonshot_kimi_changelog_adapter,
     openai_news_adapter,
+    z_ai_blog_adapter,
 )
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
 from shiyi.cli import SourceName
@@ -25,10 +29,22 @@ FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_FIXTURE_ROOT = FIXTURE_ROOT / "openai-news"
 HUGGINGFACE_FIXTURE_ROOT = FIXTURE_ROOT / "huggingface-blog"
 GOOGLE_RESEARCH_FIXTURE_ROOT = FIXTURE_ROOT / "google-research-blog"
+DEEPSEEK_FIXTURE_ROOT = FIXTURE_ROOT / "deepseek-news"
+Z_AI_FIXTURE_ROOT = FIXTURE_ROOT / "z-ai-blog"
+MOONSHOT_KIMI_FIXTURE_ROOT = FIXTURE_ROOT / "moonshot-kimi-changelog"
+BYTEDANCE_SEED_FIXTURE_ROOT = FIXTURE_ROOT / "bytedance-seed-blog"
 ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
 GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
+DEEPSEEK_UPDATES_URL = "https://api-docs.deepseek.com/updates"
+DEEPSEEK_NEWS_URL = "https://api-docs.deepseek.com/news/news260424"
+Z_AI_RELEASE_NOTES_URL = "https://docs.z.ai/release-notes/new-released.md"
+Z_AI_BLOG_URL = "https://z.ai/blog/glm-5.1"
+Z_AI_BLOG_ASSET_URL = "https://z.ai/blog/assets/glm-5.1-sEcXPNR5.js"
+MOONSHOT_KIMI_CHANGELOG_URL = "https://platform.kimi.com/blog/posts/changelog"
+BYTEDANCE_SEED_BLOG_URL = "https://seed.bytedance.com/zh/blog"
+BYTEDANCE_SEED_ARTICLE_URL = "https://seed.bytedance.com/zh/blog/seed3d-2-0发布-更高精度-更强可用性"
 CLAUDE_DESIGN_URL = "https://www.anthropic.com/news/claude-design-anthropic-labs"
 ANTHROPIC_MINIMAL_URL = "https://www.anthropic.com/news/minimal-contract"
 ANTHROPIC_SECOND_URL = "https://www.anthropic.com/news/second-contract"
@@ -91,6 +107,72 @@ CONTRACT_CASES = (
         expected_paths=(
             GOOGLE_RESEARCH_FIXTURE_ROOT / "internal-item" / "catalyzing-scientific-impact.json",
         ),
+    ),
+    ContractCase(
+        source_name="deepseek-news",
+        build_adapter=lambda: deepseek_news_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    DEEPSEEK_UPDATES_URL: (
+                        DEEPSEEK_FIXTURE_ROOT / "raw" / "updates.html"
+                    ).read_text(),
+                    DEEPSEEK_NEWS_URL: (
+                        DEEPSEEK_FIXTURE_ROOT / "raw" / "news260424.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(DEEPSEEK_FIXTURE_ROOT / "internal-item" / "deepseek-v4.json",),
+    ),
+    ContractCase(
+        source_name="z-ai-blog",
+        build_adapter=lambda: z_ai_blog_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    Z_AI_RELEASE_NOTES_URL: (
+                        Z_AI_FIXTURE_ROOT / "raw" / "new-released.md"
+                    ).read_text(),
+                    Z_AI_BLOG_URL: (Z_AI_FIXTURE_ROOT / "raw" / "glm-5-1.html").read_text(),
+                    Z_AI_BLOG_ASSET_URL: (Z_AI_FIXTURE_ROOT / "raw" / "glm-5-1.js").read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(Z_AI_FIXTURE_ROOT / "internal-item" / "glm-5-1.json",),
+    ),
+    ContractCase(
+        source_name="moonshot-kimi-changelog",
+        build_adapter=lambda: moonshot_kimi_changelog_adapter(
+            web_fetcher=FakeWebFetcher(
+                {
+                    MOONSHOT_KIMI_CHANGELOG_URL: (
+                        MOONSHOT_KIMI_FIXTURE_ROOT / "raw" / "changelog.html"
+                    ).read_text()
+                },
+                fetched_at=FETCHED_AT,
+            )
+        ),
+        expected_paths=(MOONSHOT_KIMI_FIXTURE_ROOT / "internal-item" / "kimi-k2-think.json",),
+    ),
+    ContractCase(
+        source_name="bytedance-seed-blog",
+        build_adapter=lambda: bytedance_seed_blog_adapter(
+            web_fetcher=FakeWebFetcher(
+                {
+                    BYTEDANCE_SEED_BLOG_URL: (
+                        BYTEDANCE_SEED_FIXTURE_ROOT / "raw" / "index.html"
+                    ).read_text(),
+                    BYTEDANCE_SEED_ARTICLE_URL: (
+                        BYTEDANCE_SEED_FIXTURE_ROOT / "raw" / "seed3d-2-0-released.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            )
+        ),
+        expected_paths=(BYTEDANCE_SEED_FIXTURE_ROOT / "internal-item" / "seed3d-2-0.json",),
     ),
     ContractCase(
         source_name="anthropic",
@@ -187,7 +269,11 @@ def test_rss_builtin_minimal_raw_payload_maps_to_valid_internal_item(
     assert item.occurred_at == FETCHED_AT
     assert item.provenance.source_item_id == "minimal-rss-entry"
     assert item.provenance.adapter_name == case.adapter_name
-    assert item.metadata == {"title": "Minimal RSS Entry", "link": None}
+    assert item.metadata == {
+        "title": "Minimal RSS Entry",
+        "link": None,
+        "content_depth": "summary_only",
+    }
     assert item.payload == TextPayload(text="Minimal RSS Entry")
     assert _dump_for_leak_check(item).isdisjoint({"raw_payload", "rss_guid", "feedparser"})
 
@@ -326,7 +412,11 @@ def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:
     assert item.occurred_at == FETCHED_AT
     assert item.provenance.source_item_id == "minimal-contract"
     assert item.provenance.adapter_name == "anthropic-news-index"
-    assert item.metadata == {"title": "Minimal Anthropic Item", "link": ANTHROPIC_MINIMAL_URL}
+    assert item.metadata == {
+        "title": "Minimal Anthropic Item",
+        "link": ANTHROPIC_MINIMAL_URL,
+        "content_depth": "full_page",
+    }
     assert isinstance(item.payload, HtmlPayload)
     assert str(item.payload.url) == ANTHROPIC_MINIMAL_URL
     assert _dump_for_leak_check(item).isdisjoint({"raw_payload", "dom_node", "selectolax"})

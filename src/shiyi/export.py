@@ -11,7 +11,13 @@ from typing import Literal
 from pydantic import Field
 
 from shiyi._time import utc_isoformat
-from shiyi.domain.models import ArtifactRef, SourceIdentity, StrictModel
+from shiyi.domain.models import (
+    ArtifactRef,
+    ContentDepth,
+    SourceIdentity,
+    StrictModel,
+    is_source_ready_content_depth,
+)
 
 DEFAULT_EXPORT_LIMIT = 20
 
@@ -28,18 +34,21 @@ class ExportedItem(StrictModel):
     content_hash: str | None
     adapter_name: str | None
     adapter_version: str | None
+    content_depth: ContentDepth | None = None
+    source_ready: bool = False
     normalized_artifact_uri: str | None = None
     normalized_media_type: str | None = None
     normalized_content: str | None = Field(default=None)
 
 
-def export_items(
+def export_items(  # noqa: PLR0913
     *,
     workspace: Path,
     since: datetime | None = None,
     until: datetime | None = None,
     sources: Sequence[str] = (),
     limit: int = DEFAULT_EXPORT_LIMIT,
+    source_ready_only: bool = False,
 ) -> list[ExportedItem]:
     """Read persisted normalized items for upstream consumers.
 
@@ -65,6 +74,10 @@ def export_items(
         if source_filter and (source is None or source.kind not in source_filter):
             continue
         normalized_ref = _artifact_from_json(row["normalized_artifact_json"])
+        content_depth = row["content_depth"]
+        source_ready = is_source_ready_content_depth(content_depth)
+        if source_ready_only and not source_ready:
+            continue
         exported.append(
             ExportedItem(
                 event_id=str(row["event_id"]),
@@ -75,6 +88,8 @@ def export_items(
                 content_hash=row["content_hash"],
                 adapter_name=row["adapter_name"],
                 adapter_version=row["adapter_version"],
+                content_depth=content_depth,
+                source_ready=source_ready,
                 normalized_artifact_uri=normalized_ref.uri if normalized_ref else None,
                 normalized_media_type=normalized_ref.media_type if normalized_ref else None,
                 normalized_content=_read_artifact_text(artifacts_root, normalized_ref),
@@ -97,6 +112,7 @@ def _read_rows(
     query = _export_query(has_since=since is not None, has_until=until is not None)
     with sqlite3.connect(metadata_path) as connection:
         connection.row_factory = sqlite3.Row
+        _ensure_export_columns(connection)
         return list(connection.execute(query, params).fetchall())
 
 
@@ -104,7 +120,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_since and has_until:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version
+                   source_json, captured_at, content_hash, adapter_name, adapter_version,
+                   content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at >= ? AND captured_at < ?
@@ -113,7 +130,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_since:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version
+                   source_json, captured_at, content_hash, adapter_name, adapter_version,
+                   content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at >= ?
@@ -122,7 +140,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_until:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version
+                   source_json, captured_at, content_hash, adapter_name, adapter_version,
+                   content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at < ?
@@ -130,11 +149,18 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
         """
     return """
         SELECT event_id, idempotency_key, status, normalized_artifact_json,
-               source_json, captured_at, content_hash, adapter_name, adapter_version
+               source_json, captured_at, content_hash, adapter_name, adapter_version,
+               content_depth
         FROM events
         WHERE normalized_artifact_json IS NOT NULL
         ORDER BY captured_at DESC, event_id ASC
     """
+
+
+def _ensure_export_columns(connection: sqlite3.Connection) -> None:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+    if "content_depth" not in columns:
+        connection.execute("ALTER TABLE events ADD COLUMN content_depth TEXT")
 
 
 def _artifact_from_json(value: str | None) -> ArtifactRef | None:

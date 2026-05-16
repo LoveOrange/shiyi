@@ -16,6 +16,12 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel
 
 from shiyi.adapters.anthropic import anthropic_news_adapter
+from shiyi.adapters.bytedance_seed import bytedance_seed_blog_adapter
+from shiyi.adapters.changelog import (
+    deepseek_news_adapter,
+    moonshot_kimi_changelog_adapter,
+    z_ai_blog_adapter,
+)
 from shiyi.adapters.rss import (
     google_research_blog_adapter,
     huggingface_blog_adapter,
@@ -38,7 +44,16 @@ from shiyi.ports.adapter import Adapter
 from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteEventRecordStore
 
-SourceName = Literal["openai", "anthropic", "huggingface-blog", "google-research-blog"]
+SourceName = Literal[
+    "openai",
+    "anthropic",
+    "huggingface-blog",
+    "google-research-blog",
+    "deepseek-news",
+    "z-ai-blog",
+    "moonshot-kimi-changelog",
+    "bytedance-seed-blog",
+]
 DATE_ONLY_LENGTH = 10
 
 
@@ -122,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             until=args.until,
             sources=tuple(args.source),
             limit=args.limit,
+            source_ready_only=args.source_ready_only,
         )
         sys.stdout.write(_format_json(exported_events))
 
@@ -132,7 +148,16 @@ def _build_parser() -> argparse.ArgumentParser:
     capture = subcommands.add_parser("capture", help="Run a local capture once")
     capture.add_argument(
         "--source",
-        choices=["openai", "anthropic", "huggingface-blog", "google-research-blog"],
+        choices=[
+            "openai",
+            "anthropic",
+            "huggingface-blog",
+            "google-research-blog",
+            "deepseek-news",
+            "z-ai-blog",
+            "moonshot-kimi-changelog",
+            "bytedance-seed-blog",
+        ],
         required=True,
     )
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
@@ -178,6 +203,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Source kind filter; repeat for OR semantics",
     )
     export.add_argument("--limit", type=_positive_int, default=20)
+    export.add_argument(
+        "--source-ready-only",
+        action="store_true",
+        help="Only export records whose content_depth is source-ready.",
+    )
     return parser
 
 
@@ -203,6 +233,14 @@ async def run_capture(  # noqa: PLR0913
         adapter = huggingface_blog_adapter(window=window)
     elif source == "google-research-blog":
         adapter = google_research_blog_adapter(window=window)
+    elif source == "deepseek-news":
+        adapter = deepseek_news_adapter(window=window)
+    elif source == "z-ai-blog":
+        adapter = z_ai_blog_adapter(window=window)
+    elif source == "moonshot-kimi-changelog":
+        adapter = moonshot_kimi_changelog_adapter(window=window)
+    elif source == "bytedance-seed-blog":
+        adapter = bytedance_seed_blog_adapter(window=window)
     else:
         adapter = anthropic_news_adapter(
             window=window,

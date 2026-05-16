@@ -8,6 +8,7 @@ from html import escape, unescape
 
 from shiyi.domain.models import (
     CaptureWindow,
+    ContentDepth,
     HtmlPayload,
     InternalItem,
     Provenance,
@@ -33,6 +34,7 @@ class RssFeedAdapter:
         rss_fetcher: RssFetcher | None = None,
         limit: int | None = None,
         window: CaptureWindow | None = None,
+        content_depth: ContentDepth = "summary_only",
     ) -> None:
         """Create an RSS adapter for one feed URL."""
         self._name = name
@@ -40,6 +42,7 @@ class RssFeedAdapter:
         self._source_kind = source_kind
         self._rss_fetcher = rss_fetcher or HttpRssFetcher(HttpWebFetcher())
         self._window = window or CaptureWindow(max_items=limit)
+        self._content_depth = content_depth
 
     @property
     def name(self) -> str:
@@ -72,7 +75,7 @@ class RssFeedAdapter:
                     source_item_id=entry_id,
                 ),
                 idempotency_key=item_id,
-                metadata={"title": title, "link": entry.link},
+                metadata={"title": title, "link": entry.link, "content_depth": self._content_depth},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:

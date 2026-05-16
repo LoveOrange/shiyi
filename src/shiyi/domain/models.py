@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from hashlib import sha256
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
+ContentDepth = Literal["full_page", "feed_full_content", "summary_only", "partial", "blocked"]
+SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("full_page", "feed_full_content"))
 
 
 class StrictModel(BaseModel):
@@ -101,6 +103,22 @@ class InternalItem(StrictModel):
     provenance: Provenance
     idempotency_key: NonEmptyString
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def content_depth_from_metadata(metadata: dict[str, Any]) -> ContentDepth | None:
+    """Return source-neutral content-depth metadata, validating known values."""
+    value = metadata.get("content_depth")
+    if value is None:
+        return None
+    if value in get_args(ContentDepth):
+        return cast(ContentDepth, value)
+    msg = f"unsupported content_depth: {value!r}"
+    raise ValueError(msg)
+
+
+def is_source_ready_content_depth(content_depth: ContentDepth | str | None) -> bool:
+    """Return whether content depth is decision-grade for AI Weekly by default."""
+    return content_depth in SOURCE_READY_CONTENT_DEPTHS
 
 
 class ClassifyTask(StrictModel):
@@ -198,4 +216,5 @@ class EventRecord(StrictModel):
     content_hash: str | None = None
     adapter_name: str | None = None
     adapter_version: str | None = None
+    content_depth: ContentDepth | None = None
     last_error: str | None = None

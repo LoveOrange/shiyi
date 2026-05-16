@@ -191,6 +191,7 @@ def test_main_export_prints_normalized_items(
         assert kwargs["until"] is not None
         assert kwargs["sources"] == ("blog",)
         assert kwargs["limit"] == 1
+        assert kwargs["source_ready_only"] is True
         return [
             ExportedItem(
                 event_id="evt_1",
@@ -201,6 +202,8 @@ def test_main_export_prints_normalized_items(
                 content_hash="abc",
                 adapter_name="test",
                 adapter_version="0.1.0",
+                content_depth="full_page",
+                source_ready=True,
                 normalized_artifact_uri="normalized/ab/abc",
                 normalized_media_type="text/markdown",
                 normalized_content="# Hello\n",
@@ -222,9 +225,12 @@ def test_main_export_prints_normalized_items(
             "blog",
             "--limit",
             "1",
+            "--source-ready-only",
         ]
     )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload[0]["event_id"] == "evt_1"
+    assert payload[0]["content_depth"] == "full_page"
+    assert payload[0]["source_ready"] is True
     assert payload[0]["normalized_content"] == "# Hello\n"

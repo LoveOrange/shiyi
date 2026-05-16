@@ -38,6 +38,7 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
     assert found.content_hash == event.content_hash
     assert found.adapter_name == event.provenance.adapter_name
     assert found.adapter_version == event.provenance.adapter_version
+    assert found.content_depth is None
 
     still_persisted = asyncio.run(
         store.save_enrichment(
@@ -56,6 +57,27 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
     enriched = asyncio.run(store.mark_enriched(event))
 
     assert enriched.status == "enriched"
+
+
+def test_sqlite_event_record_store_persists_content_depth(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event(content_depth="summary_only")
+    artifact = _artifact()
+
+    record = asyncio.run(
+        store.save_event(
+            event,
+            raw_artifact=artifact,
+            normalized_artifact=None,
+        )
+    )
+    found = asyncio.run(store.find_by_idempotency_key(event.idempotency_key))
+
+    assert record.content_depth == "summary_only"
+    assert found is not None
+    assert found.content_depth == "summary_only"
 
 
 def test_sqlite_event_record_store_persists_captured_at_as_utc_text(
@@ -117,6 +139,7 @@ def test_sqlite_event_record_store_adds_trace_columns_to_existing_events_table(
         "content_hash",
         "adapter_name",
         "adapter_version",
+        "content_depth",
     }.issubset(columns)
 
 
@@ -139,10 +162,13 @@ def _create_legacy_events_table(database_path: Path) -> None:
         )
 
 
-def _event(captured_at: datetime | None = None) -> InternalItem:
+def _event(
+    captured_at: datetime | None = None, *, content_depth: str | None = None
+) -> InternalItem:
     payload = HtmlPayload(html="<article>hello</article>")
     if captured_at is None:
         captured_at = datetime(2026, 5, 12, tzinfo=UTC)
+    metadata = {"content_depth": content_depth} if content_depth is not None else {}
     return InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
@@ -156,6 +182,7 @@ def _event(captured_at: datetime | None = None) -> InternalItem:
             fetched_at=captured_at,
         ),
         idempotency_key="blog:evt_1",
+        metadata=metadata,
     )
 
 

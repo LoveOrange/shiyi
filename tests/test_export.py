@@ -63,6 +63,7 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "adapter_name",
         "adapter_version",
         "captured_at",
+        "content_depth",
         "content_hash",
         "event_id",
         "idempotency_key",
@@ -71,6 +72,7 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "normalized_media_type",
         "schema_version",
         "source",
+        "source_ready",
         "status",
     }
     assert "third-party" not in exported[0].model_dump_json()
@@ -156,6 +158,82 @@ def test_export_items_normalizes_non_utc_captured_at_before_window_filtering(
 
     assert [item.event_id for item in exported] == ["evt_offset_inside_utc_window"]
     assert exported[0].captured_at == "2026-05-12T00:15:00+00:00"
+
+
+def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
+    tmp_path: Path,
+) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    events = (
+        _event(
+            "evt_full",
+            "blog",
+            datetime(2026, 5, 12, 12, tzinfo=UTC),
+            content_depth="full_page",
+        ),
+        _event(
+            "evt_feed_full",
+            "blog",
+            datetime(2026, 5, 12, 11, tzinfo=UTC),
+            content_depth="feed_full_content",
+        ),
+        _event(
+            "evt_summary",
+            "blog",
+            datetime(2026, 5, 12, 10, tzinfo=UTC),
+            content_depth="summary_only",
+        ),
+        _event(
+            "evt_partial",
+            "blog",
+            datetime(2026, 5, 12, 9, tzinfo=UTC),
+            content_depth="partial",
+        ),
+        _event(
+            "evt_blocked",
+            "blog",
+            datetime(2026, 5, 12, 8, tzinfo=UTC),
+            content_depth="blocked",
+        ),
+    )
+
+    async def arrange() -> None:
+        for event in events:
+            await _save_event(
+                artifacts=artifacts,
+                records=records,
+                event=event,
+                normalized=True,
+            )
+
+    asyncio.run(arrange())
+
+    exported = export_items(workspace=tmp_path, sources=("blog",), limit=10)
+    depth_by_id = {item.event_id: item.content_depth for item in exported}
+    source_ready_by_id = {item.event_id: item.source_ready for item in exported}
+    source_ready_only = export_items(
+        workspace=tmp_path,
+        sources=("blog",),
+        limit=10,
+        source_ready_only=True,
+    )
+
+    assert depth_by_id == {
+        "evt_full": "full_page",
+        "evt_feed_full": "feed_full_content",
+        "evt_summary": "summary_only",
+        "evt_partial": "partial",
+        "evt_blocked": "blocked",
+    }
+    assert source_ready_by_id == {
+        "evt_full": True,
+        "evt_feed_full": True,
+        "evt_summary": False,
+        "evt_partial": False,
+        "evt_blocked": False,
+    }
+    assert [item.event_id for item in source_ready_only] == ["evt_full", "evt_feed_full"]
 
 
 def test_export_items_returns_stable_empty_result_when_filters_match_no_rows(
@@ -252,8 +330,15 @@ def _html_payload(event: InternalItem) -> HtmlPayload:
     return event.payload
 
 
-def _event(event_id: str, source_kind: str, captured_at: datetime) -> InternalItem:
+def _event(
+    event_id: str,
+    source_kind: str,
+    captured_at: datetime,
+    *,
+    content_depth: str | None = None,
+) -> InternalItem:
     payload = HtmlPayload(html=f"<article><h1>{event_id}</h1><p>Hello</p></article>")
+    metadata = {"content_depth": content_depth} if content_depth is not None else {}
     return InternalItem(
         id=event_id,
         source=SourceIdentity(kind=source_kind),
@@ -267,4 +352,5 @@ def _event(event_id: str, source_kind: str, captured_at: datetime) -> InternalIt
             fetched_at=captured_at,
         ),
         idempotency_key=f"{source_kind}:{event_id}",
+        metadata=metadata,
     )

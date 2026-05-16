@@ -1,20 +1,22 @@
 [
   {
-    "schema_version": "shiyi-export-item.v1",
-    "event_id": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
-    "idempotency_key": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
-    "status": "persisted",
-    "source": {
-      "kind": "google-research-blog",
-      "uri": "https://research.google/blog/rss/",
-      "account_id": null
-    },
-    "captured_at": "2026-05-13T01:30:00+00:00",
-    "content_hash": "f92dd950fa6bfbf965c185092676805c738ec7476d7a7e98a513a0692db407ce",
     "adapter_name": "google-research-blog-rss",
     "adapter_version": "0.2.0",
+    "captured_at": "2026-05-13T01:30:00+00:00",
+    "content_depth": "summary_only",
+    "content_hash": "f92dd950fa6bfbf965c185092676805c738ec7476d7a7e98a513a0692db407ce",
+    "event_id": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
+    "idempotency_key": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
     "normalized_artifact_uri": "normalized/81/816db4dc5681eec7f0d5cd4211572a074d12f0cccdd65464cf494d6d990ac1da",
+    "normalized_content": "# Catalyzing scientific impact through global partnerships and open resources\n\nData Mining & Modeling\n\nCanonical link: <https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/>\n",
     "normalized_media_type": "text/markdown",
-    "normalized_content": "# Catalyzing scientific impact through global partnerships and open resources\n\nData Mining & Modeling\n\nCanonical link: <https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/>\n"
+    "schema_version": "shiyi-export-item.v1",
+    "source": {
+      "account_id": null,
+      "kind": "google-research-blog",
+      "uri": "https://research.google/blog/rss/"
+    },
+    "source_ready": false,
+    "status": "persisted"
   }
 ]

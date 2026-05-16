@@ -4,6 +4,7 @@
   "id": "huggingface-blog:https://huggingface.co/blog/open-r1",
   "idempotency_key": "huggingface-blog:https://huggingface.co/blog/open-r1",
   "metadata": {
+    "content_depth": "summary_only",
     "link": "https://huggingface.co/blog/open-r1",
     "title": "Open R1: a fully open reproduction of DeepSeek-R1"
   },
