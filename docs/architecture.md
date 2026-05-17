@@ -10,7 +10,7 @@ Shiyi defines a general capture and normalization pipeline where the core system
 
 - **Core owns policy and orchestration, not integrations.** Integrations implement stable ports.
 - **Raw data is never silently discarded.** Every normalized record should retain provenance back to its source item.
-- **Full detail is the source-ready bar.** Built-in adapters should treat feeds/indexes/changelogs as discovery unless they contain the complete article body; source-ready records should preserve canonical article/detail content when available.
+- **Full detail is the source-ready bar.** Built-in adapters should treat feeds/indexes/changelogs as discovery unless they contain the complete article body; source-ready records should preserve canonical article/detail content when available. For RSS/listing-driven sources, the decision-grade payload should usually be the dereferenced original article webpage, with official structured detail payloads allowed when they are the stable canonical surface.
 - **Optional preprocessing is neutral.** AI-assisted work inside Shiyi must produce reusable facts or annotations, not business opinions.
 - **Idempotency is mandatory.** Replaying the same source item should not corrupt state or duplicate durable records.
 - **Observability is part of the contract.** Every pipeline run should expose trace IDs, structured logs, and measurable outcomes.
@@ -45,7 +45,7 @@ Persistence is a family of user-provided storage components. The MVP separates a
 ## 4. Pipeline stages
 
 1. **Discover** — adapter discovers candidate source items.
-2. **Normalize** — adapter emits stable `InternalItem` objects based on full article/detail content when available.
+2. **Normalize** — adapter emits stable `InternalItem` objects based on full article/detail content when available, not on listing/feed snippets when a canonical detail surface exists.
 3. **Validate** — core validates item schema, size limits, provenance, and required fields.
 4. **Deduplicate** — MVP checks event idempotency keys; canonical content fingerprint/version semantics are a future spec.
 5. **Persist artifacts** — core stores raw and normalized artifacts through an artifact store.
@@ -108,4 +108,5 @@ Shiyi should align with top-tier open-source infrastructure projects:
 - Shiyi does not require one default model provider.
 - Shiyi does not require a server database. The MVP default is filesystem-first artifacts with SQLite event records.
 - Shiyi does not own product-specific ranking, scoring, insight, or editorial decisions.
+- Shiyi does not own cross-source topic aggregation or discussion-based importance weighting for community/media signals.
 - Shiyi does not make AI/preprocess output authoritative without validation.

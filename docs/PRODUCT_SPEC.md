@@ -107,13 +107,16 @@ contract gate complete -> low-noise source expansion -> registry/ops -> higher-n
 1. **Stable substrate before feature breadth.** Source expansion is essential, but every new source must preserve traceability, idempotency, and export safety.
 2. **Adapters are replaceable.** Source-specific logic belongs behind adapter boundaries; core should not depend on third-party DTOs.
 3. **Raw capture is first-class.** Raw payloads, fetch metadata, and provenance must remain auditable.
-4. **Full content beats previews.** For source-ready built-in adapters, RSS/index/changelog snippets are discovery metadata by default. Shiyi should capture canonical article/detail content or official structured detail payloads before exposing an item as decision-grade.
+4. **Full content beats previews.** For source-ready built-in adapters, RSS/index/changelog snippets are discovery metadata by default. When discovery starts from RSS or another listing surface, Shiyi should dereference to the canonical article/detail page before exposing an item as decision-grade. Official structured detail payloads remain acceptable when they are the stable canonical detail surface.
 5. **Normalized content is consumer-safe.** Downstream products should read stable Shiyi output without knowing source-specific DTOs.
 6. **Partial content is explicit.** Summary-only or partial records may exist as degraded fallback, but they must be marked source-neutrally with `content_depth` and must not count as AI Weekly source-ready evidence. Allowed `content_depth` values are `full_page`, `feed_full_content`, `summary_only`, `partial`, and `blocked`; only the first two are decision-grade by default.
 7. **Neutral preprocessing only.** Optional AI work inside Shiyi may summarize, extract entities, detect language, chunk, embed, or provide generic quality signals; it must not decide business importance.
-8. **Idempotency is product language.** The stable replay identity is `idempotency_key`; do not rename it to `dedupe_key`.
-9. **Local-first until contracts stabilize.** The MVP should stay easy to run locally, inspect, and test without services or credentials.
-10. **Notion is task management only.** Repository docs are the source of truth for product and design decisions.
+8. **Official low-noise sources come first.** P2.5 and adjacent source-expansion work should prioritize reusable official low-noise sources before community, social, or media coverage.
+9. **Aggregation belongs downstream.** Cross-source topic merging, discussion-volume weighting, and other importance/ranking logic belong to downstream consumers, not Shiyi core.
+10. **Defer aggressively, expand by leverage.** If a candidate source cannot yet satisfy the readiness gate or only becomes useful after downstream aggregation, keep it on the defer list. Follow an 80/20 expansion rule: add the most reusable general sources first, then revisit high-value deferred sources later.
+11. **Idempotency is product language.** The stable replay identity is `idempotency_key`; do not rename it to `dedupe_key`.
+12. **Local-first until contracts stabilize.** The MVP should stay easy to run locally, inspect, and test without services or credentials.
+13. **Notion is task management only.** Repository docs are the source of truth for product and design decisions.
 
 ## 6. Core flow
 
@@ -158,6 +161,13 @@ P2.5 source readiness now requires full-content capture. A built-in source is no
 
 Start with official, low-noise, mostly RSS/API/blog sources. They improve AI Weekly coverage without forcing Shiyi to solve ranking, community aggregation, or spam filtering too early.
 
+Selection rule for this phase:
+
+- prefer official sources that add broad reusable coverage with stable provenance;
+- if discovery starts from RSS/feed/changelog surfaces, treat them as entry points only and normalize from the canonical detail surface instead of the feed snippet;
+- if a source needs cross-source clustering, topic merging, or discussion-volume weighting before it becomes useful, defer it until downstream aggregation is ready;
+- keep a growing defer list on purpose; follow the 80/20 rule and land the highest-leverage general sources first.
+
 Recommended next batch:
 
 - Google DeepMind / Gemini official updates beyond the Google Research RSS slice;
@@ -175,7 +185,7 @@ Second batch:
 - Modal;
 - Replicate.
 
-Higher-noise sources such as Hacker News, GitHub Trending, arXiv, Papers with Code, and tech media should wait until source registry, aggregation policy, and consumer-side ranking are clearer.
+Higher-noise sources such as Hacker News, GitHub Trending, arXiv, Papers with Code, and tech media should wait until source registry, aggregation policy, and consumer-side ranking are clearer. When those sources are added later, Shiyi should still capture neutral events only; same-topic clustering and discussion-based importance weighting belong downstream.
 
 Detailed source expansion policy lives in `docs/SOURCE_STRATEGY.md`.
 

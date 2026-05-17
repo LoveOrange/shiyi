@@ -20,6 +20,12 @@ Shiyi should eventually capture many source types:
 
 But source count is not the first quality metric. The first quality metric is whether a source can be replayed, audited, normalized, exported, and consumed without leaking third-party DTOs or business-specific judgment into Shiyi core.
 
+Near-term sequencing rule:
+
+- prioritize official low-noise sources first;
+- keep community/media/social sources for later phases where downstream consumers can cluster same-topic items and use discussion intensity as an importance signal;
+- keep that aggregation/ranking logic out of Shiyi itself.
+
 ## 2. Source readiness gate
 
 A built-in source should not be merged into default source lists unless it has:
@@ -46,7 +52,7 @@ If a source cannot satisfy this gate yet, keep it experimental and out of defaul
 
 Use when the source exposes stable feed entries with title, link, ID, and published/updated time.
 
-RSS/Atom should be treated primarily as discovery metadata unless the feed contains the complete article body. For P2.5 and later, a built-in adapter must fetch the canonical article page or official structured detail payload when available, persist that detail raw artifact, and normalize the detail content into decision-grade Markdown. Summary-only feed entries are allowed only as an explicit degraded fallback.
+RSS/Atom should be treated primarily as discovery metadata unless the feed contains the complete article body. For P2.5 and later, a built-in adapter must fetch the canonical article page or official structured detail payload when available, persist that detail raw artifact, and normalize the detail content into decision-grade Markdown. For RSS-discovered sources, the decision-grade adapter payload should be the canonical detail surface itself—usually the original article webpage, otherwise an official structured detail payload when that is the stable source of truth. Summary-only feed entries are allowed only as an explicit degraded fallback.
 
 This should become the fastest source expansion path. Many official blogs should not require bespoke adapters beyond source configuration plus a generic feed adapter plus full-detail fetch.
 
@@ -105,7 +111,7 @@ Examples:
 - tech media;
 - social/community feeds.
 
-For Shiyi, these should remain neutral captured source material. Clustering, trend detection, and editorial decisions belong downstream.
+For Shiyi, these should remain neutral captured source material. Clustering, trend detection, same-topic merging across overlapping sources, and discussion-based importance weighting belong downstream.
 
 ## 4. Built-in source status
 
@@ -161,7 +167,10 @@ Audited but deferred from default built-ins:
 Selection rule:
 
 - prefer RSS/Atom, stable changelog pages, stable sitemap/index pages, or official-used JSON/SSR payloads with stable IDs and timestamps;
+- official low-noise sources beat broader but noisier coverage in this phase;
+- if discovery comes from RSS or another listing surface, treat that surface as entry-only and normalize from the canonical detail page/payload instead of the listing snippet;
 - avoid sources requiring brittle browser automation;
+- if a source depends on downstream aggregation/ranking to be useful, defer it instead of forcing it into P2.5;
 - every source must pass the readiness gate.
 
 ### Batch 2 — AI tooling and agent ecosystem
@@ -188,6 +197,8 @@ Selection rule:
 
 Goal: capture higher-noise sources after source registry and consumer aggregation are ready.
 
+These sources become materially more useful only once downstream consumers can cluster same-topic items across community/media overlap and optionally use discussion volume as an importance dimension.
+
 Candidate sources:
 
 - Hacker News;
@@ -204,7 +215,7 @@ Selection rule:
 
 - treat these as neutral source material;
 - require source-specific rate-limit and pagination behavior;
-- expect downstream consumers to cluster/rank/filter.
+- expect downstream consumers to cluster/rank/filter, including same-topic merging and discussion-based weighting where useful.
 
 ## 6. Source naming
 
