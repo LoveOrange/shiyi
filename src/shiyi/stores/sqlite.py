@@ -34,7 +34,7 @@ class SQLiteEventRecordStore:
             row = connection.execute(
                 """
                 SELECT event_id, idempotency_key, status, raw_artifact_json,
-                       normalized_artifact_json, source_json, captured_at,
+                       normalized_artifact_json, source_json, captured_at, occurred_at,
                        content_hash, adapter_name, adapter_version, content_depth, last_error
                 FROM events
                 WHERE idempotency_key = ?
@@ -62,11 +62,11 @@ class SQLiteEventRecordStore:
                 """
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
-                  normalized_artifact_json, source_json, captured_at,
+                  normalized_artifact_json, source_json, captured_at, occurred_at,
                   content_hash, adapter_name, adapter_version, content_depth, last_error,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -74,6 +74,7 @@ class SQLiteEventRecordStore:
                   normalized_artifact_json = excluded.normalized_artifact_json,
                   source_json = excluded.source_json,
                   captured_at = excluded.captured_at,
+                  occurred_at = excluded.occurred_at,
                   content_hash = excluded.content_hash,
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
@@ -89,6 +90,7 @@ class SQLiteEventRecordStore:
                     normalized_json,
                     event.source.model_dump_json(),
                     utc_isoformat(event.captured_at),
+                    utc_isoformat(event.occurred_at),
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
@@ -122,11 +124,11 @@ class SQLiteEventRecordStore:
                 """
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
-                  normalized_artifact_json, source_json, captured_at,
+                  normalized_artifact_json, source_json, captured_at, occurred_at,
                   content_hash, adapter_name, adapter_version, content_depth, last_error,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -134,6 +136,7 @@ class SQLiteEventRecordStore:
                   normalized_artifact_json = excluded.normalized_artifact_json,
                   source_json = excluded.source_json,
                   captured_at = excluded.captured_at,
+                  occurred_at = excluded.occurred_at,
                   content_hash = excluded.content_hash,
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
@@ -149,6 +152,7 @@ class SQLiteEventRecordStore:
                     normalized_json,
                     event.source.model_dump_json(),
                     utc_isoformat(event.captured_at),
+                    utc_isoformat(event.occurred_at),
                     event.content_hash,
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
@@ -225,6 +229,7 @@ class SQLiteEventRecordStore:
                   normalized_artifact_json TEXT,
                   source_json TEXT,
                   captured_at TEXT,
+                  occurred_at TEXT,
                   content_hash TEXT,
                   adapter_name TEXT,
                   adapter_version TEXT,
@@ -257,6 +262,7 @@ def _ensure_events_columns(connection: sqlite3.Connection) -> None:
     for column, definition in {
         "source_json": "TEXT",
         "captured_at": "TEXT",
+        "occurred_at": "TEXT",
         "content_hash": "TEXT",
         "adapter_name": "TEXT",
         "adapter_version": "TEXT",
@@ -270,6 +276,7 @@ def _row_to_event_record(row: sqlite3.Row) -> EventRecord:
     raw_artifact = _artifact_from_json(row["raw_artifact_json"])
     normalized_artifact = _artifact_from_json(row["normalized_artifact_json"])
     captured_at = _datetime_from_json(row["captured_at"])
+    occurred_at = _datetime_from_json(row["occurred_at"])
     return EventRecord(
         event_id=row["event_id"],
         idempotency_key=row["idempotency_key"],
@@ -278,6 +285,7 @@ def _row_to_event_record(row: sqlite3.Row) -> EventRecord:
         normalized_artifact=normalized_artifact,
         source=_source_from_json(row["source_json"]),
         captured_at=captured_at,
+        occurred_at=occurred_at,
         content_hash=row["content_hash"],
         adapter_name=row["adapter_name"],
         adapter_version=row["adapter_version"],

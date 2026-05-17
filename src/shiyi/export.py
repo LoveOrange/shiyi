@@ -31,6 +31,8 @@ class ExportedItem(StrictModel):
     status: str
     source: SourceIdentity | None
     captured_at: str | None
+    occurred_at: str | None = None
+    published_at: str | None = None
     content_hash: str | None
     adapter_name: str | None
     adapter_version: str | None
@@ -85,6 +87,8 @@ def export_items(  # noqa: PLR0913
                 status=str(row["status"]),
                 source=source,
                 captured_at=row["captured_at"],
+                occurred_at=row["occurred_at"],
+                published_at=row["occurred_at"],
                 content_hash=row["content_hash"],
                 adapter_name=row["adapter_name"],
                 adapter_version=row["adapter_version"],
@@ -120,8 +124,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_since and has_until:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version,
-                   content_depth
+                   source_json, captured_at, occurred_at, content_hash,
+                   adapter_name, adapter_version, content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at >= ? AND captured_at < ?
@@ -130,8 +134,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_since:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version,
-                   content_depth
+                   source_json, captured_at, occurred_at, content_hash,
+                   adapter_name, adapter_version, content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at >= ?
@@ -140,8 +144,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
     if has_until:
         return """
             SELECT event_id, idempotency_key, status, normalized_artifact_json,
-                   source_json, captured_at, content_hash, adapter_name, adapter_version,
-                   content_depth
+                   source_json, captured_at, occurred_at, content_hash,
+                   adapter_name, adapter_version, content_depth
             FROM events
             WHERE normalized_artifact_json IS NOT NULL
               AND captured_at < ?
@@ -149,8 +153,8 @@ def _export_query(*, has_since: bool, has_until: bool) -> str:
         """
     return """
         SELECT event_id, idempotency_key, status, normalized_artifact_json,
-               source_json, captured_at, content_hash, adapter_name, adapter_version,
-               content_depth
+               source_json, captured_at, occurred_at, content_hash,
+               adapter_name, adapter_version, content_depth
         FROM events
         WHERE normalized_artifact_json IS NOT NULL
         ORDER BY captured_at DESC, event_id ASC
@@ -161,6 +165,8 @@ def _ensure_export_columns(connection: sqlite3.Connection) -> None:
     columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
     if "content_depth" not in columns:
         connection.execute("ALTER TABLE events ADD COLUMN content_depth TEXT")
+    if "occurred_at" not in columns:
+        connection.execute("ALTER TABLE events ADD COLUMN occurred_at TEXT")
 
 
 def _artifact_from_json(value: str | None) -> ArtifactRef | None:

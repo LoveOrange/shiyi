@@ -55,6 +55,8 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
     assert exported[0].event_id == "evt_1"
     assert exported[0].source == SourceIdentity(kind="blog")
     assert exported[0].captured_at == "2026-05-12T10:00:00+00:00"
+    assert exported[0].occurred_at == "2026-05-12T10:00:00+00:00"
+    assert exported[0].published_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].normalized_media_type == "text/markdown"
     assert exported[0].normalized_content is not None
     assert "# evt\\_1" in exported[0].normalized_content
@@ -67,6 +69,8 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "content_hash",
         "event_id",
         "idempotency_key",
+        "occurred_at",
+        "published_at",
         "normalized_artifact_uri",
         "normalized_content",
         "normalized_media_type",
@@ -78,6 +82,24 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
     assert "third-party" not in exported[0].model_dump_json()
     assert "raw_payload" not in exported[0].model_dump_json()
     assert "rss_guid" not in exported[0].model_dump_json()
+
+
+def test_export_items_exposes_occurred_at_separately_from_captured_at(tmp_path: Path) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event(
+        "evt_article_date",
+        "blog",
+        datetime(2026, 5, 14, 8, 30, tzinfo=UTC),
+        occurred_at=datetime(2026, 4, 29, 12, tzinfo=UTC),
+    )
+    asyncio.run(_save_event(artifacts=artifacts, records=records, event=event, normalized=True))
+
+    exported = export_items(workspace=tmp_path, sources=("blog",), limit=10)
+
+    assert exported[0].captured_at == "2026-05-14T08:30:00+00:00"
+    assert exported[0].occurred_at == "2026-04-29T12:00:00+00:00"
+    assert exported[0].published_at == "2026-04-29T12:00:00+00:00"
 
 
 def test_export_items_uses_half_open_window_source_filter_and_stable_ordering(
@@ -336,6 +358,7 @@ def _event(
     captured_at: datetime,
     *,
     content_depth: str | None = None,
+    occurred_at: datetime | None = None,
 ) -> InternalItem:
     payload = HtmlPayload(html=f"<article><h1>{event_id}</h1><p>Hello</p></article>")
     metadata = {"content_depth": content_depth} if content_depth is not None else {}
@@ -343,7 +366,7 @@ def _event(
         id=event_id,
         source=SourceIdentity(kind=source_kind),
         captured_at=captured_at,
-        occurred_at=captured_at,
+        occurred_at=occurred_at or captured_at,
         payload=payload,
         content_hash=payload_content_hash(payload),
         provenance=Provenance(

@@ -3,6 +3,8 @@
     "adapter_name": "microsoft-ai-blog-rss",
     "adapter_version": "0.2.0",
     "captured_at": "2026-05-13T08:30:00+00:00",
+    "occurred_at": "2026-05-13T13:00:00+00:00",
+    "published_at": "2026-05-13T13:00:00+00:00",
     "content_depth": "feed_full_content",
     "content_hash": "788042238b5257833e2871db12117903ea535cf71c63cc21a314a9421a855d71",
     "event_id": "microsoft-ai-blog:frontier-transformation-readiness",

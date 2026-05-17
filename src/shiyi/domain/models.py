@@ -213,6 +213,7 @@ class EventRecord(StrictModel):
     normalized_artifact: ArtifactRef | None = None
     source: SourceIdentity | None = None
     captured_at: datetime | None = None
+    occurred_at: datetime | None = None
     content_hash: str | None = None
     adapter_name: str | None = None
     adapter_version: str | None = None

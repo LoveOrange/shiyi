@@ -3,6 +3,8 @@
     "adapter_name": "mistral-news-article",
     "adapter_version": "0.1.0",
     "captured_at": "2026-05-14T08:30:00+00:00",
+    "occurred_at": "2026-04-29T12:00:00+00:00",
+    "published_at": "2026-04-29T12:00:00+00:00",
     "content_depth": "full_page",
     "content_hash": "bc290357261b83b6c52a3ef5d89dda4b192ad0cea0e2d7c9122690dbf4d44112",
     "event_id": "mistral-news:vibe-remote-agents-mistral-medium-3-5",

@@ -3,6 +3,8 @@
     "adapter_name": "bytedance-seed-blog-ssr",
     "adapter_version": "0.1.0",
     "captured_at": "2026-05-14T08:30:00+00:00",
+    "occurred_at": "2026-04-22T16:00:00+00:00",
+    "published_at": "2026-04-22T16:00:00+00:00",
     "content_depth": "full_page",
     "content_hash": "5bc9a8d50c290061e8785aa1bea9f1989c225fd3e94f840932d7baf6c4e8393d",
     "event_id": "bytedance-seed-blog:1776683179376",

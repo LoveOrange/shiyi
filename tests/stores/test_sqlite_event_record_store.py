@@ -35,6 +35,7 @@ def test_sqlite_event_record_store_saves_event_and_enrichment(tmp_path: Path) ->
     assert found.raw_artifact == artifact
     assert found.source == event.source
     assert found.captured_at == event.captured_at
+    assert found.occurred_at == event.occurred_at
     assert found.content_hash == event.content_hash
     assert found.adapter_name == event.provenance.adapter_name
     assert found.adapter_version == event.provenance.adapter_version
@@ -97,10 +98,11 @@ def test_sqlite_event_record_store_persists_captured_at_as_utc_text(
     )
 
     assert record.captured_at == datetime(2026, 5, 11, 16, 30, tzinfo=UTC)
+    assert record.occurred_at == datetime(2026, 5, 11, 16, 30, tzinfo=UTC)
     with sqlite3.connect(database_path) as connection:
-        captured_at = connection.execute("SELECT captured_at FROM events").fetchone()[0]
+        row = connection.execute("SELECT captured_at, occurred_at FROM events").fetchone()
 
-    assert captured_at == "2026-05-11T16:30:00+00:00"
+    assert row == ("2026-05-11T16:30:00+00:00", "2026-05-11T16:30:00+00:00")
 
 
 def test_sqlite_event_record_store_adds_trace_columns_to_existing_events_table(
@@ -136,6 +138,7 @@ def test_sqlite_event_record_store_adds_trace_columns_to_existing_events_table(
     assert {
         "source_json",
         "captured_at",
+        "occurred_at",
         "content_hash",
         "adapter_name",
         "adapter_version",

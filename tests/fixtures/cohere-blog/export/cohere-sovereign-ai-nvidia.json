@@ -3,6 +3,8 @@
     "adapter_name": "cohere-blog-article",
     "adapter_version": "0.1.0",
     "captured_at": "2026-05-14T08:30:00+00:00",
+    "occurred_at": "2026-03-16T20:28:39+00:00",
+    "published_at": "2026-03-16T20:28:39+00:00",
     "content_depth": "full_page",
     "content_hash": "ad0b529fdfd0116240a02a37f2641599eaad794c72c7cf400b86f928638772ab",
     "event_id": "cohere-blog:cohere-sovereign-ai-nvidia",

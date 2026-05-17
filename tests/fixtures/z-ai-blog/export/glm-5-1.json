@@ -3,6 +3,8 @@
     "adapter_name": "z-ai-blog-article",
     "adapter_version": "0.1.0",
     "captured_at": "2026-05-14T08:30:00+00:00",
+    "occurred_at": "2026-04-07T00:00:00+00:00",
+    "published_at": "2026-04-07T00:00:00+00:00",
     "content_depth": "full_page",
     "content_hash": "5a0af613c1128bd2eb92edf15eefc6a070ec22021ff16d74c163d2ae34caf30e",
     "event_id": "z-ai-blog:2026-04-07-glm-5-1",

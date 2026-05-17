@@ -3,6 +3,8 @@
     "adapter_name": "huggingface-blog-rss",
     "adapter_version": "0.2.0",
     "captured_at": "2026-05-13T01:30:00+00:00",
+    "occurred_at": "2026-05-09T09:00:00+00:00",
+    "published_at": "2026-05-09T09:00:00+00:00",
     "content_depth": "summary_only",
     "content_hash": "e8e1df7e8dcae06a7addeb886c7e9fec020cee9dda3191d959957ad045167165",
     "event_id": "huggingface-blog:https://huggingface.co/blog/open-r1",

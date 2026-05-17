@@ -3,6 +3,8 @@
     "adapter_name": "openai-news-rss",
     "adapter_version": "0.2.0",
     "captured_at": "2026-05-13T01:30:00+00:00",
+    "occurred_at": "2026-05-08T10:00:00+00:00",
+    "published_at": "2026-05-08T10:00:00+00:00",
     "content_depth": "summary_only",
     "content_hash": "ea94c1e44fd1cbc6634e006a857c0d2785b3d76a36bd9d162bf360f39031a521",
     "event_id": "openai-news:running-codex-safely",
