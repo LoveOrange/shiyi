@@ -56,8 +56,25 @@ from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
 from shiyi.ports.event_record_store import EventRecordStore
 from shiyi.ports.normalizer import Normalizer
+from shiyi.sources import (
+    BUILTIN_SOURCE_NAMES,
+    SOURCE_BACKLOG,
+    SOURCE_DEFINITIONS,
+    SourceBacklogItem,
+    SourceDefinition,
+    SourceName,
+    SourceSummary,
+    build_source_adapter,
+    iter_builtin_sources,
+    iter_source_backlog,
+    source_definition,
+    source_summaries,
+)
 
 __all__ = [
+    "BUILTIN_SOURCE_NAMES",
+    "SOURCE_BACKLOG",
+    "SOURCE_DEFINITIONS",
     "AIProvider",
     "Adapter",
     "AnthropicNewsAdapter",
@@ -92,11 +109,16 @@ __all__ = [
     "PipelineRunSummary",
     "Provenance",
     "RssFeedAdapter",
+    "SourceBacklogItem",
+    "SourceDefinition",
     "SourceIdentity",
+    "SourceName",
+    "SourceSummary",
     "SummarizeTask",
     "TextPayload",
     "TokenUsage",
     "anthropic_news_adapter",
+    "build_source_adapter",
     "bytedance_seed_blog_adapter",
     "cohere_blog_adapter",
     "content_depth_from_metadata",
@@ -108,11 +130,15 @@ __all__ = [
     "google_research_blog_adapter",
     "huggingface_blog_adapter",
     "is_source_ready_content_depth",
+    "iter_builtin_sources",
+    "iter_source_backlog",
     "microsoft_ai_blog_adapter",
     "mistral_news_adapter",
     "moonshot_kimi_changelog_adapter",
     "openai_news_adapter",
     "payload_content_hash",
+    "source_definition",
+    "source_summaries",
     "z_ai_blog_adapter",
     "z_ai_release_notes_adapter",
 ]

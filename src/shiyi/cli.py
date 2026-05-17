@@ -11,27 +11,10 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 
-from shiyi.adapters.anthropic import anthropic_news_adapter
-from shiyi.adapters.bytedance_seed import bytedance_seed_blog_adapter
-from shiyi.adapters.changelog import (
-    cohere_blog_adapter,
-    deepseek_news_adapter,
-    gemini_api_changelog_adapter,
-    mistral_news_adapter,
-    moonshot_kimi_changelog_adapter,
-    z_ai_blog_adapter,
-)
-from shiyi.adapters.deepmind import deepmind_blog_adapter
-from shiyi.adapters.rss import (
-    google_research_blog_adapter,
-    huggingface_blog_adapter,
-    microsoft_ai_blog_adapter,
-    openai_news_adapter,
-)
 from shiyi.domain.models import (
     CaptureWindow,
     ClassifyTask,
@@ -42,28 +25,12 @@ from shiyi.domain.models import (
     SummarizeTask,
 )
 from shiyi.export import export_items
-from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline, PipelineRunSummary
-from shiyi.ports.adapter import Adapter
+from shiyi.sources import BUILTIN_SOURCE_NAMES, SourceName, build_source_adapter, source_summaries
 from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteEventRecordStore
 
-SourceName = Literal[
-    "openai",
-    "anthropic",
-    "huggingface-blog",
-    "google-research-blog",
-    "deepmind-blog",
-    "deepseek-news",
-    "z-ai-blog",
-    "moonshot-kimi-changelog",
-    "bytedance-seed-blog",
-    "gemini-api-changelog",
-    "mistral-news",
-    "microsoft-ai-blog",
-    "cohere-blog",
-]
 DATE_ONLY_LENGTH = 10
 
 
@@ -150,6 +117,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             source_ready_only=args.source_ready_only,
         )
         sys.stdout.write(_format_json(exported_events))
+    elif args.command == "sources":
+        sys.stdout.write(_format_json(source_summaries(include_backlog=args.include_backlog)))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -158,21 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
     capture = subcommands.add_parser("capture", help="Run a local capture once")
     capture.add_argument(
         "--source",
-        choices=[
-            "openai",
-            "anthropic",
-            "huggingface-blog",
-            "google-research-blog",
-            "deepmind-blog",
-            "deepseek-news",
-            "z-ai-blog",
-            "moonshot-kimi-changelog",
-            "bytedance-seed-blog",
-            "gemini-api-changelog",
-            "mistral-news",
-            "microsoft-ai-blog",
-            "cohere-blog",
-        ],
+        choices=BUILTIN_SOURCE_NAMES,
         required=True,
     )
     capture.add_argument("--workspace", type=Path, default=Path(".shiyi"))
@@ -223,10 +178,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only export records whose content_depth is source-ready.",
     )
+    sources = subcommands.add_parser("sources", help="List registered sources and handoff backlog")
+    sources.add_argument(
+        "--include-backlog",
+        action="store_true",
+        help="Include deferred P3/high-noise source backlog rows.",
+    )
     return parser
 
 
-async def run_capture(  # noqa: PLR0912, PLR0913
+async def run_capture(  # noqa: PLR0913
     *,
     source: SourceName,
     workspace: Path,
@@ -241,36 +202,7 @@ async def run_capture(  # noqa: PLR0912, PLR0913
     item_cap = max_items if max_items is not None else limit
     window = CaptureWindow(since=since, until=until, max_items=item_cap or 5)
     raw_cache_root = workspace / "data" / "raw"
-    adapter: Adapter
-    if source == "openai":
-        adapter = openai_news_adapter(window=window)
-    elif source == "huggingface-blog":
-        adapter = huggingface_blog_adapter(window=window)
-    elif source == "google-research-blog":
-        adapter = google_research_blog_adapter(window=window)
-    elif source == "deepmind-blog":
-        adapter = deepmind_blog_adapter(window=window)
-    elif source == "deepseek-news":
-        adapter = deepseek_news_adapter(window=window)
-    elif source == "z-ai-blog":
-        adapter = z_ai_blog_adapter(window=window)
-    elif source == "moonshot-kimi-changelog":
-        adapter = moonshot_kimi_changelog_adapter(window=window)
-    elif source == "bytedance-seed-blog":
-        adapter = bytedance_seed_blog_adapter(window=window)
-    elif source == "gemini-api-changelog":
-        adapter = gemini_api_changelog_adapter(window=window)
-    elif source == "mistral-news":
-        adapter = mistral_news_adapter(window=window)
-    elif source == "microsoft-ai-blog":
-        adapter = microsoft_ai_blog_adapter(window=window)
-    elif source == "cohere-blog":
-        adapter = cohere_blog_adapter(window=window)
-    else:
-        adapter = anthropic_news_adapter(
-            window=window,
-            web_fetcher=HttpWebFetcher(raw_cache_root=raw_cache_root),
-        )
+    adapter = build_source_adapter(source, window=window, raw_cache_root=raw_cache_root)
     pipeline = CapturePipeline(
         adapter=adapter,
         ai_provider=LocalHeuristicAIProvider(),

@@ -25,10 +25,10 @@ from shiyi import (
     z_ai_blog_adapter,
 )
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
-from shiyi.cli import SourceName
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFeed
+from shiyi.sources import SourceName
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_FIXTURE_ROOT = FIXTURE_ROOT / "openai-news"

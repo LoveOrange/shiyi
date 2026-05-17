@@ -8,7 +8,6 @@ from _pytest.monkeypatch import MonkeyPatch
 
 from shiyi.cli import (
     CaptureSummary,
-    SourceName,
     _capture_summary,
     _format_summary,
     list_events,
@@ -16,6 +15,7 @@ from shiyi.cli import (
 )
 from shiyi.domain.models import SourceIdentity
 from shiyi.export import ExportedItem
+from shiyi.sources import SourceName
 
 
 def test_format_summary_outputs_json_line() -> None:
@@ -178,6 +178,18 @@ def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path:
 def test_main_export_rejects_non_positive_limit(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         main(["export", "--workspace", str(tmp_path), "--limit", "0"])
+
+
+def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
+    main(["sources", "--include-backlog"])
+
+    payload = json.loads(capsys.readouterr().out)
+    names = {row["name"] for row in payload}
+    assert "microsoft-ai-blog" in names
+    assert "qwen-research" in names
+    microsoft = next(row for row in payload if row["name"] == "microsoft-ai-blog")
+    assert microsoft["status"] == "built-in"
+    assert microsoft["default_content_depth"] == "feed_full_content"
 
 
 def test_main_export_prints_normalized_items(
