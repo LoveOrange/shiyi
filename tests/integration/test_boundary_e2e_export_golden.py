@@ -15,11 +15,15 @@ from shiyi import (
     HtmlMarkdownNormalizer,
     InternalItem,
     bytedance_seed_blog_adapter,
+    cohere_blog_adapter,
     deepmind_blog_adapter,
     deepseek_news_adapter,
     export_items,
+    gemini_api_changelog_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
+    microsoft_ai_blog_adapter,
+    mistral_news_adapter,
     moonshot_kimi_changelog_adapter,
     openai_news_adapter,
     z_ai_blog_adapter,
@@ -44,6 +48,14 @@ Z_AI_BLOG_ASSET_URL = "https://z.ai/blog/assets/glm-5.1-sEcXPNR5.js"
 MOONSHOT_KIMI_CHANGELOG_URL = "https://platform.kimi.com/blog/posts/changelog"
 BYTEDANCE_SEED_BLOG_URL = "https://seed.bytedance.com/zh/blog"
 BYTEDANCE_SEED_ARTICLE_URL = "https://seed.bytedance.com/zh/blog/seed3d-2-0发布-更高精度-更强可用性"
+GEMINI_API_CHANGELOG_URL = "https://ai.google.dev/gemini-api/docs/changelog.md.txt"
+MISTRAL_NEWS_URL = "https://mistral.ai/news"
+MISTRAL_NEWS_ARTICLE_URL = "https://mistral.ai/news/vibe-remote-agents-mistral-medium-3-5"
+MICROSOFT_AI_BLOG_FEED_URL = (
+    "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
+)
+COHERE_BLOG_URL = "https://cohere.com/blog"
+COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
@@ -78,6 +90,15 @@ RSS_EXPORT_CASES = (
             FIXTURE_ROOT / "google-research-blog" / "export" / "catalyzing-scientific-impact.json"
         ),
         build_adapter=google_research_blog_adapter,
+    ),
+    RssExportCase(
+        source_kind="microsoft-ai-blog",
+        feed_url=MICROSOFT_AI_BLOG_FEED_URL,
+        fixture_root=FIXTURE_ROOT / "microsoft-ai-blog",
+        expected_export_path=(
+            FIXTURE_ROOT / "microsoft-ai-blog" / "export" / "frontier-transformation-readiness.json"
+        ),
+        build_adapter=microsoft_ai_blog_adapter,
     ),
 )
 
@@ -164,6 +185,45 @@ WEB_EXPORT_CASES = (
         },
         expected_export_path=FIXTURE_ROOT / "bytedance-seed-blog" / "export" / "seed3d-2-0.json",
         build_adapter=lambda fetcher: bytedance_seed_blog_adapter(web_fetcher=fetcher),
+    ),
+    WebExportCase(
+        source_kind="gemini-api-changelog",
+        pages={
+            GEMINI_API_CHANGELOG_URL: (
+                FIXTURE_ROOT / "gemini-api-changelog" / "raw" / "changelog.md"
+            ).read_text()
+        },
+        expected_export_path=(FIXTURE_ROOT / "gemini-api-changelog" / "export" / "2026-05-07.json"),
+        build_adapter=lambda fetcher: gemini_api_changelog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="gemini-3.1-flash-lite",
+    ),
+    WebExportCase(
+        source_kind="mistral-news",
+        pages={
+            MISTRAL_NEWS_URL: (FIXTURE_ROOT / "mistral-news" / "raw" / "index.html").read_text(),
+            MISTRAL_NEWS_ARTICLE_URL: (
+                FIXTURE_ROOT / "mistral-news" / "raw" / "vibe-remote-agents-mistral-medium-3-5.html"
+            ).read_text(),
+        },
+        expected_export_path=FIXTURE_ROOT / "mistral-news" / "export" / "vibe-remote-agents.json",
+        build_adapter=lambda fetcher: mistral_news_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Remote coding sessions run in the cloud",
+        excluded_excerpts=("Footer noise",),
+    ),
+    WebExportCase(
+        source_kind="cohere-blog",
+        pages={
+            COHERE_BLOG_URL: (FIXTURE_ROOT / "cohere-blog" / "raw" / "index.html").read_text(),
+            COHERE_BLOG_ARTICLE_URL: (
+                FIXTURE_ROOT / "cohere-blog" / "raw" / "cohere-sovereign-ai-nvidia.html"
+            ).read_text(),
+        },
+        expected_export_path=FIXTURE_ROOT
+        / "cohere-blog"
+        / "export"
+        / "cohere-sovereign-ai-nvidia.json",
+        build_adapter=lambda fetcher: cohere_blog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Together with NVIDIA",
     ),
 )
 

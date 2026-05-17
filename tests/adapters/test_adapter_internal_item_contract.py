@@ -12,10 +12,14 @@ from shiyi import (
     InternalItem,
     anthropic_news_adapter,
     bytedance_seed_blog_adapter,
+    cohere_blog_adapter,
     deepmind_blog_adapter,
     deepseek_news_adapter,
+    gemini_api_changelog_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
+    microsoft_ai_blog_adapter,
+    mistral_news_adapter,
     moonshot_kimi_changelog_adapter,
     openai_news_adapter,
     z_ai_blog_adapter,
@@ -35,6 +39,10 @@ DEEPSEEK_FIXTURE_ROOT = FIXTURE_ROOT / "deepseek-news"
 Z_AI_FIXTURE_ROOT = FIXTURE_ROOT / "z-ai-blog"
 MOONSHOT_KIMI_FIXTURE_ROOT = FIXTURE_ROOT / "moonshot-kimi-changelog"
 BYTEDANCE_SEED_FIXTURE_ROOT = FIXTURE_ROOT / "bytedance-seed-blog"
+GEMINI_API_FIXTURE_ROOT = FIXTURE_ROOT / "gemini-api-changelog"
+MISTRAL_NEWS_FIXTURE_ROOT = FIXTURE_ROOT / "mistral-news"
+MICROSOFT_AI_BLOG_FIXTURE_ROOT = FIXTURE_ROOT / "microsoft-ai-blog"
+COHERE_BLOG_FIXTURE_ROOT = FIXTURE_ROOT / "cohere-blog"
 ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
@@ -49,6 +57,14 @@ Z_AI_BLOG_ASSET_URL = "https://z.ai/blog/assets/glm-5.1-sEcXPNR5.js"
 MOONSHOT_KIMI_CHANGELOG_URL = "https://platform.kimi.com/blog/posts/changelog"
 BYTEDANCE_SEED_BLOG_URL = "https://seed.bytedance.com/zh/blog"
 BYTEDANCE_SEED_ARTICLE_URL = "https://seed.bytedance.com/zh/blog/seed3d-2-0发布-更高精度-更强可用性"
+GEMINI_API_CHANGELOG_URL = "https://ai.google.dev/gemini-api/docs/changelog.md.txt"
+MISTRAL_NEWS_URL = "https://mistral.ai/news"
+MISTRAL_NEWS_ARTICLE_URL = "https://mistral.ai/news/vibe-remote-agents-mistral-medium-3-5"
+MICROSOFT_AI_BLOG_FEED_URL = (
+    "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
+)
+COHERE_BLOG_URL = "https://cohere.com/blog"
+COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
 CLAUDE_DESIGN_URL = "https://www.anthropic.com/news/claude-design-anthropic-labs"
 ANTHROPIC_MINIMAL_URL = "https://www.anthropic.com/news/minimal-contract"
 ANTHROPIC_SECOND_URL = "https://www.anthropic.com/news/second-contract"
@@ -67,6 +83,7 @@ class RssBuiltinCase(NamedTuple):
     feed_url: str
     source_kind: str
     adapter_name: str
+    content_depth: str
     build_adapter: Callable[[RssFeed, CaptureWindow | None], Adapter]
 
 
@@ -201,6 +218,76 @@ CONTRACT_CASES = (
         expected_paths=(BYTEDANCE_SEED_FIXTURE_ROOT / "internal-item" / "seed3d-2-0.json",),
     ),
     ContractCase(
+        source_name="gemini-api-changelog",
+        build_adapter=lambda: gemini_api_changelog_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    GEMINI_API_CHANGELOG_URL: (
+                        GEMINI_API_FIXTURE_ROOT / "raw" / "changelog.md"
+                    ).read_text()
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(GEMINI_API_FIXTURE_ROOT / "internal-item" / "2026-05-07.json",),
+    ),
+    ContractCase(
+        source_name="mistral-news",
+        build_adapter=lambda: mistral_news_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    MISTRAL_NEWS_URL: (
+                        MISTRAL_NEWS_FIXTURE_ROOT / "raw" / "index.html"
+                    ).read_text(),
+                    MISTRAL_NEWS_ARTICLE_URL: (
+                        MISTRAL_NEWS_FIXTURE_ROOT
+                        / "raw"
+                        / "vibe-remote-agents-mistral-medium-3-5.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(MISTRAL_NEWS_FIXTURE_ROOT / "internal-item" / "vibe-remote-agents.json",),
+    ),
+    ContractCase(
+        source_name="microsoft-ai-blog",
+        build_adapter=lambda: microsoft_ai_blog_adapter(
+            rss_fetcher=FakeRssFetcher(
+                {
+                    MICROSOFT_AI_BLOG_FEED_URL: RssFeed.model_validate_json(
+                        (MICROSOFT_AI_BLOG_FIXTURE_ROOT / "raw" / "feed.json").read_text()
+                    )
+                }
+            )
+        ),
+        expected_paths=(
+            MICROSOFT_AI_BLOG_FIXTURE_ROOT
+            / "internal-item"
+            / "frontier-transformation-readiness.json",
+        ),
+    ),
+    ContractCase(
+        source_name="cohere-blog",
+        build_adapter=lambda: cohere_blog_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    COHERE_BLOG_URL: (COHERE_BLOG_FIXTURE_ROOT / "raw" / "index.html").read_text(),
+                    COHERE_BLOG_ARTICLE_URL: (
+                        COHERE_BLOG_FIXTURE_ROOT / "raw" / "cohere-sovereign-ai-nvidia.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(
+            COHERE_BLOG_FIXTURE_ROOT / "internal-item" / "cohere-sovereign-ai-nvidia.json",
+        ),
+    ),
+    ContractCase(
         source_name="anthropic",
         build_adapter=lambda: anthropic_news_adapter(
             limit=1,
@@ -226,6 +313,7 @@ RSS_BUILTIN_CASES = (
         feed_url=OPENAI_RSS_URL,
         source_kind="openai-news",
         adapter_name="openai-news-rss",
+        content_depth="summary_only",
         build_adapter=lambda feed, window: openai_news_adapter(
             rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}), window=window
         ),
@@ -235,6 +323,7 @@ RSS_BUILTIN_CASES = (
         feed_url=HUGGINGFACE_RSS_URL,
         source_kind="huggingface-blog",
         adapter_name="huggingface-blog-rss",
+        content_depth="summary_only",
         build_adapter=lambda feed, window: huggingface_blog_adapter(
             rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}), window=window
         ),
@@ -244,8 +333,19 @@ RSS_BUILTIN_CASES = (
         feed_url=GOOGLE_RESEARCH_RSS_URL,
         source_kind="google-research-blog",
         adapter_name="google-research-blog-rss",
+        content_depth="summary_only",
         build_adapter=lambda feed, window: google_research_blog_adapter(
             rss_fetcher=FakeRssFetcher({GOOGLE_RESEARCH_RSS_URL: feed}), window=window
+        ),
+    ),
+    RssBuiltinCase(
+        source_name="microsoft-ai-blog",
+        feed_url=MICROSOFT_AI_BLOG_FEED_URL,
+        source_kind="microsoft-ai-blog",
+        adapter_name="microsoft-ai-blog-rss",
+        content_depth="feed_full_content",
+        build_adapter=lambda feed, window: microsoft_ai_blog_adapter(
+            rss_fetcher=FakeRssFetcher({MICROSOFT_AI_BLOG_FEED_URL: feed}), window=window
         ),
     ),
 )
@@ -298,7 +398,7 @@ def test_rss_builtin_minimal_raw_payload_maps_to_valid_internal_item(
     assert item.metadata == {
         "title": "Minimal RSS Entry",
         "link": None,
-        "content_depth": "summary_only",
+        "content_depth": case.content_depth,
     }
     assert item.payload == TextPayload(text="Minimal RSS Entry")
     assert _dump_for_leak_check(item).isdisjoint({"raw_payload", "rss_guid", "feedparser"})

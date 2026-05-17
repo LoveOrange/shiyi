@@ -18,7 +18,10 @@ from pydantic import BaseModel
 from shiyi.adapters.anthropic import anthropic_news_adapter
 from shiyi.adapters.bytedance_seed import bytedance_seed_blog_adapter
 from shiyi.adapters.changelog import (
+    cohere_blog_adapter,
     deepseek_news_adapter,
+    gemini_api_changelog_adapter,
+    mistral_news_adapter,
     moonshot_kimi_changelog_adapter,
     z_ai_blog_adapter,
 )
@@ -26,6 +29,7 @@ from shiyi.adapters.deepmind import deepmind_blog_adapter
 from shiyi.adapters.rss import (
     google_research_blog_adapter,
     huggingface_blog_adapter,
+    microsoft_ai_blog_adapter,
     openai_news_adapter,
 )
 from shiyi.domain.models import (
@@ -55,6 +59,10 @@ SourceName = Literal[
     "z-ai-blog",
     "moonshot-kimi-changelog",
     "bytedance-seed-blog",
+    "gemini-api-changelog",
+    "mistral-news",
+    "microsoft-ai-blog",
+    "cohere-blog",
 ]
 DATE_ONLY_LENGTH = 10
 
@@ -160,6 +168,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "z-ai-blog",
             "moonshot-kimi-changelog",
             "bytedance-seed-blog",
+            "gemini-api-changelog",
+            "mistral-news",
+            "microsoft-ai-blog",
+            "cohere-blog",
         ],
         required=True,
     )
@@ -214,7 +226,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_capture(  # noqa: PLR0913
+async def run_capture(  # noqa: PLR0912, PLR0913
     *,
     source: SourceName,
     workspace: Path,
@@ -246,6 +258,14 @@ async def run_capture(  # noqa: PLR0913
         adapter = moonshot_kimi_changelog_adapter(window=window)
     elif source == "bytedance-seed-blog":
         adapter = bytedance_seed_blog_adapter(window=window)
+    elif source == "gemini-api-changelog":
+        adapter = gemini_api_changelog_adapter(window=window)
+    elif source == "mistral-news":
+        adapter = mistral_news_adapter(window=window)
+    elif source == "microsoft-ai-blog":
+        adapter = microsoft_ai_blog_adapter(window=window)
+    elif source == "cohere-blog":
+        adapter = cohere_blog_adapter(window=window)
     else:
         adapter = anthropic_news_adapter(
             window=window,

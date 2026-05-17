@@ -83,6 +83,9 @@ class RssFeedAdapter:
 
 
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+MICROSOFT_AI_BLOG_FEED_URL = (
+    "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
+)
 
 
 def _rss_payload(*, title: str, link: str | None, html: str) -> HtmlPayload | TextPayload:
@@ -169,4 +172,22 @@ def google_research_blog_adapter(
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
+    )
+
+
+def microsoft_ai_blog_adapter(
+    *,
+    limit: int | None = None,
+    window: CaptureWindow | None = None,
+    rss_fetcher: RssFetcher | None = None,
+) -> RssFeedAdapter:
+    """Create the default Microsoft AI blog RSS adapter."""
+    return RssFeedAdapter(
+        name="microsoft-ai-blog-rss",
+        feed_url=MICROSOFT_AI_BLOG_FEED_URL,
+        source_kind="microsoft-ai-blog",
+        limit=limit,
+        window=window,
+        rss_fetcher=rss_fetcher,
+        content_depth="feed_full_content",
     )
