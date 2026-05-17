@@ -12,6 +12,7 @@ from shiyi import (
     InternalItem,
     anthropic_news_adapter,
     bytedance_seed_blog_adapter,
+    deepmind_blog_adapter,
     deepseek_news_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
@@ -29,6 +30,7 @@ FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_FIXTURE_ROOT = FIXTURE_ROOT / "openai-news"
 HUGGINGFACE_FIXTURE_ROOT = FIXTURE_ROOT / "huggingface-blog"
 GOOGLE_RESEARCH_FIXTURE_ROOT = FIXTURE_ROOT / "google-research-blog"
+DEEPMIND_FIXTURE_ROOT = FIXTURE_ROOT / "deepmind-blog"
 DEEPSEEK_FIXTURE_ROOT = FIXTURE_ROOT / "deepseek-news"
 Z_AI_FIXTURE_ROOT = FIXTURE_ROOT / "z-ai-blog"
 MOONSHOT_KIMI_FIXTURE_ROOT = FIXTURE_ROOT / "moonshot-kimi-changelog"
@@ -37,6 +39,8 @@ ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
 GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
+DEEPMIND_RSS_URL = "https://deepmind.google/blog/rss.xml"
+DEEPMIND_ALPHAEVOLVE_URL = "https://deepmind.google/blog/alphaevolve-impact/"
 DEEPSEEK_UPDATES_URL = "https://api-docs.deepseek.com/updates"
 DEEPSEEK_NEWS_URL = "https://api-docs.deepseek.com/news/news260424"
 Z_AI_RELEASE_NOTES_URL = "https://docs.z.ai/release-notes/new-released.md"
@@ -107,6 +111,28 @@ CONTRACT_CASES = (
         expected_paths=(
             GOOGLE_RESEARCH_FIXTURE_ROOT / "internal-item" / "catalyzing-scientific-impact.json",
         ),
+    ),
+    ContractCase(
+        source_name="deepmind-blog",
+        build_adapter=lambda: deepmind_blog_adapter(
+            limit=1,
+            rss_fetcher=FakeRssFetcher(
+                {
+                    DEEPMIND_RSS_URL: RssFeed.model_validate_json(
+                        (DEEPMIND_FIXTURE_ROOT / "raw" / "feed.json").read_text()
+                    )
+                }
+            ),
+            web_fetcher=FakeWebFetcher(
+                {
+                    DEEPMIND_ALPHAEVOLVE_URL: (
+                        DEEPMIND_FIXTURE_ROOT / "raw" / "alphaevolve-impact.html"
+                    ).read_text()
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(DEEPMIND_FIXTURE_ROOT / "internal-item" / "alphaevolve-impact.json",),
     ),
     ContractCase(
         source_name="deepseek-news",

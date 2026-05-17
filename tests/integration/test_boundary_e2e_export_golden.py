@@ -15,6 +15,7 @@ from shiyi import (
     HtmlMarkdownNormalizer,
     InternalItem,
     bytedance_seed_blog_adapter,
+    deepmind_blog_adapter,
     deepseek_news_adapter,
     export_items,
     google_research_blog_adapter,
@@ -33,6 +34,8 @@ FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
 GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
+DEEPMIND_RSS_URL = "https://deepmind.google/blog/rss.xml"
+DEEPMIND_ALPHAEVOLVE_URL = "https://deepmind.google/blog/alphaevolve-impact/"
 DEEPSEEK_UPDATES_URL = "https://api-docs.deepseek.com/updates"
 DEEPSEEK_NEWS_URL = "https://api-docs.deepseek.com/news/news260424"
 Z_AI_RELEASE_NOTES_URL = "https://docs.z.ai/release-notes/new-released.md"
@@ -85,9 +88,32 @@ class WebExportCase(NamedTuple):
     expected_export_path: Path
     build_adapter: Callable[[FakeWebFetcher], Adapter]
     expected_excerpt: str | None = None
+    excluded_excerpts: tuple[str, ...] = ()
 
 
 WEB_EXPORT_CASES = (
+    WebExportCase(
+        source_kind="deepmind-blog",
+        pages={
+            DEEPMIND_ALPHAEVOLVE_URL: (
+                FIXTURE_ROOT / "deepmind-blog" / "raw" / "alphaevolve-impact.html"
+            ).read_text()
+        },
+        expected_export_path=FIXTURE_ROOT / "deepmind-blog" / "export" / "alphaevolve-impact.json",
+        build_adapter=lambda fetcher: deepmind_blog_adapter(
+            limit=1,
+            rss_fetcher=FakeRssFetcher(
+                {
+                    DEEPMIND_RSS_URL: RssFeed.model_validate_json(
+                        (FIXTURE_ROOT / "deepmind-blog" / "raw" / "feed.json").read_text()
+                    )
+                }
+            ),
+            web_fetcher=fetcher,
+        ),
+        expected_excerpt="Improving AI infrastructure",
+        excluded_excerpts=("Related posts", "Explore our next generation AI systems"),
+    ),
     WebExportCase(
         source_kind="deepseek-news",
         pages={
@@ -212,6 +238,8 @@ def test_fixture_backed_web_ingest_persist_export_matches_golden(
     assert "Canonical link:" in normalized_content
     if case.expected_excerpt is not None:
         assert case.expected_excerpt in normalized_content
+    for excluded_excerpt in case.excluded_excerpts:
+        assert excluded_excerpt not in normalized_content
 
 
 def test_summary_only_rss_exports_are_disambiguated_by_title_and_link(tmp_path: Path) -> None:

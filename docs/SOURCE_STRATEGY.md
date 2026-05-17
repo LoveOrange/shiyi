@@ -115,12 +115,13 @@ Current built-ins:
 - `anthropic` — Anthropic news index parser;
 - `huggingface-blog` — Hugging Face Blog RSS feed;
 - `google-research-blog` — Google Research Blog RSS feed;
+- `deepmind-blog` — Google DeepMind Blog RSS discovery plus canonical article detail pages;
 - `deepseek-news` — DeepSeek official news pages discovered from API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
 - `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages.
 
-These provide three patterns: reusable feed capture, index/page capture, and stable official changelog/embedded-data capture.
+These provide four patterns: reusable feed capture, RSS-discovery/detail-page capture, index/page capture, and stable official changelog/embedded-data capture.
 The P2.5 slices intentionally keep implementation hand-wired; source registry/config belongs to P3.
 
 ## 5. Recommended expansion batches
@@ -137,6 +138,10 @@ Recommended candidates:
 4. Microsoft AI / Azure AI official updates;
 5. Mistral official updates;
 6. Cohere official updates.
+
+Overseas official Slice B implementation outcome:
+
+- `deepmind-blog` — Google DeepMind Blog RSS at `https://deepmind.google/blog/rss.xml` is used only as discovery. Emitted source identity is the canonical article URL such as `https://deepmind.google/blog/alphaevolve-impact/`; normalized/exported content comes from the article-scoped detail body, not the feed summary or whole page chrome.
 
 China provider P2.5-03 audit and implementation outcome:
 
@@ -212,6 +217,7 @@ Examples:
 - `anthropic-news` for Anthropic news content;
 - `huggingface-blog` for Hugging Face Blog RSS content;
 - `google-research-blog` for Google Research Blog RSS content;
+- `deepmind-blog` for Google DeepMind Blog article content discovered through RSS;
 - `deepseek-news` for DeepSeek official news article content;
 - `z-ai-blog` for Z.ai / GLM official blog article content;
 - `moonshot-kimi-changelog` for Kimi platform changelog entries;

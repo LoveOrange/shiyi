@@ -108,6 +108,7 @@ Current implementation slices:
 
 - `huggingface-blog` through the reusable RSS adapter path;
 - `google-research-blog` through the reusable RSS adapter path;
+- `deepmind-blog` through a narrow RSS-discovery/detail-page adapter with the feed used only as a discovery index;
 - `deepseek-news` through an official news adapter with the updates page used only as a discovery index;
 - `z-ai-blog` through an official blog adapter with release notes used only as a discovery index;
 - `moonshot-kimi-changelog` through a static changelog-page adapter;

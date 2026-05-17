@@ -22,6 +22,7 @@ from shiyi.adapters.changelog import (
     moonshot_kimi_changelog_adapter,
     z_ai_blog_adapter,
 )
+from shiyi.adapters.deepmind import deepmind_blog_adapter
 from shiyi.adapters.rss import (
     google_research_blog_adapter,
     huggingface_blog_adapter,
@@ -49,6 +50,7 @@ SourceName = Literal[
     "anthropic",
     "huggingface-blog",
     "google-research-blog",
+    "deepmind-blog",
     "deepseek-news",
     "z-ai-blog",
     "moonshot-kimi-changelog",
@@ -153,6 +155,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "anthropic",
             "huggingface-blog",
             "google-research-blog",
+            "deepmind-blog",
             "deepseek-news",
             "z-ai-blog",
             "moonshot-kimi-changelog",
@@ -233,6 +236,8 @@ async def run_capture(  # noqa: PLR0913
         adapter = huggingface_blog_adapter(window=window)
     elif source == "google-research-blog":
         adapter = google_research_blog_adapter(window=window)
+    elif source == "deepmind-blog":
+        adapter = deepmind_blog_adapter(window=window)
     elif source == "deepseek-news":
         adapter = deepseek_news_adapter(window=window)
     elif source == "z-ai-blog":

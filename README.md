@@ -142,6 +142,7 @@ Current built-in sources:
 - `anthropic` — Anthropic news index parser.
 - `huggingface-blog` — Hugging Face Blog RSS feed.
 - `google-research-blog` — Google Research Blog RSS feed.
+- `deepmind-blog` — Google DeepMind Blog RSS discovery plus canonical article detail pages.
 - `deepseek-news` — DeepSeek official news article pages discovered from API docs updates.
 - `z-ai-blog` — Z.ai / GLM official blog posts discovered from release notes.
 - `moonshot-kimi-changelog` — Kimi Open Platform changelog.

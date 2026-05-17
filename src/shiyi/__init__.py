@@ -14,6 +14,7 @@ from shiyi.adapters.changelog import (
     z_ai_blog_adapter,
     z_ai_release_notes_adapter,
 )
+from shiyi.adapters.deepmind import DeepMindArticle, DeepMindBlogAdapter, deepmind_blog_adapter
 from shiyi.adapters.rss import (
     RssFeedAdapter,
     google_research_blog_adapter,
@@ -70,6 +71,8 @@ __all__ = [
     "ChangelogPageAdapter",
     "ClassifyTask",
     "ContentDepth",
+    "DeepMindArticle",
+    "DeepMindBlogAdapter",
     "EnrichmentResult",
     "EventRecord",
     "EventRecordStore",
@@ -92,6 +95,7 @@ __all__ = [
     "anthropic_news_adapter",
     "bytedance_seed_blog_adapter",
     "content_depth_from_metadata",
+    "deepmind_blog_adapter",
     "deepseek_news_adapter",
     "deepseek_updates_adapter",
     "export_items",

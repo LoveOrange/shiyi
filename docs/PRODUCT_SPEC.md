@@ -143,12 +143,13 @@ Current built-in sources:
 - `anthropic` — Anthropic news index parser;
 - `huggingface-blog` — Hugging Face Blog RSS feed;
 - `google-research-blog` — Google Research Blog RSS feed;
+- `deepmind-blog` — Google DeepMind Blog RSS discovery plus canonical article detail pages;
 - `deepseek-news` — DeepSeek official news article pages, discovered from the API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts, discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
 - `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata.
 
-These prove three adapter patterns: reusable feed-style capture, index-page/article capture, and stable official changelog/embedded-data capture.
+These prove four adapter patterns: reusable feed-style capture, RSS-discovery/detail-page capture, index-page/article capture, and stable official changelog/embedded-data capture.
 The P2.5 slices are still deliberately small; source registry/config and broader batch scale-out remain P3 work.
 
 P2.5 source readiness now requires full-content capture. A built-in source is not ready for AI Weekly consumption if its normalized/exported content is only a feed summary, index excerpt, or changelog teaser while a canonical detail page or official detail payload exists.
