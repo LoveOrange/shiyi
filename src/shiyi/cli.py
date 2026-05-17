@@ -38,7 +38,7 @@ DATE_ONLY_LENGTH = 10
 class CaptureSummary:
     """Human and machine-readable capture run summary."""
 
-    source: SourceName
+    source: str
     workspace: str
     processed: int
     total_events: int
@@ -189,7 +189,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 async def run_capture(  # noqa: PLR0913
     *,
-    source: SourceName,
+    source: SourceName | str,
     workspace: Path,
     limit: int | None,
     max_items: int | None = None,
@@ -220,7 +220,7 @@ async def run_capture(  # noqa: PLR0913
 
 def _capture_summary(  # noqa: PLR0913
     *,
-    source: SourceName,
+    source: SourceName | str,
     workspace: Path,
     run_summary: PipelineRunSummary | None = None,
     processed: int | None = None,
@@ -260,7 +260,7 @@ def _capture_summary(  # noqa: PLR0913
         error_messages = tuple(errors)
 
     return CaptureSummary(
-        source=source,
+        source=source.value if isinstance(source, SourceName) else source,
         workspace=str(workspace),
         processed=processed_count,
         total_events=total_events,

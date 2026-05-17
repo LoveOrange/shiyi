@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal, Protocol, TypeAlias
 
@@ -35,21 +35,25 @@ from shiyi.domain.models import CaptureWindow, ContentDepth
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.adapter import Adapter
 
-SourceName = Literal[
-    "openai",
-    "anthropic",
-    "huggingface-blog",
-    "google-research-blog",
-    "deepmind-blog",
-    "deepseek-news",
-    "z-ai-blog",
-    "moonshot-kimi-changelog",
-    "bytedance-seed-blog",
-    "gemini-api-changelog",
-    "mistral-news",
-    "microsoft-ai-blog",
-    "cohere-blog",
-]
+
+class SourceName(StrEnum):
+    """Canonical built-in source names accepted by capture commands."""
+
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    HUGGINGFACE_BLOG = "huggingface-blog"
+    GOOGLE_RESEARCH_BLOG = "google-research-blog"
+    DEEPMIND_BLOG = "deepmind-blog"
+    DEEPSEEK_NEWS = "deepseek-news"
+    Z_AI_BLOG = "z-ai-blog"
+    MOONSHOT_KIMI_CHANGELOG = "moonshot-kimi-changelog"
+    BYTEDANCE_SEED_BLOG = "bytedance-seed-blog"
+    GEMINI_API_CHANGELOG = "gemini-api-changelog"
+    MISTRAL_NEWS = "mistral-news"
+    MICROSOFT_AI_BLOG = "microsoft-ai-blog"
+    COHERE_BLOG = "cohere-blog"
+
+
 SourceFamily: TypeAlias = Literal[
     "rss",
     "article-index",
@@ -129,7 +133,7 @@ class SourceSummary:
 
 
 def build_source_adapter(
-    source: SourceName,
+    source: SourceName | str,
     *,
     window: CaptureWindow | None,
     raw_cache_root: Path | None = None,
@@ -138,13 +142,14 @@ def build_source_adapter(
     return source_definition(source).create_adapter(window=window, raw_cache_root=raw_cache_root)
 
 
-def source_definition(source: SourceName) -> SourceDefinition:
+def source_definition(source: SourceName | str) -> SourceDefinition:
     """Return one built-in source definition by source name."""
     try:
-        return _SOURCE_DEFINITIONS_BY_NAME[source]
-    except KeyError as error:
+        source_name = source if isinstance(source, SourceName) else SourceName(source)
+    except ValueError as error:
         msg = f"unknown source: {source}"
         raise ValueError(msg) from error
+    return _SOURCE_DEFINITIONS_BY_NAME[source_name]
 
 
 def iter_builtin_sources() -> tuple[SourceDefinition, ...]:
@@ -167,7 +172,7 @@ def source_summaries(*, include_backlog: bool = False) -> list[SourceSummary]:
 
 def _source_summary(definition: SourceDefinition) -> SourceSummary:
     return SourceSummary(
-        name=definition.name,
+        name=definition.name.value,
         status="built-in",
         source_kind=definition.source_kind,
         adapter_name=definition.adapter_name,
@@ -311,13 +316,9 @@ def _ignore_raw_cache_root(raw_cache_root: Path | None) -> None:
     _ = raw_cache_root
 
 
-def _source_names(definitions: Iterable[SourceDefinition]) -> tuple[SourceName, ...]:
-    return tuple(definition.name for definition in definitions)
-
-
 SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
     SourceDefinition(
-        name="openai",
+        name=SourceName.OPENAI,
         source_kind="openai-news",
         adapter_name="openai-news-rss",
         family="rss",
@@ -328,7 +329,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_openai_adapter,
     ),
     SourceDefinition(
-        name="anthropic",
+        name=SourceName.ANTHROPIC,
         source_kind="anthropic-news",
         adapter_name="anthropic-news-index",
         family="article-index",
@@ -339,7 +340,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_anthropic_adapter,
     ),
     SourceDefinition(
-        name="huggingface-blog",
+        name=SourceName.HUGGINGFACE_BLOG,
         source_kind="huggingface-blog",
         adapter_name="huggingface-blog-rss",
         family="rss",
@@ -350,7 +351,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_huggingface_blog_adapter,
     ),
     SourceDefinition(
-        name="google-research-blog",
+        name=SourceName.GOOGLE_RESEARCH_BLOG,
         source_kind="google-research-blog",
         adapter_name="google-research-blog-rss",
         family="rss",
@@ -361,7 +362,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_google_research_blog_adapter,
     ),
     SourceDefinition(
-        name="deepmind-blog",
+        name=SourceName.DEEPMIND_BLOG,
         source_kind="deepmind-blog",
         adapter_name="deepmind-blog-detail",
         family="rss-detail",
@@ -372,7 +373,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_deepmind_blog_adapter,
     ),
     SourceDefinition(
-        name="deepseek-news",
+        name=SourceName.DEEPSEEK_NEWS,
         source_kind="deepseek-news",
         adapter_name="deepseek-news-article",
         family="article-index",
@@ -383,7 +384,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_deepseek_news_adapter,
     ),
     SourceDefinition(
-        name="z-ai-blog",
+        name=SourceName.Z_AI_BLOG,
         source_kind="z-ai-blog",
         adapter_name="z-ai-blog-article",
         family="article-index",
@@ -394,7 +395,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_z_ai_blog_adapter,
     ),
     SourceDefinition(
-        name="moonshot-kimi-changelog",
+        name=SourceName.MOONSHOT_KIMI_CHANGELOG,
         source_kind="moonshot-kimi-changelog",
         adapter_name="moonshot-kimi-changelog-page",
         family="changelog",
@@ -405,7 +406,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_moonshot_kimi_changelog_adapter,
     ),
     SourceDefinition(
-        name="bytedance-seed-blog",
+        name=SourceName.BYTEDANCE_SEED_BLOG,
         source_kind="bytedance-seed-blog",
         adapter_name="bytedance-seed-blog-ssr",
         family="ssr-detail",
@@ -416,7 +417,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_bytedance_seed_blog_adapter,
     ),
     SourceDefinition(
-        name="gemini-api-changelog",
+        name=SourceName.GEMINI_API_CHANGELOG,
         source_kind="gemini-api-changelog",
         adapter_name="gemini-api-changelog-page",
         family="changelog",
@@ -427,7 +428,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_gemini_api_changelog_adapter,
     ),
     SourceDefinition(
-        name="mistral-news",
+        name=SourceName.MISTRAL_NEWS,
         source_kind="mistral-news",
         adapter_name="mistral-news-article",
         family="article-index",
@@ -438,7 +439,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_mistral_news_adapter,
     ),
     SourceDefinition(
-        name="microsoft-ai-blog",
+        name=SourceName.MICROSOFT_AI_BLOG,
         source_kind="microsoft-ai-blog",
         adapter_name="microsoft-ai-blog-rss",
         family="rss",
@@ -449,7 +450,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_microsoft_ai_blog_adapter,
     ),
     SourceDefinition(
-        name="cohere-blog",
+        name=SourceName.COHERE_BLOG,
         source_kind="cohere-blog",
         adapter_name="cohere-blog-article",
         family="article-index",
@@ -460,7 +461,9 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         factory=_cohere_blog_adapter,
     ),
 )
-BUILTIN_SOURCE_NAMES: tuple[SourceName, ...] = _source_names(SOURCE_DEFINITIONS)
+BUILTIN_SOURCE_NAMES: tuple[str, ...] = tuple(
+    definition.name.value for definition in SOURCE_DEFINITIONS
+)
 _SOURCE_DEFINITIONS_BY_NAME: dict[SourceName, SourceDefinition] = {
     definition.name: definition for definition in SOURCE_DEFINITIONS
 }

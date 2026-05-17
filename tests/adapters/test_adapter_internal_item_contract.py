@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
-from typing import NamedTuple, get_args
+from typing import NamedTuple
 
 import pytest
 
@@ -28,7 +28,7 @@ from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFeed
-from shiyi.sources import SourceName
+from shiyi.sources import BUILTIN_SOURCE_NAMES
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
 OPENAI_FIXTURE_ROOT = FIXTURE_ROOT / "openai-news"
@@ -73,13 +73,13 @@ FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
 class ContractCase(NamedTuple):
-    source_name: SourceName
+    source_name: str
     build_adapter: Callable[[], Adapter]
     expected_paths: tuple[Path, ...]
 
 
 class RssBuiltinCase(NamedTuple):
-    source_name: SourceName
+    source_name: str
     feed_url: str
     source_kind: str
     adapter_name: str
@@ -352,7 +352,7 @@ RSS_BUILTIN_CASES = (
 
 
 def test_every_builtin_source_has_executable_contract_case() -> None:
-    assert {case.source_name for case in CONTRACT_CASES} == set(get_args(SourceName))
+    assert {case.source_name for case in CONTRACT_CASES} == set(BUILTIN_SOURCE_NAMES)
 
 
 @pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda case: case.source_name)

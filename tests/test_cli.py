@@ -72,7 +72,7 @@ def test_main_capture_prints_summary(
 
     async def fake_run_capture(  # noqa: PLR0913
         *,
-        source: SourceName,
+        source: SourceName | str,
         workspace: Path,
         limit: int | None,
         max_items: int | None = None,

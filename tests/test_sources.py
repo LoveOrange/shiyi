@@ -1,5 +1,3 @@
-from typing import cast, get_args
-
 import pytest
 
 from shiyi import (
@@ -14,9 +12,9 @@ from shiyi import (
 from shiyi.domain.models import CaptureWindow
 
 
-def test_source_registry_covers_builtin_source_name_literal() -> None:
-    assert tuple(get_args(SourceName)) == BUILTIN_SOURCE_NAMES
-    assert tuple(source.name for source in iter_builtin_sources()) == BUILTIN_SOURCE_NAMES
+def test_source_registry_covers_builtin_source_name_enum() -> None:
+    assert tuple(source.value for source in SourceName) == BUILTIN_SOURCE_NAMES
+    assert tuple(source.name.value for source in iter_builtin_sources()) == BUILTIN_SOURCE_NAMES
 
 
 def test_source_registry_builds_adapter_without_cli_branching() -> None:
@@ -56,4 +54,4 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
 
 def test_source_registry_rejects_unknown_source() -> None:
     with pytest.raises(ValueError, match="unknown source"):
-        source_definition(cast(SourceName, "not-a-source"))
+        source_definition("not-a-source")
