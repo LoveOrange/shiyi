@@ -290,6 +290,13 @@ A new Adapter/source should not be merged until it has:
 
 If a source cannot satisfy this gate yet, merge it behind an explicit experimental path and keep it out of default source lists.
 
+The `shiyi sources --include-backlog` review contract must also stay covered by
+regression tests. The JSON rows should distinguish ready, degraded, and deferred
+readiness states; listing-only, summary-only, canonical-detail, and structured-API capture
+modes; source class; defer reason; traceability refs; and whether the row counts as
+official source-ready coverage. High-noise/community backlog rows must be explicit and
+must never count as official source-ready coverage.
+
 ## 8. CI expectations
 
 Default CI should run:

@@ -37,19 +37,33 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
         summary for summary in summaries if summary.name == "google-research-blog"
     )
     assert microsoft.status == "built-in"
+    assert microsoft.source_class == "official"
+    assert microsoft.detail_capture_mode == "listing-only"
+    assert microsoft.readiness_status == "ready"
     assert microsoft.default_content_depth == "feed_full_content"
     assert microsoft.source_ready is True
+    assert microsoft.counts_as_official_source_ready is True
     assert openai.source_ready is False
+    assert openai.detail_capture_mode == "summary-only"
+    assert openai.readiness_status == "degraded"
+    assert openai.counts_as_official_source_ready is False
     assert openai.default_content_depth == "summary_only"
     assert openai.defer_reason is not None
     assert "canonical detail" in openai.defer_reason
+    assert huggingface.source_class == "official"
+    assert huggingface.detail_capture_mode == "canonical-detail"
+    assert huggingface.readiness_status == "ready"
     assert huggingface.default_content_depth == "full_page"
     assert huggingface.source_ready is True
     assert huggingface.defer_reason is None
+    assert huggingface.counts_as_official_source_ready is True
+    assert google_research.detail_capture_mode == "canonical-detail"
+    assert google_research.readiness_status == "ready"
     assert google_research.default_content_depth == "full_page"
     assert google_research.source_ready is True
     assert google_research.defer_reason is None
     assert all(summary.defer_reason for summary in summaries if summary.source_ready is False)
+    assert all(summary.traceability_refs for summary in summaries)
     assert all(not hasattr(summary, "factory") for summary in summaries)
 
 
@@ -63,8 +77,47 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     )
     assert qwen.status == "deferred"
     assert qwen.bucket == "p3-json-api-fetcher"
+    assert qwen.source_class == "official"
+    assert qwen.detail_capture_mode == "structured-api"
+    assert qwen.readiness_status == "deferred"
+    assert qwen.source_ready is False
+    assert qwen.counts_as_official_source_ready is False
     assert qwen.defer_reason == qwen.notes
+    assert qwen.traceability_refs
+    assert community.source_class == "community"
+    assert community.detail_capture_mode == "listing-only"
+    assert community.readiness_status == "deferred"
     assert community.bucket == "later-high-noise"
+    assert community.source_ready is False
+    assert community.counts_as_official_source_ready is False
+
+
+def test_source_registry_readiness_contract_covers_review_states() -> None:
+    summaries = {summary.name: summary for summary in source_summaries(include_backlog=True)}
+
+    assert summaries["huggingface-blog"].readiness_status == "ready"
+    assert summaries["openai"].readiness_status == "degraded"
+    assert summaries["qwen-research"].readiness_status == "deferred"
+    assert summaries["microsoft-ai-blog"].detail_capture_mode == "listing-only"
+    assert summaries["google-research-blog"].detail_capture_mode == "canonical-detail"
+    assert summaries["bytedance-seed-blog"].detail_capture_mode == "structured-api"
+
+
+def test_high_noise_community_backlog_never_counts_as_official_source_ready() -> None:
+    summaries = source_summaries(include_backlog=True)
+
+    official_coverage_names = {
+        summary.name for summary in summaries if summary.counts_as_official_source_ready
+    }
+    assert "github-trending-or-community-feeds" not in official_coverage_names
+    assert "qwen-research" not in official_coverage_names
+    assert "openai" not in official_coverage_names
+    assert all(
+        not summary.counts_as_official_source_ready
+        for summary in summaries
+        if summary.source_class == "community" or summary.bucket == "later-high-noise"
+    )
+    assert {"huggingface-blog", "google-research-blog"} <= official_coverage_names
 
 
 def test_source_registry_rejects_unknown_source() -> None:

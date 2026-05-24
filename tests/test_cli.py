@@ -189,7 +189,14 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     assert "qwen-research" in names
     microsoft = next(row for row in payload if row["name"] == "microsoft-ai-blog")
     assert microsoft["status"] == "built-in"
+    assert microsoft["readiness_status"] == "ready"
+    assert microsoft["detail_capture_mode"] == "listing-only"
     assert microsoft["default_content_depth"] == "feed_full_content"
+    assert microsoft["counts_as_official_source_ready"] is True
+    qwen = next(row for row in payload if row["name"] == "qwen-research")
+    assert qwen["readiness_status"] == "deferred"
+    assert qwen["detail_capture_mode"] == "structured-api"
+    assert qwen["counts_as_official_source_ready"] is False
 
 
 def test_main_export_prints_normalized_items(

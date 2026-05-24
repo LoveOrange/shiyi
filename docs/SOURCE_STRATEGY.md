@@ -46,6 +46,26 @@ A built-in source should not be merged into default source lists unless it has:
 
 If a source cannot satisfy this gate yet, keep it experimental and out of default source lists.
 
+### 2.1 Registry/status review contract
+
+`shiyi sources --include-backlog` is the machine-readable review surface for source
+readiness. Every row must expose:
+
+- `source_class`: `official` or `community`;
+- `detail_capture_mode`: `listing-only`, `summary-only`, `canonical-detail`, or
+  `structured-api`;
+- `default_content_depth`: one of Shiyi's source-neutral content-depth values when the
+  source is built in;
+- `readiness_status`: `ready`, `degraded`, or `deferred`;
+- `defer_reason`: required for every non-ready row;
+- `traceability_refs`: doc/test/fixture references supporting the row;
+- `counts_as_official_source_ready`: the coverage bit consumers should use for official
+  source-ready counts.
+
+Only official rows with `readiness_status=ready` count as official source-ready coverage.
+`degraded`, `deferred`, `community`, and `later-high-noise` backlog rows must remain
+visible for planning, but they do not count toward M2 official source-ready coverage.
+
 ## 3. Adapter families
 
 ### 3.1 RSS / Atom feed sources
