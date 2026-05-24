@@ -54,6 +54,11 @@ MISTRAL_NEWS_ARTICLE_URL = "https://mistral.ai/news/vibe-remote-agents-mistral-m
 MICROSOFT_AI_BLOG_FEED_URL = (
     "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
 )
+HUGGINGFACE_OPEN_R1_URL = "https://huggingface.co/blog/open-r1"
+GOOGLE_RESEARCH_ARTICLE_URL = (
+    "https://research.google/blog/"
+    "catalyzing-scientific-impact-through-global-partnerships-and-open-resources"
+)
 COHERE_BLOG_URL = "https://cohere.com/blog"
 COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
@@ -64,7 +69,8 @@ class RssExportCase(NamedTuple):
     feed_url: str
     fixture_root: Path
     expected_export_path: Path
-    build_adapter: Callable[..., Adapter]
+    build_adapter: Callable[[RssFeed, FakeWebFetcher | None], Adapter]
+    pages: Mapping[str, str] = {}
 
 
 RSS_EXPORT_CASES = (
@@ -73,14 +79,24 @@ RSS_EXPORT_CASES = (
         feed_url=OPENAI_RSS_URL,
         fixture_root=FIXTURE_ROOT / "openai-news",
         expected_export_path=FIXTURE_ROOT / "openai-news" / "export" / "running-codex-safely.json",
-        build_adapter=openai_news_adapter,
+        build_adapter=lambda feed, _fetcher: openai_news_adapter(
+            rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed})
+        ),
     ),
     RssExportCase(
         source_kind="huggingface-blog",
         feed_url=HUGGINGFACE_RSS_URL,
         fixture_root=FIXTURE_ROOT / "huggingface-blog",
         expected_export_path=FIXTURE_ROOT / "huggingface-blog" / "export" / "open-r1.json",
-        build_adapter=huggingface_blog_adapter,
+        build_adapter=lambda feed, fetcher: huggingface_blog_adapter(
+            rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}),
+            web_fetcher=fetcher,
+        ),
+        pages={
+            HUGGINGFACE_OPEN_R1_URL: (
+                FIXTURE_ROOT / "huggingface-blog" / "raw" / "open-r1.html"
+            ).read_text(),
+        },
     ),
     RssExportCase(
         source_kind="google-research-blog",
@@ -89,7 +105,15 @@ RSS_EXPORT_CASES = (
         expected_export_path=(
             FIXTURE_ROOT / "google-research-blog" / "export" / "catalyzing-scientific-impact.json"
         ),
-        build_adapter=google_research_blog_adapter,
+        build_adapter=lambda feed, fetcher: google_research_blog_adapter(
+            rss_fetcher=FakeRssFetcher({GOOGLE_RESEARCH_RSS_URL: feed}),
+            web_fetcher=fetcher,
+        ),
+        pages={
+            GOOGLE_RESEARCH_ARTICLE_URL: (
+                FIXTURE_ROOT / "google-research-blog" / "raw" / "catalyzing-scientific-impact.html"
+            ).read_text(),
+        },
     ),
     RssExportCase(
         source_kind="microsoft-ai-blog",
@@ -98,7 +122,9 @@ RSS_EXPORT_CASES = (
         expected_export_path=(
             FIXTURE_ROOT / "microsoft-ai-blog" / "export" / "frontier-transformation-readiness.json"
         ),
-        build_adapter=microsoft_ai_blog_adapter,
+        build_adapter=lambda feed, _fetcher: microsoft_ai_blog_adapter(
+            rss_fetcher=FakeRssFetcher({MICROSOFT_AI_BLOG_FEED_URL: feed})
+        ),
     ),
 )
 
@@ -242,7 +268,8 @@ def test_fixture_backed_rss_ingest_persist_export_matches_golden(
     case: RssExportCase,
 ) -> None:
     feed = RssFeed.model_validate_json((case.fixture_root / "raw" / "feed.json").read_text())
-    adapter = case.build_adapter(rss_fetcher=FakeRssFetcher({case.feed_url: feed}))
+    web_fetcher = FakeWebFetcher(case.pages, fetched_at=FETCHED_AT) if case.pages else None
+    adapter = case.build_adapter(feed, web_fetcher)
     pipeline = _pipeline(adapter=adapter, workspace=tmp_path)
 
     summary = asyncio.run(pipeline.run_once())
@@ -251,7 +278,7 @@ def test_fixture_backed_rss_ingest_persist_export_matches_golden(
         for item in export_items(
             workspace=tmp_path,
             since=datetime(2026, 5, 1, tzinfo=UTC),
-            until=datetime(2026, 5, 14, tzinfo=UTC),
+            until=datetime(2026, 5, 15, tzinfo=UTC),
             sources=(case.source_kind,),
             limit=10,
         )
@@ -264,11 +291,19 @@ def test_fixture_backed_rss_ingest_persist_export_matches_golden(
     assert _stable_dump(exported) == _read_json(case.expected_export_path)
     assert "rss_guid" not in json.dumps(exported)
     assert "raw_payload" not in json.dumps(exported)
-    assert entry.title in normalized_content
-    if entry.link is not None:
-        assert entry.link in normalized_content
-    if entry.html and entry.html == _plain_text(entry.html):
-        assert entry.html in normalized_content
+    if case.pages:
+        assert normalized_content.startswith("# ")
+        assert "Canonical link:" in normalized_content
+        source = exported[0]["source"] or {}
+        source_uri = source.get("uri")
+        if isinstance(source_uri, str):
+            assert source_uri in normalized_content
+    else:
+        assert entry.title in normalized_content
+        if entry.link is not None:
+            assert entry.link in normalized_content
+        if entry.html and entry.html == _plain_text(entry.html):
+            assert entry.html in normalized_content
 
 
 @pytest.mark.parametrize("case", WEB_EXPORT_CASES, ids=lambda case: case.source_kind)
@@ -303,10 +338,10 @@ def test_fixture_backed_web_ingest_persist_export_matches_golden(
 
 
 def test_summary_only_rss_exports_are_disambiguated_by_title_and_link(tmp_path: Path) -> None:
-    first_link = "https://research.google/blog/first-summary-only/"
-    second_link = "https://research.google/blog/second-summary-only/"
+    first_link = "https://openai.com/index/first-summary-only/"
+    second_link = "https://openai.com/index/second-summary-only/"
     feed = RssFeed(
-        url=GOOGLE_RESEARCH_RSS_URL,
+        url=OPENAI_RSS_URL,
         fetched_at=datetime(2026, 5, 13, 1, 30, tzinfo=UTC),
         entries=(
             RssEntry(
@@ -326,16 +361,14 @@ def test_summary_only_rss_exports_are_disambiguated_by_title_and_link(tmp_path: 
         ),
     )
     pipeline = _pipeline(
-        adapter=google_research_blog_adapter(
-            rss_fetcher=FakeRssFetcher({GOOGLE_RESEARCH_RSS_URL: feed})
-        ),
+        adapter=openai_news_adapter(rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed})),
         workspace=tmp_path,
     )
 
     summary = asyncio.run(pipeline.run_once())
     exported = export_items(
         workspace=tmp_path,
-        sources=("google-research-blog",),
+        sources=("openai-news",),
         limit=10,
     )
     normalized_by_event_id = {item.event_id: item.normalized_content or "" for item in exported}
@@ -347,16 +380,12 @@ def test_summary_only_rss_exports_are_disambiguated_by_title_and_link(tmp_path: 
     assert {item.source_ready for item in exported} == {False}
     assert len(set(normalized_by_event_id.values())) == expected_count
     assert len({item.content_hash for item in exported}) == expected_count
+    assert "First summary-only research item" in normalized_by_event_id[f"openai-news:{first_link}"]
+    assert first_link in normalized_by_event_id[f"openai-news:{first_link}"]
     assert (
-        "First summary-only research item"
-        in normalized_by_event_id[f"google-research-blog:{first_link}"]
+        "Second summary-only research item" in normalized_by_event_id[f"openai-news:{second_link}"]
     )
-    assert first_link in normalized_by_event_id[f"google-research-blog:{first_link}"]
-    assert (
-        "Second summary-only research item"
-        in normalized_by_event_id[f"google-research-blog:{second_link}"]
-    )
-    assert second_link in normalized_by_event_id[f"google-research-blog:{second_link}"]
+    assert second_link in normalized_by_event_id[f"openai-news:{second_link}"]
 
 
 def test_pipeline_rerun_and_duplicate_batch_do_not_duplicate_durable_events(tmp_path: Path) -> None:

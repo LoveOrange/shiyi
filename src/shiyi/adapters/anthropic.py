@@ -184,19 +184,31 @@ def _extract_article_date(html: str) -> datetime | None:
         value = node.attributes.get("datetime") or node.text(strip=True)
         if parsed := _parse_datetime(value):
             return parsed
+    for selector in (".body-3.agate", "[class*='agate']"):
+        node = parser.css_first(selector)
+        if node is not None and (parsed := _parse_datetime(node.text(strip=True))):
+            return parsed
     return None
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
     if value is None or not value.strip():
         return None
+    stripped = value.strip()
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
     except ValueError:
-        try:
-            parsed = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
-            return None
+        for format_ in ("%b %d, %Y", "%B %d, %Y"):
+            try:
+                parsed = datetime.strptime(stripped, format_).replace(tzinfo=UTC)
+                break
+            except ValueError:
+                continue
+        else:
+            try:
+                parsed = parsedate_to_datetime(stripped)
+            except (TypeError, ValueError):
+                return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)

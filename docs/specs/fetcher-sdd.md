@@ -228,7 +228,7 @@ Current flow:
 2. Parse entries.
 3. Emit `InternalItem` from RSS entry content/summary.
 
-OpenAI used the RSS entry directly in the MVP flow. For P2.5 and later, this is no longer sufficient unless the feed entry contains the full article body. The adapter should fetch and cache the canonical detail page when available, normalize the full page content, and mark any summary-only fallback explicitly with `content_depth=summary_only`.
+OpenAI used the RSS entry directly in the MVP flow. For P2.5 and later, this is no longer sufficient unless the feed entry contains the full article body. Current readiness status is explicit defer: observed RSS entries are summary-only, and unauthenticated canonical detail fetches return a managed browser challenge instead of stable article HTML. Until an official structured detail surface or compliant detail-fetch path exists, keep OpenAI records `content_depth=summary_only` and out of source-ready counts.
 
 ## 11. HTTP policy
 

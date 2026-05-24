@@ -95,6 +95,7 @@ class SourceDefinition:
     source_ready: bool
     notes: str
     factory: SourceAdapterFactory = field(repr=False, compare=False)
+    defer_reason: str | None = None
 
     def create_adapter(
         self,
@@ -128,6 +129,7 @@ class SourceSummary:
     adapter_name: str | None = None
     default_content_depth: str | None = None
     source_ready: bool | None = None
+    defer_reason: str | None = None
     bucket: str | None = None
     notes: str | None = None
 
@@ -180,6 +182,7 @@ def _source_summary(definition: SourceDefinition) -> SourceSummary:
         entry_url=definition.entry_url,
         default_content_depth=definition.default_content_depth,
         source_ready=definition.source_ready,
+        defer_reason=definition.defer_reason,
         notes=definition.notes,
     )
 
@@ -191,6 +194,7 @@ def _backlog_summary(item: SourceBacklogItem) -> SourceSummary:
         family="backlog",
         entry_url=item.entry_url,
         bucket=item.bucket,
+        defer_reason=item.reason,
         notes=item.reason,
     )
 
@@ -218,8 +222,8 @@ def _huggingface_blog_adapter(
     window: CaptureWindow | None,
     raw_cache_root: Path | None = None,
 ) -> Adapter:
-    _ignore_raw_cache_root(raw_cache_root)
-    return huggingface_blog_adapter(window=window)
+    web_fetcher = HttpWebFetcher(raw_cache_root=raw_cache_root) if raw_cache_root else None
+    return huggingface_blog_adapter(window=window, web_fetcher=web_fetcher)
 
 
 def _google_research_blog_adapter(
@@ -227,8 +231,8 @@ def _google_research_blog_adapter(
     window: CaptureWindow | None,
     raw_cache_root: Path | None = None,
 ) -> Adapter:
-    _ignore_raw_cache_root(raw_cache_root)
-    return google_research_blog_adapter(window=window)
+    web_fetcher = HttpWebFetcher(raw_cache_root=raw_cache_root) if raw_cache_root else None
+    return google_research_blog_adapter(window=window, web_fetcher=web_fetcher)
 
 
 def _deepmind_blog_adapter(
@@ -325,7 +329,13 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         entry_url="https://openai.com/news/rss.xml",
         default_content_depth="summary_only",
         source_ready=False,
-        notes="generic RSS; discovery-grade unless feed content carries full body",
+        notes="generic RSS remains discovery-grade until a compliant canonical detail path exists",
+        defer_reason=(
+            "OpenAI RSS entries observed in the readiness audit are summary-only, while "
+            "unauthenticated canonical detail fetches return a managed browser challenge instead "
+            "of stable article HTML. Keep OpenAI out of source-ready counts until an official "
+            "structured detail surface or compliant detail-fetch path is available."
+        ),
         factory=_openai_adapter,
     ),
     SourceDefinition(
@@ -342,23 +352,23 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
     SourceDefinition(
         name=SourceName.HUGGINGFACE_BLOG,
         source_kind="huggingface-blog",
-        adapter_name="huggingface-blog-rss",
-        family="rss",
+        adapter_name="huggingface-blog-detail",
+        family="rss-detail",
         entry_url="https://huggingface.co/blog/feed.xml",
-        default_content_depth="summary_only",
-        source_ready=False,
-        notes="generic RSS; candidate for P3 declarative RSS config",
+        default_content_depth="full_page",
+        source_ready=True,
+        notes="RSS discovery plus canonical blog detail pages",
         factory=_huggingface_blog_adapter,
     ),
     SourceDefinition(
         name=SourceName.GOOGLE_RESEARCH_BLOG,
         source_kind="google-research-blog",
-        adapter_name="google-research-blog-rss",
-        family="rss",
+        adapter_name="google-research-blog-detail",
+        family="rss-detail",
         entry_url="https://research.google/blog/rss/",
-        default_content_depth="summary_only",
-        source_ready=False,
-        notes="generic RSS; candidate for P3 declarative RSS config",
+        default_content_depth="full_page",
+        source_ready=True,
+        notes="RSS discovery plus canonical blog detail pages",
         factory=_google_research_blog_adapter,
     ),
     SourceDefinition(

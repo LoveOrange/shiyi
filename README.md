@@ -138,10 +138,10 @@ Adapters define the raw key from entry-level metadata. A cache hit skips the rem
 
 Current built-in sources:
 
-- `openai` — OpenAI news RSS feed.
+- `openai` — OpenAI news RSS feed; explicit discovery-grade defer until a compliant canonical detail path is available.
 - `anthropic` — Anthropic news index parser.
-- `huggingface-blog` — Hugging Face Blog RSS feed.
-- `google-research-blog` — Google Research Blog RSS feed.
+- `huggingface-blog` — Hugging Face Blog RSS discovery plus canonical article detail pages.
+- `google-research-blog` — Google Research Blog RSS discovery plus canonical article detail pages.
 - `deepmind-blog` — Google DeepMind Blog RSS discovery plus canonical article detail pages.
 - `deepseek-news` — DeepSeek official news article pages discovered from API docs updates.
 - `z-ai-blog` — Z.ai / GLM official blog posts discovered from release notes.

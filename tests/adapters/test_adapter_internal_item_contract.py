@@ -63,6 +63,11 @@ MISTRAL_NEWS_ARTICLE_URL = "https://mistral.ai/news/vibe-remote-agents-mistral-m
 MICROSOFT_AI_BLOG_FEED_URL = (
     "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
 )
+HUGGINGFACE_OPEN_R1_URL = "https://huggingface.co/blog/open-r1"
+GOOGLE_RESEARCH_ARTICLE_URL = (
+    "https://research.google/blog/"
+    "catalyzing-scientific-impact-through-global-partnerships-and-open-resources"
+)
 COHERE_BLOG_URL = "https://cohere.com/blog"
 COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
 CLAUDE_DESIGN_URL = "https://www.anthropic.com/news/claude-design-anthropic-labs"
@@ -110,7 +115,15 @@ CONTRACT_CASES = (
                         (HUGGINGFACE_FIXTURE_ROOT / "raw" / "feed.json").read_text()
                     )
                 }
-            )
+            ),
+            web_fetcher=FakeWebFetcher(
+                {
+                    HUGGINGFACE_OPEN_R1_URL: (
+                        HUGGINGFACE_FIXTURE_ROOT / "raw" / "open-r1.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
         ),
         expected_paths=(HUGGINGFACE_FIXTURE_ROOT / "internal-item" / "open-r1.json",),
     ),
@@ -123,7 +136,15 @@ CONTRACT_CASES = (
                         (GOOGLE_RESEARCH_FIXTURE_ROOT / "raw" / "feed.json").read_text()
                     )
                 }
-            )
+            ),
+            web_fetcher=FakeWebFetcher(
+                {
+                    GOOGLE_RESEARCH_ARTICLE_URL: (
+                        GOOGLE_RESEARCH_FIXTURE_ROOT / "raw" / "catalyzing-scientific-impact.html"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
         ),
         expected_paths=(
             GOOGLE_RESEARCH_FIXTURE_ROOT / "internal-item" / "catalyzing-scientific-impact.json",
@@ -316,26 +337,6 @@ RSS_BUILTIN_CASES = (
         content_depth="summary_only",
         build_adapter=lambda feed, window: openai_news_adapter(
             rss_fetcher=FakeRssFetcher({OPENAI_RSS_URL: feed}), window=window
-        ),
-    ),
-    RssBuiltinCase(
-        source_name="huggingface-blog",
-        feed_url=HUGGINGFACE_RSS_URL,
-        source_kind="huggingface-blog",
-        adapter_name="huggingface-blog-rss",
-        content_depth="summary_only",
-        build_adapter=lambda feed, window: huggingface_blog_adapter(
-            rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}), window=window
-        ),
-    ),
-    RssBuiltinCase(
-        source_name="google-research-blog",
-        feed_url=GOOGLE_RESEARCH_RSS_URL,
-        source_kind="google-research-blog",
-        adapter_name="google-research-blog-rss",
-        content_depth="summary_only",
-        build_adapter=lambda feed, window: google_research_blog_adapter(
-            rss_fetcher=FakeRssFetcher({GOOGLE_RESEARCH_RSS_URL: feed}), window=window
         ),
     ),
     RssBuiltinCase(

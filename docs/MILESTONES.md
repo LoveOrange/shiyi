@@ -106,8 +106,8 @@ Recommended first batch:
 
 Current implementation slices:
 
-- `huggingface-blog` through the reusable RSS adapter path;
-- `google-research-blog` through the reusable RSS adapter path;
+- `huggingface-blog` through RSS discovery plus canonical article detail pages;
+- `google-research-blog` through RSS discovery plus canonical article detail pages;
 - `deepmind-blog` through a narrow RSS-discovery/detail-page adapter with the feed used only as a discovery index;
 - `deepseek-news` through an official news adapter with the updates page used only as a discovery index;
 - `z-ai-blog` through an official blog adapter with release notes used only as a discovery index;
@@ -115,6 +115,7 @@ Current implementation slices:
 - `bytedance-seed-blog` through official SSR embedded-data index plus article detail pages;
 - text-only RSS and changelog entries remain exportable through canonical Markdown normalization;
 - `qwen-research` and `minimax-news` are audited but deferred until JSON/API completeness and fixture boundaries are stronger;
+- `openai` remains built in but discovery-grade only: current RSS entries are summary-only and canonical detail fetches need a compliant stable detail path before the source can count as source-ready;
 - source registry/config remains deferred to P3.
 
 Acceptance:

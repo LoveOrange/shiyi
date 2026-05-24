@@ -19,6 +19,8 @@ from shiyi.adapters.changelog import (
 )
 from shiyi.adapters.deepmind import DeepMindArticle, DeepMindBlogAdapter, deepmind_blog_adapter
 from shiyi.adapters.rss import (
+    RssDetailAdapter,
+    RssDetailArticle,
     RssFeedAdapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
@@ -108,6 +110,8 @@ __all__ = [
     "PipelineRunError",
     "PipelineRunSummary",
     "Provenance",
+    "RssDetailAdapter",
+    "RssDetailArticle",
     "RssFeedAdapter",
     "SourceBacklogItem",
     "SourceDefinition",

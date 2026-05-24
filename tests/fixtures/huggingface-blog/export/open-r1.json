@@ -1,24 +1,24 @@
 [
   {
-    "adapter_name": "huggingface-blog-rss",
-    "adapter_version": "0.2.0",
-    "captured_at": "2026-05-13T01:30:00+00:00",
-    "occurred_at": "2026-05-09T09:00:00+00:00",
-    "published_at": "2026-05-09T09:00:00+00:00",
-    "content_depth": "summary_only",
-    "content_hash": "e8e1df7e8dcae06a7addeb886c7e9fec020cee9dda3191d959957ad045167165",
+    "schema_version": "shiyi-export-item.v1",
     "event_id": "huggingface-blog:https://huggingface.co/blog/open-r1",
     "idempotency_key": "huggingface-blog:https://huggingface.co/blog/open-r1",
-    "normalized_artifact_uri": "normalized/4f/4f787f9508674b84091425147d921e8f25ddefe3843653241cf9f4dfaf1c3845",
-    "normalized_content": "Open R1: a fully open reproduction of DeepSeek-R1\n\nCanonical link: https://huggingface.co/blog/open-r1\n",
-    "normalized_media_type": "text/markdown",
-    "schema_version": "shiyi-export-item.v1",
+    "status": "persisted",
     "source": {
-      "account_id": null,
       "kind": "huggingface-blog",
-      "uri": "https://huggingface.co/blog/feed.xml"
+      "uri": "https://huggingface.co/blog/open-r1",
+      "account_id": null
     },
-    "source_ready": false,
-    "status": "persisted"
+    "captured_at": "2026-05-14T08:30:00+00:00",
+    "occurred_at": "2026-05-09T09:00:00+00:00",
+    "published_at": "2026-05-09T09:00:00+00:00",
+    "content_hash": "5ba2607579b6e1a0d1ee4a47983712fc2ddc9fd269fee26c3aa4ea50bc803ab0",
+    "adapter_name": "huggingface-blog-detail",
+    "adapter_version": "0.1.0",
+    "content_depth": "full_page",
+    "source_ready": true,
+    "normalized_artifact_uri": "normalized/c6/c661ece7b137ab25b81c032367caf43095773c2f3507158578fe6574fdad4ba8",
+    "normalized_media_type": "text/markdown",
+    "normalized_content": "# Open-R1: a fully open reproduction of DeepSeek-R1\n\nPublished: 2026-05-09\n\nCanonical link: <https://huggingface.co/blog/open-r1>\n\nAuthor: Elie Bakouch, Leandro von Werra, Lewis Tunstall\n\nOpen-R1 is a fully open reproduction of DeepSeek-R1 with a transparent training recipe\nand reproducible reasoning experiments.\n\nDeepSeek-R1 showed that test-time reasoning can materially improve mathematics, coding,\nand logic performance.\n\n## What is DeepSeek-R1?\n\n## Open-R1: the missing pieces\n\n* Open datasets for reasoning traces.\n* Open training recipes for reinforcement learning.\n"
   }
 ]

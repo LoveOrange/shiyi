@@ -82,6 +82,26 @@ def test_anthropic_news_adapter_filters_by_article_date_window() -> None:
     assert [event.idempotency_key for event in events] == ["anthropic-news:inside"]
 
 
+def test_anthropic_news_adapter_filters_by_visible_article_date() -> None:
+    fetcher = FakeWebFetcher()
+    fetcher.pages["https://www.anthropic.com/news/inside"] = """
+    <html><head><title>Inside</title></head>
+    <body><h1>Inside</h1><div class="body-3 agate">May 12, 2026</div></body></html>
+    """
+    adapter = anthropic_news_adapter(
+        web_fetcher=fetcher,
+        window=CaptureWindow(
+            since=datetime(2026, 5, 12, tzinfo=UTC),
+            until=datetime(2026, 5, 13, tzinfo=UTC),
+        ),
+    )
+
+    events = asyncio.run(_collect_events(adapter))
+
+    assert [event.idempotency_key for event in events] == ["anthropic-news:inside"]
+    assert events[0].occurred_at == datetime(2026, 5, 12, tzinfo=UTC)
+
+
 async def _collect_anthropic_events(*, limit: int) -> list[InternalItem]:
     adapter = anthropic_news_adapter(limit=limit)
     return [event async for event in adapter.discover()]
