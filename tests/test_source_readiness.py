@@ -59,6 +59,16 @@ def test_structured_api_fixture_size_boundary_covers_current_ready_payloads() ->
     assert all(check.max_bytes == DEFAULT_STRUCTURED_FIXTURE_MAX_BYTES for check in checks)
 
 
+def test_us04_ai_coding_ready_fixture_size_boundary_is_bounded() -> None:
+    checks = [
+        check_fixture_size(FIXTURE_ROOT / "cursor-changelog" / "raw" / "changelog.html"),
+        check_fixture_size(FIXTURE_ROOT / "github-copilot-changelog" / "raw" / "feed.json"),
+    ]
+
+    assert all(check.ok for check in checks)
+    assert all(check.max_bytes == DEFAULT_STRUCTURED_FIXTURE_MAX_BYTES for check in checks)
+
+
 def test_fixture_size_check_marks_oversized_payloads(tmp_path: Path) -> None:
     oversized = tmp_path / "oversized.json"
     payload_size = 4

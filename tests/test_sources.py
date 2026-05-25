@@ -50,6 +50,8 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     bytedance = next(summary for summary in summaries if summary.name == "bytedance-seed-blog")
     assert microsoft.status == "built-in"
     assert microsoft.source_category == "official"
+    assert microsoft.fetcher_family == "rss"
+    assert microsoft.family == "rss"
     assert microsoft.detail_capture_mode == "listing-only"
     assert microsoft.content_completeness == "complete"
     assert microsoft.readiness_status == "ready"
@@ -86,16 +88,39 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert all(not hasattr(summary, "factory") for summary in summaries)
 
 
+def test_source_registry_summaries_expose_us04_ai_coding_sources() -> None:
+    summaries = source_summaries()
+
+    cursor = next(summary for summary in summaries if summary.name == "cursor-changelog")
+    copilot = next(summary for summary in summaries if summary.name == "github-copilot-changelog")
+
+    assert cursor.fetcher_family == "changelog"
+    assert cursor.detail_capture_mode == "listing-only"
+    assert cursor.content_completeness == "complete"
+    assert cursor.source_ready is True
+    assert cursor.counts_as_official_source_ready is True
+    assert copilot.fetcher_family == "rss"
+    assert copilot.detail_capture_mode == "listing-only"
+    assert copilot.content_completeness == "complete"
+    assert copilot.source_ready is True
+    assert copilot.counts_as_official_source_ready is True
+
+
 def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     summaries = source_summaries(include_backlog=True)
 
     assert {item.name for item in SOURCE_BACKLOG} <= {summary.name for summary in summaries}
     qwen = next(summary for summary in summaries if summary.name == "qwen-research")
+    kiro = next(summary for summary in summaries if summary.name == "kiro-changelog")
+    antigravity = next(
+        summary for summary in summaries if summary.name == "google-antigravity-changelog"
+    )
     community = next(
         summary for summary in summaries if summary.name == "github-trending-or-community-feeds"
     )
     assert qwen.status == "deferred"
     assert qwen.bucket == "p3-json-api-fetcher"
+    assert qwen.fetcher_family == "structured-api"
     assert qwen.source_category == "official"
     assert qwen.detail_capture_mode == "structured-api"
     assert qwen.content_completeness is None
@@ -114,7 +139,20 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
         "bounded_fixtures",
         "repeatable_extraction_tests",
     }
+    assert kiro.status == "deferred"
+    assert kiro.source_category == "official"
+    assert kiro.fetcher_family == "rss-detail"
+    assert kiro.detail_capture_mode == "canonical-detail"
+    assert "summary-only descriptions" in (kiro.defer_reason or "")
+    assert antigravity.status == "deferred"
+    assert antigravity.bucket == "p3-json-api-fetcher"
+    assert antigravity.source_category == "official"
+    assert antigravity.fetcher_family == "structured-api"
+    assert antigravity.detail_capture_mode == "structured-api"
+    assert antigravity.structured_api_gate == "blocked"
+    assert "stable_item_ids" in antigravity.structured_api_blockers
     assert community.source_category == "community"
+    assert community.fetcher_family == "listing"
     assert community.detail_capture_mode == "listing-only"
     assert community.content_completeness is None
     assert community.readiness_status == "deferred"
@@ -135,6 +173,11 @@ def test_source_registry_readiness_contract_covers_review_states() -> None:
     assert summaries["microsoft-ai-blog"].detail_capture_mode == "listing-only"
     assert summaries["google-research-blog"].detail_capture_mode == "canonical-detail"
     assert summaries["bytedance-seed-blog"].detail_capture_mode == "structured-api"
+    assert summaries["cursor-changelog"].readiness_status == "ready"
+    assert summaries["cursor-changelog"].fetcher_family == "changelog"
+    assert summaries["github-copilot-changelog"].readiness_status == "ready"
+    assert summaries["kiro-changelog"].readiness_status == "deferred"
+    assert summaries["google-antigravity-changelog"].readiness_status == "deferred"
     assert summaries["bytedance-seed-blog"].structured_api_gate == "ready"
     assert summaries["qwen-research"].structured_api_gate == "blocked"
 
@@ -146,6 +189,8 @@ def test_source_registry_uses_minimal_taxonomies_and_derived_readiness() -> None
     assert get_args(ContentCompleteness) == ("complete", "partial", "summary_only")
     assert get_args(SourceCategory) == ("official", "community", "social_media")
     assert get_args(AuthorityTier) == ("primary", "secondary", "unverified")
+    assert "fetcher_family" in source_definition_fields
+    assert "family" not in source_definition_fields
     assert "readiness_status" not in source_definition_fields
     assert "source_ready" not in source_definition_fields
     assert "counts_as_official_source_ready" not in source_definition_fields
@@ -165,7 +210,12 @@ def test_high_noise_community_backlog_never_counts_as_official_source_ready() ->
         for summary in summaries
         if summary.source_category == "community" or summary.bucket == "later-high-noise"
     )
-    assert {"huggingface-blog", "google-research-blog"} <= official_coverage_names
+    assert {
+        "huggingface-blog",
+        "google-research-blog",
+        "cursor-changelog",
+        "github-copilot-changelog",
+    } <= official_coverage_names
 
 
 def test_source_registry_rejects_unknown_source() -> None:
@@ -184,7 +234,7 @@ def test_structured_api_builtins_must_pass_readiness_gate() -> None:
             name=SourceName.BYTEDANCE_SEED_BLOG,
             source_kind="example-structured",
             adapter_name="example-structured",
-            family="ssr-detail",
+            fetcher_family="ssr-detail",
             source_category="official",
             detail_capture_mode="structured-api",
             entry_url="https://example.com",

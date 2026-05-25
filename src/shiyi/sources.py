@@ -11,12 +11,14 @@ from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL, anthropic_news_adapter
 from shiyi.adapters.bytedance_seed import BYTEDANCE_SEED_BLOG_URL, bytedance_seed_blog_adapter
 from shiyi.adapters.changelog import (
     COHERE_BLOG_URL,
+    CURSOR_CHANGELOG_URL,
     DEEPSEEK_UPDATES_URL,
     GEMINI_API_CHANGELOG_URL,
     MISTRAL_NEWS_URL,
     MOONSHOT_KIMI_CHANGELOG_URL,
     Z_AI_RELEASE_NOTES_URL,
     cohere_blog_adapter,
+    cursor_changelog_adapter,
     deepseek_news_adapter,
     gemini_api_changelog_adapter,
     mistral_news_adapter,
@@ -25,7 +27,9 @@ from shiyi.adapters.changelog import (
 )
 from shiyi.adapters.deepmind import DEEPMIND_BLOG_RSS_URL, deepmind_blog_adapter
 from shiyi.adapters.rss import (
+    GITHUB_COPILOT_CHANGELOG_FEED_URL,
     MICROSOFT_AI_BLOG_FEED_URL,
+    github_copilot_changelog_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
     microsoft_ai_blog_adapter,
@@ -59,6 +63,8 @@ class SourceName(StrEnum):
     MISTRAL_NEWS = "mistral-news"
     MICROSOFT_AI_BLOG = "microsoft-ai-blog"
     COHERE_BLOG = "cohere-blog"
+    CURSOR_CHANGELOG = "cursor-changelog"
+    GITHUB_COPILOT_CHANGELOG = "github-copilot-changelog"
 
 
 SourceFamily: TypeAlias = Literal[
@@ -105,7 +111,7 @@ class SourceDefinition:
     name: SourceName
     source_kind: str
     adapter_name: str
-    family: SourceFamily
+    fetcher_family: SourceFamily
     source_category: SourceCategory
     detail_capture_mode: DetailCaptureMode
     entry_url: str
@@ -163,6 +169,11 @@ class SourceDefinition:
         """Create the adapter represented by this source definition."""
         return self.factory(window=window, raw_cache_root=raw_cache_root)
 
+    @property
+    def family(self) -> SourceFamily:
+        """Compatibility alias for callers still reading the old source type name."""
+        return self.fetcher_family
+
 
 @dataclass(frozen=True, slots=True)
 class SourceBacklogItem:
@@ -179,6 +190,7 @@ class SourceBacklogItem:
     structured_api_readiness: StructuredApiReadinessEvidence | None = None
     readiness_status: Literal["deferred"] = "deferred"
     content_completeness: ContentCompleteness | None = None
+    fetcher_family: str = "backlog"
 
     def __post_init__(self) -> None:
         """Validate deferred structured/API candidates carry explicit gate evidence."""
@@ -201,6 +213,7 @@ class SourceSummary:
     family: str
     entry_url: str
     source_category: SourceCategory | None = None
+    fetcher_family: str | None = None
     authority_tier: AuthorityTier | None = None
     detail_capture_mode: DetailCaptureMode | None = None
     content_completeness: ContentCompleteness | None = None
@@ -220,6 +233,7 @@ class SourceSummary:
 
     def __post_init__(self) -> None:
         """Derive review labels from category, completeness, traceability, and defer state."""
+        fetcher_family = self.fetcher_family or self.family
         source_ready = self.status == "built-in" and is_item_ready_content_completeness(
             self.content_completeness
         )
@@ -235,6 +249,7 @@ class SourceSummary:
             "counts_as_official_source_ready",
             counts_as_official_source_ready,
         )
+        object.__setattr__(self, "fetcher_family", fetcher_family)
 
 
 def build_source_adapter(
@@ -282,6 +297,7 @@ def _source_summary(definition: SourceDefinition) -> SourceSummary:
         source_kind=definition.source_kind,
         adapter_name=definition.adapter_name,
         family=definition.family,
+        fetcher_family=definition.fetcher_family,
         source_category=definition.source_category,
         authority_tier=definition.authority_tier,
         detail_capture_mode=definition.detail_capture_mode,
@@ -314,7 +330,8 @@ def _backlog_summary(item: SourceBacklogItem) -> SourceSummary:
     return SourceSummary(
         name=item.name,
         status="deferred",
-        family="backlog",
+        family=item.fetcher_family,
+        fetcher_family=item.fetcher_family,
         source_category=item.source_category,
         authority_tier=item.authority_tier,
         detail_capture_mode=item.detail_capture_mode,
@@ -454,6 +471,24 @@ def _cohere_blog_adapter(
     return cohere_blog_adapter(window=window)
 
 
+def _cursor_changelog_adapter(
+    *,
+    window: CaptureWindow | None,
+    raw_cache_root: Path | None = None,
+) -> Adapter:
+    web_fetcher = HttpWebFetcher(raw_cache_root=raw_cache_root) if raw_cache_root else None
+    return cursor_changelog_adapter(window=window, web_fetcher=web_fetcher)
+
+
+def _github_copilot_changelog_adapter(
+    *,
+    window: CaptureWindow | None,
+    raw_cache_root: Path | None = None,
+) -> Adapter:
+    _ignore_raw_cache_root(raw_cache_root)
+    return github_copilot_changelog_adapter(window=window)
+
+
 def _ignore_raw_cache_root(raw_cache_root: Path | None) -> None:
     _ = raw_cache_root
 
@@ -463,7 +498,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.OPENAI,
         source_kind="openai-news",
         adapter_name="openai-news-rss",
-        family="rss",
+        fetcher_family="rss",
         source_category="official",
         detail_capture_mode="summary-only",
         entry_url="https://openai.com/news/rss.xml",
@@ -485,7 +520,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.ANTHROPIC,
         source_kind="anthropic-news",
         adapter_name="anthropic-news-index",
-        family="article-index",
+        fetcher_family="article-index",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=ANTHROPIC_NEWS_URL,
@@ -501,7 +536,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.HUGGINGFACE_BLOG,
         source_kind="huggingface-blog",
         adapter_name="huggingface-blog-detail",
-        family="rss-detail",
+        fetcher_family="rss-detail",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://huggingface.co/blog/feed.xml",
@@ -517,7 +552,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.GOOGLE_RESEARCH_BLOG,
         source_kind="google-research-blog",
         adapter_name="google-research-blog-detail",
-        family="rss-detail",
+        fetcher_family="rss-detail",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://research.google/blog/rss/",
@@ -533,7 +568,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.DEEPMIND_BLOG,
         source_kind="deepmind-blog",
         adapter_name="deepmind-blog-detail",
-        family="rss-detail",
+        fetcher_family="rss-detail",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPMIND_BLOG_RSS_URL,
@@ -549,7 +584,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.DEEPSEEK_NEWS,
         source_kind="deepseek-news",
         adapter_name="deepseek-news-article",
-        family="article-index",
+        fetcher_family="article-index",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPSEEK_UPDATES_URL,
@@ -565,7 +600,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.Z_AI_BLOG,
         source_kind="z-ai-blog",
         adapter_name="z-ai-blog-article",
-        family="article-index",
+        fetcher_family="article-index",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=Z_AI_RELEASE_NOTES_URL,
@@ -581,7 +616,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.MOONSHOT_KIMI_CHANGELOG,
         source_kind="moonshot-kimi-changelog",
         adapter_name="moonshot-kimi-changelog-page",
-        family="changelog",
+        fetcher_family="changelog",
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=MOONSHOT_KIMI_CHANGELOG_URL,
@@ -597,7 +632,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.BYTEDANCE_SEED_BLOG,
         source_kind="bytedance-seed-blog",
         adapter_name="bytedance-seed-blog-ssr",
-        family="ssr-detail",
+        fetcher_family="ssr-detail",
         source_category="official",
         detail_capture_mode="structured-api",
         entry_url=BYTEDANCE_SEED_BLOG_URL,
@@ -627,7 +662,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.GEMINI_API_CHANGELOG,
         source_kind="gemini-api-changelog",
         adapter_name="gemini-api-changelog-page",
-        family="changelog",
+        fetcher_family="changelog",
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=GEMINI_API_CHANGELOG_URL,
@@ -643,7 +678,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.MISTRAL_NEWS,
         source_kind="mistral-news",
         adapter_name="mistral-news-article",
-        family="article-index",
+        fetcher_family="article-index",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=MISTRAL_NEWS_URL,
@@ -659,7 +694,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.MICROSOFT_AI_BLOG,
         source_kind="microsoft-ai-blog",
         adapter_name="microsoft-ai-blog-rss",
-        family="rss",
+        fetcher_family="rss",
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=MICROSOFT_AI_BLOG_FEED_URL,
@@ -675,7 +710,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         name=SourceName.COHERE_BLOG,
         source_kind="cohere-blog",
         adapter_name="cohere-blog-article",
-        family="article-index",
+        fetcher_family="article-index",
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=COHERE_BLOG_URL,
@@ -686,6 +721,40 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
             "tests/fixtures/cohere-blog/export/cohere-sovereign-ai-nvidia.json",
         ),
         factory=_cohere_blog_adapter,
+    ),
+    SourceDefinition(
+        name=SourceName.CURSOR_CHANGELOG,
+        source_kind="cursor-changelog",
+        adapter_name="cursor-changelog-page",
+        fetcher_family="changelog",
+        source_category="official",
+        detail_capture_mode="listing-only",
+        entry_url=CURSOR_CHANGELOG_URL,
+        default_content_depth="complete",
+        notes="official AI coding changelog with SSR article entries and canonical changelog URLs",
+        traceability_refs=(
+            "docs/SOURCE_STRATEGY.md#us04--ai-coding-official-sources",
+            "tests/fixtures/cursor-changelog/export/improvements-to-cursor-automations.json",
+        ),
+        factory=_cursor_changelog_adapter,
+    ),
+    SourceDefinition(
+        name=SourceName.GITHUB_COPILOT_CHANGELOG,
+        source_kind="github-copilot-changelog",
+        adapter_name="github-copilot-changelog-rss",
+        fetcher_family="rss",
+        source_category="official",
+        detail_capture_mode="listing-only",
+        entry_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
+        default_content_depth="complete",
+        notes=(
+            "official GitHub Blog Copilot changelog feed with full content:encoded article bodies"
+        ),
+        traceability_refs=(
+            "docs/SOURCE_STRATEGY.md#us04--ai-coding-official-sources",
+            "tests/fixtures/github-copilot-changelog/export/github-copilot-for-eclipse-is-open-source.json",
+        ),
+        factory=_github_copilot_changelog_adapter,
     ),
 )
 BUILTIN_SOURCE_NAMES: tuple[str, ...] = tuple(
@@ -710,6 +779,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         structured_api_readiness=StructuredApiReadinessEvidence(
             traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
         ),
+        fetcher_family="structured-api",
     ),
     SourceBacklogItem(
         name="minimax-news",
@@ -725,6 +795,38 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         structured_api_readiness=StructuredApiReadinessEvidence(
             traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
         ),
+        fetcher_family="structured-api",
+    ),
+    SourceBacklogItem(
+        name="kiro-changelog",
+        bucket="p3-registry-candidate",
+        source_category="official",
+        detail_capture_mode="canonical-detail",
+        entry_url="https://kiro.dev/changelog/feed.rss",
+        reason=(
+            "official Kiro feed has reliable timestamps and canonical item URLs, but several "
+            "items expose summary-only descriptions with ellipses and patch fragment links need "
+            "fixture-backed complete detail extraction before source-ready promotion"
+        ),
+        traceability_refs=("docs/SOURCE_STRATEGY.md#us04--ai-coding-official-sources",),
+        fetcher_family="rss-detail",
+    ),
+    SourceBacklogItem(
+        name="google-antigravity-changelog",
+        bucket="p3-json-api-fetcher",
+        source_category="official",
+        detail_capture_mode="structured-api",
+        entry_url="https://antigravity.google/changelog?app=antigravity-ide",
+        reason=(
+            "official Antigravity changelog shell is JS-rendered; promotion requires stable "
+            "embedded-data extraction with stable IDs, timestamps, canonical URLs, complete "
+            "payloads, bounded fixtures, and repeatable parser tests"
+        ),
+        traceability_refs=("docs/SOURCE_STRATEGY.md#us04--ai-coding-official-sources",),
+        structured_api_readiness=StructuredApiReadinessEvidence(
+            traceability_refs=("docs/SOURCE_STRATEGY.md#us04--ai-coding-official-sources",),
+        ),
+        fetcher_family="structured-api",
     ),
     SourceBacklogItem(
         name="langchain-blog",
@@ -737,6 +839,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
             "not P2.5 hand-wiring"
         ),
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-2--ai-tooling-and-agent-ecosystem",),
+        fetcher_family="article-index",
     ),
     SourceBacklogItem(
         name="llamaindex-blog",
@@ -746,6 +849,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         entry_url="https://www.llamaindex.ai/blog",
         reason="tooling ecosystem source; candidate after source registry/config exists",
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-2--ai-tooling-and-agent-ecosystem",),
+        fetcher_family="article-index",
     ),
     SourceBacklogItem(
         name="vercel-ai-sdk",
@@ -758,6 +862,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
             "default capture"
         ),
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-2--ai-tooling-and-agent-ecosystem",),
+        fetcher_family="rss",
     ),
     SourceBacklogItem(
         name="github-trending-or-community-feeds",
@@ -767,5 +872,6 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         entry_url="https://github.com/trending",
         reason="high-noise community signal; defer until higher-noise source policy exists",
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-3--research-and-community-signals",),
+        fetcher_family="listing",
     ),
 )

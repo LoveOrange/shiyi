@@ -150,12 +150,22 @@ Current built-in sources:
 - `deepseek-news` — DeepSeek official news article pages, discovered from the API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts, discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
-- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata.
+- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata;
+- `gemini-api-changelog` — Gemini API official changelog text page;
+- `mistral-news` — Mistral static news index plus official article detail pages;
+- `microsoft-ai-blog` — Microsoft AI Blog WordPress feed with decision-grade feed content;
+- `cohere-blog` — Cohere official blog index plus official detail payload;
+- `cursor-changelog` — Cursor official changelog page for AI-coding product updates;
+- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full changelog bodies.
 
 These prove four adapter patterns: reusable feed-style capture, RSS-discovery/detail-page capture, index-page/article capture, and stable official changelog/embedded-data capture.
 The P2.5 slices are still deliberately small; source registry/config and broader batch scale-out remain P3 work.
 
 P2.5 source readiness now requires full-content capture. A built-in source is not ready for AI Weekly consumption if its normalized/exported content is only a feed summary, index excerpt, or changelog teaser while a canonical detail page or official detail payload exists.
+
+The public source-status model uses `source_category` plus `fetcher_family`; legacy
+`family` and `detail_capture_mode` remain compatibility/status evidence only during
+migration and must not be used as manual readiness premises.
 
 ### 7.2 Near-term expansion policy
 

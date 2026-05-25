@@ -16,10 +16,12 @@ from shiyi import (
     InternalItem,
     bytedance_seed_blog_adapter,
     cohere_blog_adapter,
+    cursor_changelog_adapter,
     deepmind_blog_adapter,
     deepseek_news_adapter,
     export_items,
     gemini_api_changelog_adapter,
+    github_copilot_changelog_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
     microsoft_ai_blog_adapter,
@@ -61,6 +63,8 @@ GOOGLE_RESEARCH_ARTICLE_URL = (
 )
 COHERE_BLOG_URL = "https://cohere.com/blog"
 COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
+CURSOR_CHANGELOG_URL = "https://cursor.com/changelog"
+GITHUB_COPILOT_CHANGELOG_FEED_URL = "https://github.blog/changelog/label/copilot/feed/"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
@@ -124,6 +128,21 @@ RSS_EXPORT_CASES = (
         ),
         build_adapter=lambda feed, _fetcher: microsoft_ai_blog_adapter(
             rss_fetcher=FakeRssFetcher({MICROSOFT_AI_BLOG_FEED_URL: feed})
+        ),
+    ),
+    RssExportCase(
+        source_kind="github-copilot-changelog",
+        feed_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
+        fixture_root=FIXTURE_ROOT / "github-copilot-changelog",
+        expected_export_path=(
+            FIXTURE_ROOT
+            / "github-copilot-changelog"
+            / "export"
+            / "github-copilot-for-eclipse-is-open-source.json"
+        ),
+        build_adapter=lambda feed, _fetcher: github_copilot_changelog_adapter(
+            limit=1,
+            rss_fetcher=FakeRssFetcher({GITHUB_COPILOT_CHANGELOG_FEED_URL: feed}),
         ),
     ),
 )
@@ -251,6 +270,19 @@ WEB_EXPORT_CASES = (
         build_adapter=lambda fetcher: cohere_blog_adapter(limit=1, web_fetcher=fetcher),
         expected_excerpt="Together with NVIDIA",
     ),
+    WebExportCase(
+        source_kind="cursor-changelog",
+        pages={
+            CURSOR_CHANGELOG_URL: (
+                FIXTURE_ROOT / "cursor-changelog" / "raw" / "changelog.html"
+            ).read_text(),
+        },
+        expected_export_path=(
+            FIXTURE_ROOT / "cursor-changelog" / "export" / "improvements-to-cursor-automations.json"
+        ),
+        build_adapter=lambda fetcher: cursor_changelog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Cursor Automations are now available in the Agents Window",
+    ),
 )
 
 
@@ -278,7 +310,7 @@ def test_fixture_backed_rss_ingest_persist_export_matches_golden(
         for item in export_items(
             workspace=tmp_path,
             since=datetime(2026, 5, 1, tzinfo=UTC),
-            until=datetime(2026, 5, 15, tzinfo=UTC),
+            until=datetime(2026, 5, 26, tzinfo=UTC),
             sources=(case.source_kind,),
             limit=10,
         )

@@ -292,11 +292,12 @@ A new Adapter/source should not be merged until it has:
 If a source cannot satisfy this gate yet, merge it behind an explicit experimental path and keep it out of default source lists.
 
 The `shiyi sources --include-backlog` review contract must also stay covered by
-regression tests. The JSON rows should distinguish source category, optional authority
-tier, content completeness, derived ready/degraded/deferred review labels, listing-only,
-summary-only, canonical-detail, and structured-API capture modes, defer reason,
-traceability refs, and the derived official coverage bit. High-noise/community backlog
-rows must be explicit and must never count as official source-ready coverage.
+regression tests. The JSON rows should distinguish source category, `fetcher_family`,
+optional authority tier, content completeness, derived ready/degraded/deferred review
+labels, compatibility capture evidence (`detail_capture_mode` while it exists), defer
+reason, traceability refs, and the derived official coverage bit. High-noise/community
+backlog rows must be explicit and must never count as official source-ready coverage.
+Legacy `family` may be emitted only as a compatibility alias for `fetcher_family`.
 
 For official structured/API surfaces, tests must also cover the explicit readiness gate:
 stable official endpoint, stable item IDs or deterministic canonical IDs, reliable

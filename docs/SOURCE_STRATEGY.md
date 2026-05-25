@@ -1,7 +1,7 @@
 # Shiyi Source Strategy
 
 - Status: Canonical source expansion strategy
-- Last updated: 2026-05-16
+- Last updated: 2026-05-25
 - Owners: Lin, Kana, Kurisu
 
 Shiyi's long-term goal is broad source coverage. The strategy is to add many sources through stable adapter families and readiness gates, not through fragile one-off scrapers.
@@ -52,10 +52,15 @@ If a source cannot satisfy this gate yet, keep it experimental and out of defaul
 readiness. Every row must expose:
 
 - `source_category`: initially `official`, `community`, or `social_media`;
+- `fetcher_family`: the adapter/fetcher technical shape, such as `rss`,
+  `rss-detail`, `article-index`, `changelog`, `ssr-detail`, or a deferred
+  structured/embedded-data candidate label;
 - optional `authority_tier` for within-category source authority when category alone is not
   enough, especially future social-media accounts;
-- `detail_capture_mode`: `listing-only`, `summary-only`, `canonical-detail`, or
-  `structured-api`;
+- compatibility `family` may remain in JSON temporarily as an alias for `fetcher_family`;
+- compatibility `detail_capture_mode`: `listing-only`, `summary-only`,
+  `canonical-detail`, or `structured-api`, emitted only as derived capture evidence/status
+  during migration, not as a manual readiness premise;
 - `default_content_depth`: `complete`, `partial`, or `summary_only` when the source is
   built in;
 - `content_completeness`: `complete`, `partial`, or `summary_only` when a built-in source
@@ -81,9 +86,10 @@ coverage.
 Structured/API candidates must pass all objective gate checks before they can become
 source-ready: stable official endpoint, stable item IDs or deterministic canonical IDs,
 reliable published timestamps, canonical URLs, complete payloads, bounded fixtures,
-repeatable extraction tests, and traceability references. `qwen-research` and
-`minimax-news` deliberately remain `structured-api` backlog rows until these checks are
-proven; `bytedance-seed-blog` is the current ready structured/SSR example.
+repeatable extraction tests, and traceability references. `qwen-research`,
+`minimax-news`, and `google-antigravity-changelog` deliberately remain structured/API or
+embedded-data backlog rows until these checks are proven; `bytedance-seed-blog` is the
+current ready structured/SSR example.
 
 ## 3. Adapter families
 
@@ -164,7 +170,13 @@ Current built-ins:
 - `deepseek-news` — DeepSeek official news pages discovered from API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
-- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages.
+- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages;
+- `gemini-api-changelog` — Gemini API official changelog text page;
+- `mistral-news` — static news index plus official article detail pages;
+- `microsoft-ai-blog` — Microsoft AI Blog WordPress feed with decision-grade feed content;
+- `cohere-blog` — Cohere official blog index plus official detail payload;
+- `cursor-changelog` — Cursor official changelog page with SSR article entries and canonical changelog URLs;
+- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full `content:encoded` changelog bodies.
 
 These provide four patterns: reusable feed capture, RSS-discovery/detail-page capture, index/page capture, and stable official changelog/embedded-data capture.
 The P2.5 slices intentionally keep implementation hand-wired; source registry/config belongs to P3.
@@ -224,6 +236,10 @@ Goal: capture engineering/tooling signals for developer-oriented weekly reports 
 
 Candidate sources:
 
+- Cursor changelog;
+- Kiro changelog;
+- Google Antigravity changelog;
+- GitHub Copilot changelog;
 - LangChain;
 - LlamaIndex;
 - Vercel AI SDK;
@@ -237,6 +253,26 @@ Selection rule:
 - prefer official changelog/blog/release feeds;
 - avoid deriving importance inside Shiyi;
 - consumers decide whether a tool update is weekly-report worthy.
+
+US04 AI-coding official source outcome:
+
+- `cursor-changelog` is built in as a ready official changelog source. The adapter parses
+  SSR changelog articles from `https://cursor.com/changelog`, deduplicates repeated
+  entries by canonical URL, and derives stable IDs from canonical changelog paths so
+  same-day posts do not collide.
+- `github-copilot-changelog` is built in as a ready official RSS source. The adapter uses
+  the Copilot label feed at `https://github.blog/changelog/label/copilot/feed/`; current
+  WordPress entries carry complete `content:encoded` article bodies and stable GUIDs.
+- `kiro-changelog` stays deferred. The official feed has timestamps and canonical links,
+  but several descriptions are summary-only with ellipses, and patch links require
+  fixture-backed complete detail extraction for fragment-specific entries before source-ready
+  promotion.
+- `google-antigravity-changelog` stays deferred. The official changelog shell is
+  JS-rendered; promotion requires stable embedded-data extraction with stable IDs,
+  timestamps, canonical URLs, complete payloads, bounded fixtures, and repeatable parser
+  tests. Curling a minified bundle is not enough evidence for readiness.
+- `vercel-ai-sdk` and `langchain-blog` remain pending/deferred; they are useful ecosystem
+  sources but not the near-term AI-coding bottleneck for US04.
 
 ### Batch 3 — Research and community signals
 
