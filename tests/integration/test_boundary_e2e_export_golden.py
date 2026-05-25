@@ -377,6 +377,7 @@ def test_summary_only_rss_exports_are_disambiguated_by_title_and_link(tmp_path: 
     assert summary.processed == expected_count
     assert len(exported) == expected_count
     assert {item.content_depth for item in exported} == {"summary_only"}
+    assert {item.content_completeness for item in exported} == {"summary_only"}
     assert {item.source_ready for item in exported} == {False}
     assert len(set(normalized_by_event_id.values())) == expected_count
     assert len({item.content_hash for item in exported}) == expected_count

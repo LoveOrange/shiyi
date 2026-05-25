@@ -1,8 +1,15 @@
+from dataclasses import fields
+from typing import get_args
+
 import pytest
 
 from shiyi import (
     BUILTIN_SOURCE_NAMES,
     SOURCE_BACKLOG,
+    AuthorityTier,
+    ContentCompleteness,
+    SourceCategory,
+    SourceDefinition,
     SourceName,
     build_source_adapter,
     iter_builtin_sources,
@@ -37,21 +44,24 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
         summary for summary in summaries if summary.name == "google-research-blog"
     )
     assert microsoft.status == "built-in"
-    assert microsoft.source_class == "official"
+    assert microsoft.source_category == "official"
     assert microsoft.detail_capture_mode == "listing-only"
+    assert microsoft.content_completeness == "complete"
     assert microsoft.readiness_status == "ready"
     assert microsoft.default_content_depth == "feed_full_content"
     assert microsoft.source_ready is True
     assert microsoft.counts_as_official_source_ready is True
     assert openai.source_ready is False
     assert openai.detail_capture_mode == "summary-only"
+    assert openai.content_completeness == "summary_only"
     assert openai.readiness_status == "degraded"
     assert openai.counts_as_official_source_ready is False
     assert openai.default_content_depth == "summary_only"
     assert openai.defer_reason is not None
     assert "canonical detail" in openai.defer_reason
-    assert huggingface.source_class == "official"
+    assert huggingface.source_category == "official"
     assert huggingface.detail_capture_mode == "canonical-detail"
+    assert huggingface.content_completeness == "complete"
     assert huggingface.readiness_status == "ready"
     assert huggingface.default_content_depth == "full_page"
     assert huggingface.source_ready is True
@@ -77,15 +87,17 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     )
     assert qwen.status == "deferred"
     assert qwen.bucket == "p3-json-api-fetcher"
-    assert qwen.source_class == "official"
+    assert qwen.source_category == "official"
     assert qwen.detail_capture_mode == "structured-api"
+    assert qwen.content_completeness is None
     assert qwen.readiness_status == "deferred"
     assert qwen.source_ready is False
     assert qwen.counts_as_official_source_ready is False
     assert qwen.defer_reason == qwen.notes
     assert qwen.traceability_refs
-    assert community.source_class == "community"
+    assert community.source_category == "community"
     assert community.detail_capture_mode == "listing-only"
+    assert community.content_completeness is None
     assert community.readiness_status == "deferred"
     assert community.bucket == "later-high-noise"
     assert community.source_ready is False
@@ -98,9 +110,23 @@ def test_source_registry_readiness_contract_covers_review_states() -> None:
     assert summaries["huggingface-blog"].readiness_status == "ready"
     assert summaries["openai"].readiness_status == "degraded"
     assert summaries["qwen-research"].readiness_status == "deferred"
+    assert summaries["huggingface-blog"].content_completeness == "complete"
+    assert summaries["openai"].content_completeness == "summary_only"
+    assert summaries["qwen-research"].content_completeness is None
     assert summaries["microsoft-ai-blog"].detail_capture_mode == "listing-only"
     assert summaries["google-research-blog"].detail_capture_mode == "canonical-detail"
     assert summaries["bytedance-seed-blog"].detail_capture_mode == "structured-api"
+
+
+def test_source_registry_uses_minimal_taxonomies_and_derived_readiness() -> None:
+    source_definition_fields = {field.name for field in fields(SourceDefinition)}
+
+    assert get_args(ContentCompleteness) == ("complete", "partial", "summary_only")
+    assert get_args(SourceCategory) == ("official", "community", "social_media")
+    assert get_args(AuthorityTier) == ("primary", "secondary", "unverified")
+    assert "readiness_status" not in source_definition_fields
+    assert "source_ready" not in source_definition_fields
+    assert "counts_as_official_source_ready" not in source_definition_fields
 
 
 def test_high_noise_community_backlog_never_counts_as_official_source_ready() -> None:
@@ -115,7 +141,7 @@ def test_high_noise_community_backlog_never_counts_as_official_source_ready() ->
     assert all(
         not summary.counts_as_official_source_ready
         for summary in summaries
-        if summary.source_class == "community" or summary.bucket == "later-high-noise"
+        if summary.source_category == "community" or summary.bucket == "later-high-noise"
     )
     assert {"huggingface-blog", "google-research-blog"} <= official_coverage_names
 

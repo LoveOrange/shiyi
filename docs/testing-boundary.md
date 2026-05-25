@@ -129,13 +129,14 @@ Tests should catch:
 ### 4.5 Content depth is part of source readiness
 
 RSS/index/changelog snippets are discovery metadata by default. A built-in source should be source-ready only when Shiyi captures the canonical article/detail page or official structured detail payload when one exists.
+Consumer-facing readiness uses three item-level completeness states derived from content depth: `complete`, `partial`, and `summary_only`.
 
 Tests should catch:
 
 - adapter fixtures that only exercise teaser/summary/listing content while a detail page exists
 - normalized content that is materially shorter or less informative than the source detail payload
-- records lacking source-neutral `content_depth` metadata when they are summary-only, partial, or blocked
-- AI Weekly readiness checks counting `summary_only`, `partial`, or `blocked` records as full source coverage
+- records lacking source-neutral `content_depth` and derived `content_completeness` metadata when they are summary-only, partial, or blocked
+- AI Weekly readiness checks counting `partial` or `summary_only` records as full source coverage
 
 ### 4.6 Export/read is a consumer contract
 
@@ -234,7 +235,7 @@ Must cover:
 6. Empty result returns a stable empty output, not a crash.
 7. Fixture-backed E2E smoke runs ingest to persist to read/export.
 8. Golden export output changes only when the contract intentionally changes.
-9. Export/read output includes source-neutral `content_depth` metadata so consumers can exclude `summary_only`, `partial`, and `blocked` degraded records from decision-grade workflows.
+9. Export/read output includes source-neutral `content_depth` plus derived `content_completeness` metadata so consumers can exclude incomplete records from decision-grade workflows.
 
 ## 6. Fixture and golden-output policy
 
@@ -286,16 +287,16 @@ A new Adapter/source should not be merged until it has:
 - fake-source or mocked Fetcher contract coverage
 - fixture-backed pipeline integration smoke, when the source is part of built-in capture
 - export/read smoke proving downstream output does not expose third-party DTOs
-- export/read smoke proving `summary_only`, `partial`, and `blocked` degraded records are marked source-neutrally with `content_depth` and do not count as AI Weekly source-ready
+- export/read smoke proving incomplete records are marked source-neutrally with `content_depth` plus derived `content_completeness` and do not count as AI Weekly source-ready
 
 If a source cannot satisfy this gate yet, merge it behind an explicit experimental path and keep it out of default source lists.
 
 The `shiyi sources --include-backlog` review contract must also stay covered by
-regression tests. The JSON rows should distinguish ready, degraded, and deferred
-readiness states; listing-only, summary-only, canonical-detail, and structured-API capture
-modes; source class; defer reason; traceability refs; and whether the row counts as
-official source-ready coverage. High-noise/community backlog rows must be explicit and
-must never count as official source-ready coverage.
+regression tests. The JSON rows should distinguish source category, optional authority
+tier, content completeness, derived ready/degraded/deferred review labels, listing-only,
+summary-only, canonical-detail, and structured-API capture modes, defer reason,
+traceability refs, and the derived official coverage bit. High-noise/community backlog
+rows must be explicit and must never count as official source-ready coverage.
 
 ## 8. CI expectations
 

@@ -31,7 +31,13 @@ from shiyi.adapters.rss import (
     microsoft_ai_blog_adapter,
     openai_news_adapter,
 )
-from shiyi.domain.models import CaptureWindow, ContentDepth, is_source_ready_content_depth
+from shiyi.domain.models import (
+    CaptureWindow,
+    ContentCompleteness,
+    ContentDepth,
+    content_completeness_from_depth,
+    is_item_ready_content_completeness,
+)
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.adapter import Adapter
 
@@ -61,7 +67,7 @@ SourceFamily: TypeAlias = Literal[
     "changelog",
     "ssr-detail",
 ]
-SourceClass: TypeAlias = Literal["official", "community"]
+SourceCategory: TypeAlias = Literal["official", "community", "social_media"]
 DetailCaptureMode: TypeAlias = Literal[
     "listing-only",
     "summary-only",
@@ -69,6 +75,7 @@ DetailCaptureMode: TypeAlias = Literal[
     "structured-api",
 ]
 ReadinessStatus: TypeAlias = Literal["ready", "degraded", "deferred"]
+AuthorityTier: TypeAlias = Literal["primary", "secondary", "unverified"]
 BacklogBucket: TypeAlias = Literal[
     "p3-registry-candidate",
     "p3-json-api-fetcher",
@@ -98,39 +105,47 @@ class SourceDefinition:
     source_kind: str
     adapter_name: str
     family: SourceFamily
-    source_class: SourceClass
+    source_category: SourceCategory
     detail_capture_mode: DetailCaptureMode
-    readiness_status: ReadinessStatus
     entry_url: str
     default_content_depth: ContentDepth
     notes: str
     traceability_refs: tuple[str, ...]
     factory: SourceAdapterFactory = field(repr=False, compare=False)
+    authority_tier: AuthorityTier | None = None
     defer_reason: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the source-readiness contract at import time."""
-        if self.readiness_status == "ready":
+        if self.default_content_completeness == "complete":
             if self.defer_reason is not None:
-                msg = f"ready source must not carry defer_reason: {self.name.value}"
-                raise ValueError(msg)
-            if not is_source_ready_content_depth(self.default_content_depth):
-                msg = (
-                    f"ready source must use source-ready content depth: {self.name.value} "
-                    f"({self.default_content_depth})"
-                )
+                msg = f"complete source must not carry defer_reason: {self.name.value}"
                 raise ValueError(msg)
         elif not self.defer_reason:
-            msg = f"non-ready source must carry defer_reason: {self.name.value}"
+            msg = f"incomplete source must carry defer_reason: {self.name.value}"
             raise ValueError(msg)
         if not self.traceability_refs:
             msg = f"source must carry traceability refs: {self.name.value}"
             raise ValueError(msg)
 
     @property
+    def default_content_completeness(self) -> ContentCompleteness:
+        """Return the item-level completeness implied by the default content depth."""
+        completeness = content_completeness_from_depth(self.default_content_depth)
+        if completeness is None:
+            msg = f"built-in source must carry default content completeness: {self.name.value}"
+            raise ValueError(msg)
+        return completeness
+
+    @property
+    def readiness_status(self) -> ReadinessStatus:
+        """Return the review label derived from content completeness."""
+        return "ready" if self.source_ready else "degraded"
+
+    @property
     def source_ready(self) -> bool:
-        """Return whether this source counts as source-ready coverage."""
-        return self.readiness_status == "ready"
+        """Return the source-ready review label derived from content completeness."""
+        return is_item_ready_content_completeness(self.default_content_completeness)
 
     def create_adapter(
         self,
@@ -148,12 +163,14 @@ class SourceBacklogItem:
 
     name: str
     bucket: BacklogBucket
-    source_class: SourceClass
+    source_category: SourceCategory
     detail_capture_mode: DetailCaptureMode
     entry_url: str
     reason: str
     traceability_refs: tuple[str, ...]
+    authority_tier: AuthorityTier | None = None
     readiness_status: Literal["deferred"] = "deferred"
+    content_completeness: ContentCompleteness | None = None
 
     @property
     def source_ready(self) -> bool:
@@ -169,8 +186,10 @@ class SourceSummary:
     status: SourceStatus
     family: str
     entry_url: str
-    source_class: SourceClass | None = None
+    source_category: SourceCategory | None = None
+    authority_tier: AuthorityTier | None = None
     detail_capture_mode: DetailCaptureMode | None = None
+    content_completeness: ContentCompleteness | None = None
     readiness_status: ReadinessStatus | None = None
     source_ready: bool = False
     counts_as_official_source_ready: bool = False
@@ -181,6 +200,24 @@ class SourceSummary:
     defer_reason: str | None = None
     bucket: str | None = None
     notes: str | None = None
+
+    def __post_init__(self) -> None:
+        """Derive review labels from category, completeness, traceability, and defer state."""
+        source_ready = self.status == "built-in" and is_item_ready_content_completeness(
+            self.content_completeness
+        )
+        counts_as_official_source_ready = (
+            self.source_category == "official"
+            and source_ready
+            and bool(self.traceability_refs)
+            and self.defer_reason is None
+        )
+        object.__setattr__(self, "source_ready", source_ready)
+        object.__setattr__(
+            self,
+            "counts_as_official_source_ready",
+            counts_as_official_source_ready,
+        )
 
 
 def build_source_adapter(
@@ -228,13 +265,13 @@ def _source_summary(definition: SourceDefinition) -> SourceSummary:
         source_kind=definition.source_kind,
         adapter_name=definition.adapter_name,
         family=definition.family,
-        source_class=definition.source_class,
+        source_category=definition.source_category,
+        authority_tier=definition.authority_tier,
         detail_capture_mode=definition.detail_capture_mode,
+        content_completeness=definition.default_content_completeness,
         readiness_status=definition.readiness_status,
         entry_url=definition.entry_url,
         default_content_depth=definition.default_content_depth,
-        source_ready=definition.source_ready,
-        counts_as_official_source_ready=_counts_as_official_source_ready(definition),
         defer_reason=definition.defer_reason,
         notes=definition.notes,
         traceability_refs=definition.traceability_refs,
@@ -246,21 +283,17 @@ def _backlog_summary(item: SourceBacklogItem) -> SourceSummary:
         name=item.name,
         status="deferred",
         family="backlog",
-        source_class=item.source_class,
+        source_category=item.source_category,
+        authority_tier=item.authority_tier,
         detail_capture_mode=item.detail_capture_mode,
+        content_completeness=item.content_completeness,
         readiness_status=item.readiness_status,
         entry_url=item.entry_url,
-        source_ready=item.source_ready,
-        counts_as_official_source_ready=False,
         bucket=item.bucket,
         defer_reason=item.reason,
         notes=item.reason,
         traceability_refs=item.traceability_refs,
     )
-
-
-def _counts_as_official_source_ready(definition: SourceDefinition) -> bool:
-    return definition.source_class == "official" and definition.source_ready
 
 
 def _openai_adapter(
@@ -390,9 +423,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="openai-news",
         adapter_name="openai-news-rss",
         family="rss",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="summary-only",
-        readiness_status="degraded",
         entry_url="https://openai.com/news/rss.xml",
         default_content_depth="summary_only",
         notes="generic RSS remains discovery-grade until a compliant canonical detail path exists",
@@ -413,9 +445,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="anthropic-news",
         adapter_name="anthropic-news-index",
         family="article-index",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=ANTHROPIC_NEWS_URL,
         default_content_depth="full_page",
         notes="index discovery plus official article detail pages",
@@ -430,9 +461,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="huggingface-blog",
         adapter_name="huggingface-blog-detail",
         family="rss-detail",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url="https://huggingface.co/blog/feed.xml",
         default_content_depth="full_page",
         notes="RSS discovery plus canonical blog detail pages",
@@ -447,9 +477,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="google-research-blog",
         adapter_name="google-research-blog-detail",
         family="rss-detail",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url="https://research.google/blog/rss/",
         default_content_depth="full_page",
         notes="RSS discovery plus canonical blog detail pages",
@@ -464,9 +493,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="deepmind-blog",
         adapter_name="deepmind-blog-detail",
         family="rss-detail",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=DEEPMIND_BLOG_RSS_URL,
         default_content_depth="full_page",
         notes="RSS discovery plus canonical article detail pages",
@@ -481,9 +509,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="deepseek-news",
         adapter_name="deepseek-news-article",
         family="article-index",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=DEEPSEEK_UPDATES_URL,
         default_content_depth="full_page",
         notes="official updates page used as discovery index",
@@ -498,9 +525,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="z-ai-blog",
         adapter_name="z-ai-blog-article",
         family="article-index",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=Z_AI_RELEASE_NOTES_URL,
         default_content_depth="full_page",
         notes="release-note discovery plus official blog detail payload",
@@ -515,9 +541,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="moonshot-kimi-changelog",
         adapter_name="moonshot-kimi-changelog-page",
         family="changelog",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="listing-only",
-        readiness_status="ready",
         entry_url=MOONSHOT_KIMI_CHANGELOG_URL,
         default_content_depth="feed_full_content",
         notes="official changelog; downstream should treat as engineering radar by default",
@@ -532,9 +557,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="bytedance-seed-blog",
         adapter_name="bytedance-seed-blog-ssr",
         family="ssr-detail",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="structured-api",
-        readiness_status="ready",
         entry_url=BYTEDANCE_SEED_BLOG_URL,
         default_content_depth="full_page",
         notes="official SSR embedded-data index plus article detail pages",
@@ -549,9 +573,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="gemini-api-changelog",
         adapter_name="gemini-api-changelog-page",
         family="changelog",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="listing-only",
-        readiness_status="ready",
         entry_url=GEMINI_API_CHANGELOG_URL,
         default_content_depth="feed_full_content",
         notes="official changelog; downstream should treat as engineering radar by default",
@@ -566,9 +589,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="mistral-news",
         adapter_name="mistral-news-article",
         family="article-index",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=MISTRAL_NEWS_URL,
         default_content_depth="full_page",
         notes="static news index plus official article detail pages",
@@ -583,9 +605,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="microsoft-ai-blog",
         adapter_name="microsoft-ai-blog-rss",
         family="rss",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="listing-only",
-        readiness_status="ready",
         entry_url=MICROSOFT_AI_BLOG_FEED_URL,
         default_content_depth="feed_full_content",
         notes="WordPress RSS currently carries decision-grade feed content",
@@ -600,9 +621,8 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_kind="cohere-blog",
         adapter_name="cohere-blog-article",
         family="article-index",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
-        readiness_status="ready",
         entry_url=COHERE_BLOG_URL,
         default_content_depth="full_page",
         notes="official blog, but downstream may demote high-level partnership/marketing posts",
@@ -624,7 +644,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="qwen-research",
         bucket="p3-json-api-fetcher",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="structured-api",
         entry_url="https://qwen.ai/research",
         reason=(
@@ -636,7 +656,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="minimax-news",
         bucket="p3-json-api-fetcher",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="structured-api",
         entry_url="https://www.minimax.io/news",
         reason=(
@@ -648,7 +668,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="langchain-blog",
         bucket="p3-registry-candidate",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://blog.langchain.com/",
         reason=(
@@ -660,7 +680,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="llamaindex-blog",
         bucket="p3-registry-candidate",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://www.llamaindex.ai/blog",
         reason="tooling ecosystem source; candidate after source registry/config exists",
@@ -669,7 +689,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="vercel-ai-sdk",
         bucket="p3-registry-candidate",
-        source_class="official",
+        source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://vercel.com/blog",
         reason=(
@@ -681,7 +701,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
     SourceBacklogItem(
         name="github-trending-or-community-feeds",
         bucket="later-high-noise",
-        source_class="community",
+        source_category="community",
         detail_capture_mode="listing-only",
         entry_url="https://github.com/trending",
         reason="high-noise community signal; defer until higher-noise source policy exists",

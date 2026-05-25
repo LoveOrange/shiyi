@@ -6,6 +6,7 @@
     "occurred_at": "2026-05-07T00:00:00+00:00",
     "published_at": "2026-05-07T00:00:00+00:00",
     "content_depth": "feed_full_content",
+    "content_completeness": "complete",
     "content_hash": "4203b9f28623f8ee69c65737254ab55114c77323cad5f6fc909ad63df7f541c5",
     "event_id": "gemini-api-changelog:2026-05-07",
     "idempotency_key": "gemini-api-changelog:2026-05-07",

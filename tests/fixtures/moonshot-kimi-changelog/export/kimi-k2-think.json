@@ -6,6 +6,7 @@
     "occurred_at": "2025-11-06T00:00:00+00:00",
     "published_at": "2025-11-06T00:00:00+00:00",
     "content_depth": "feed_full_content",
+    "content_completeness": "complete",
     "content_hash": "ab5fe002cda38df60b2fb648d4c280bda6281abdbd051e5ee2b84282a87a0c5e",
     "event_id": "moonshot-kimi-changelog:2025-11-06",
     "idempotency_key": "moonshot-kimi-changelog:2025-11-06",

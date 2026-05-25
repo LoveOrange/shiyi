@@ -2,6 +2,9 @@ import asyncio
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from shiyi.domain.models import (
     ArtifactWrite,
     HtmlPayload,
@@ -10,7 +13,7 @@ from shiyi.domain.models import (
     SourceIdentity,
     payload_content_hash,
 )
-from shiyi.export import export_items
+from shiyi.export import ExportedItem, export_items
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.stores.filesystem import FileSystemArtifactStore
 from shiyi.stores.sqlite import SQLiteEventRecordStore
@@ -65,6 +68,7 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "adapter_name",
         "adapter_version",
         "captured_at",
+        "content_completeness",
         "content_depth",
         "content_hash",
         "event_id",
@@ -233,6 +237,7 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
 
     exported = export_items(workspace=tmp_path, sources=("blog",), limit=10)
     depth_by_id = {item.event_id: item.content_depth for item in exported}
+    completeness_by_id = {item.event_id: item.content_completeness for item in exported}
     source_ready_by_id = {item.event_id: item.source_ready for item in exported}
     source_ready_only = export_items(
         workspace=tmp_path,
@@ -248,6 +253,13 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
         "evt_partial": "partial",
         "evt_blocked": "blocked",
     }
+    assert completeness_by_id == {
+        "evt_full": "complete",
+        "evt_feed_full": "complete",
+        "evt_summary": "summary_only",
+        "evt_partial": "partial",
+        "evt_blocked": "partial",
+    }
     assert source_ready_by_id == {
         "evt_full": True,
         "evt_feed_full": True,
@@ -256,6 +268,52 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
         "evt_blocked": False,
     }
     assert [item.event_id for item in source_ready_only] == ["evt_full", "evt_feed_full"]
+
+
+def test_exported_item_derives_readiness_from_content_depth() -> None:
+    item = ExportedItem(
+        event_id="evt_1",
+        idempotency_key="blog:evt_1",
+        status="persisted",
+        source=SourceIdentity(kind="blog"),
+        captured_at="2026-05-12T00:00:00+00:00",
+        content_hash="abc",
+        adapter_name="test",
+        adapter_version="0.1.0",
+        content_depth="full_page",
+        normalized_content="# Hello\n",
+    )
+
+    assert item.content_completeness == "complete"
+    assert item.source_ready is True
+    with pytest.raises(ValidationError, match="content_completeness must be derived"):
+        ExportedItem(
+            event_id="evt_bad_completeness",
+            idempotency_key="blog:evt_bad_completeness",
+            status="persisted",
+            source=SourceIdentity(kind="blog"),
+            captured_at="2026-05-12T00:00:00+00:00",
+            content_hash="abc",
+            adapter_name="test",
+            adapter_version="0.1.0",
+            content_depth="full_page",
+            content_completeness="summary_only",
+            normalized_content="# Hello\n",
+        )
+    with pytest.raises(ValidationError, match="source_ready must be derived"):
+        ExportedItem(
+            event_id="evt_bad_ready",
+            idempotency_key="blog:evt_bad_ready",
+            status="persisted",
+            source=SourceIdentity(kind="blog"),
+            captured_at="2026-05-12T00:00:00+00:00",
+            content_hash="abc",
+            adapter_name="test",
+            adapter_version="0.1.0",
+            content_depth="summary_only",
+            source_ready=True,
+            normalized_content="# Hello\n",
+        )
 
 
 def test_export_items_returns_stable_empty_result_when_filters_match_no_rows(

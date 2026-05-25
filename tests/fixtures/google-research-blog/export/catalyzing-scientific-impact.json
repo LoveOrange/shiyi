@@ -16,6 +16,7 @@
     "adapter_name": "google-research-blog-detail",
     "adapter_version": "0.1.0",
     "content_depth": "full_page",
+    "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/9b/9b14d084df35947ebd40b38e431e701bad21788e29957e14f2d0acd60a74b3a7",
     "normalized_media_type": "text/markdown",

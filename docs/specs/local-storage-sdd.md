@@ -86,7 +86,7 @@ shiyi export --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
 
 Output is a JSON array of `shiyi-export-item.v1` objects containing Shiyi trace fields plus `normalized_content`. It deliberately does not expose third-party adapter DTOs to consumers.
 
-For P2.5 source-readiness review, export/read consumers must be able to distinguish full article/detail records from summary-only or partial degraded records. Export/read should expose a Shiyi-native `content_depth` field or equivalent source-neutral metadata with these values: `full_page`, `feed_full_content`, `summary_only`, `partial`, `blocked`. Only `full_page` and `feed_full_content` are source-ready by default. Do not leak adapter-specific raw DTO fields.
+For P2.5 source-readiness review, export/read consumers must be able to distinguish full article/detail records from summary-only or partial degraded records. Export/read should expose Shiyi-native `content_depth` plus derived `content_completeness`; `content_depth` keeps mechanical detail such as `full_page`, `feed_full_content`, `summary_only`, `partial`, and `blocked`, while `content_completeness` is limited to `complete`, `partial`, and `summary_only`. Only `content_completeness=complete` is source-ready by default. Do not leak adapter-specific raw DTO fields.
 
 Export filters use a half-open `captured_at` window: `--since` is inclusive and `--until` is exclusive. Both stored `captured_at` values and filter bounds are compared as canonical UTC instants, so source timestamps with non-UTC offsets are first normalized to UTC.
 Repeated `--source` filters match canonical Shiyi `source.kind` values with OR semantics.

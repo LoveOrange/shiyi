@@ -6,17 +6,19 @@ import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from shiyi._time import utc_isoformat
 from shiyi.domain.models import (
     ArtifactRef,
+    ContentCompleteness,
     ContentDepth,
     SourceIdentity,
     StrictModel,
-    is_source_ready_content_depth,
+    content_completeness_from_depth,
+    is_item_ready_content_completeness,
 )
 
 DEFAULT_EXPORT_LIMIT = 20
@@ -37,10 +39,40 @@ class ExportedItem(StrictModel):
     adapter_name: str | None
     adapter_version: str | None
     content_depth: ContentDepth | None = None
+    content_completeness: ContentCompleteness | None = None
     source_ready: bool = False
     normalized_artifact_uri: str | None = None
     normalized_media_type: str | None = None
     normalized_content: str | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def derive_readiness_labels(cls, data: object) -> object:
+        """Derive item readiness labels from content depth to avoid split truth."""
+        if not isinstance(data, dict):
+            return data
+        content_depth = cast(str | None, data.get("content_depth"))
+        content_completeness = content_completeness_from_depth(content_depth)
+        supplied_completeness = cast(str | None, data.get("content_completeness"))
+        if supplied_completeness is not None and supplied_completeness != content_completeness:
+            msg = (
+                "content_completeness must be derived from content_depth: "
+                f"{supplied_completeness!r} != {content_completeness!r}"
+            )
+            raise ValueError(msg)
+        source_ready = is_item_ready_content_completeness(content_completeness)
+        supplied_source_ready = data.get("source_ready")
+        if supplied_source_ready is not None and supplied_source_ready != source_ready:
+            msg = (
+                "source_ready must be derived from content_completeness: "
+                f"{supplied_source_ready!r} != {source_ready!r}"
+            )
+            raise ValueError(msg)
+        return {
+            **data,
+            "content_completeness": content_completeness,
+            "source_ready": source_ready,
+        }
 
 
 def export_items(  # noqa: PLR0913
@@ -77,7 +109,8 @@ def export_items(  # noqa: PLR0913
             continue
         normalized_ref = _artifact_from_json(row["normalized_artifact_json"])
         content_depth = row["content_depth"]
-        source_ready = is_source_ready_content_depth(content_depth)
+        content_completeness = content_completeness_from_depth(content_depth)
+        source_ready = is_item_ready_content_completeness(content_completeness)
         if source_ready_only and not source_ready:
             continue
         exported.append(
@@ -93,6 +126,7 @@ def export_items(  # noqa: PLR0913
                 adapter_name=row["adapter_name"],
                 adapter_version=row["adapter_version"],
                 content_depth=content_depth,
+                content_completeness=content_completeness,
                 source_ready=source_ready,
                 normalized_artifact_uri=normalized_ref.uri if normalized_ref else None,
                 normalized_media_type=normalized_ref.media_type if normalized_ref else None,

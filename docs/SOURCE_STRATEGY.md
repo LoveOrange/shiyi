@@ -41,7 +41,7 @@ A built-in source should not be merged into default source lists unless it has:
 - pipeline integration smoke when the source is part of built-in capture;
 - export/read smoke proving consumer output excludes source-specific raw DTO fields;
 - normalized/exported content quality assertions proving consumers receive full article/detail content, not merely RSS/index summaries;
-- explicit degraded-state metadata via source-neutral `content_depth` for `summary_only`, `partial`, or `blocked` records so consumers can exclude them from decision-grade source-ready counts;
+- explicit item-level `content_completeness` derived from source-neutral `content_depth`, collapsed to `complete`, `partial`, or `summary_only`, so consumers can exclude incomplete records from decision-grade source-ready counts;
 - opt-in live smoke if the source is public and brittle enough to warrant reachability checks.
 
 If a source cannot satisfy this gate yet, keep it experimental and out of default source lists.
@@ -51,20 +51,29 @@ If a source cannot satisfy this gate yet, keep it experimental and out of defaul
 `shiyi sources --include-backlog` is the machine-readable review surface for source
 readiness. Every row must expose:
 
-- `source_class`: `official` or `community`;
+- `source_category`: initially `official`, `community`, or `social_media`;
+- optional `authority_tier` for within-category source authority when category alone is not
+  enough, especially future social-media accounts;
 - `detail_capture_mode`: `listing-only`, `summary-only`, `canonical-detail`, or
   `structured-api`;
 - `default_content_depth`: one of Shiyi's source-neutral content-depth values when the
   source is built in;
-- `readiness_status`: `ready`, `degraded`, or `deferred`;
-- `defer_reason`: required for every non-ready row;
+- `content_completeness`: `complete`, `partial`, or `summary_only` when a built-in source
+  emits normalized items; deferred backlog rows keep this null until implemented;
+- derived `readiness_status`: `ready`, `degraded`, or `deferred`;
+- derived `source_ready`: true only for `content_completeness=complete`;
+- `defer_reason`: required for every incomplete or deferred row;
 - `traceability_refs`: doc/test/fixture references supporting the row;
-- `counts_as_official_source_ready`: the coverage bit consumers should use for official
-  source-ready counts.
+- derived `counts_as_official_source_ready`: the coverage bit consumers should use for
+  official source-ready counts.
 
-Only official rows with `readiness_status=ready` count as official source-ready coverage.
-`degraded`, `deferred`, `community`, and `later-high-noise` backlog rows must remain
-visible for planning, but they do not count toward M2 official source-ready coverage.
+Only rows with `source_category=official`, `content_completeness=complete`,
+non-empty `traceability_refs`, and no defer/blocker state count as official source-ready
+coverage. `readiness_status`, `source_ready`, and `counts_as_official_source_ready` are
+review labels derived from that evidence; they are not independent item-level truths.
+`degraded`, `deferred`, `community`, `social_media`, and `later-high-noise` backlog rows
+must remain visible for planning, but they do not count toward M2 official source-ready
+coverage.
 
 ## 3. Adapter families
 

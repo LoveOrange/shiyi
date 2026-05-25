@@ -16,6 +16,7 @@
     "adapter_name": "huggingface-blog-detail",
     "adapter_version": "0.1.0",
     "content_depth": "full_page",
+    "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/c6/c661ece7b137ab25b81c032367caf43095773c2f3507158578fe6574fdad4ba8",
     "normalized_media_type": "text/markdown",

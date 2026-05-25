@@ -42,7 +42,7 @@ Fetcher fetches lightweight listing/index/feed
 -> Pipeline persists raw artifact, normalizes, persists event records, enriches
 ```
 
-P2.5 content-depth decision: RSS/index/changelog entries are discovery metadata by default. Unless an entry demonstrably contains the full article body, the adapter must fetch the canonical article/detail URL or official structured detail payload before emitting a decision-grade `InternalItem`. Summary-only content may still be emitted as a degraded fallback, but it must be marked with source-neutral `content_depth` (`summary_only`, `partial`, or `blocked`) and must not count as source-ready for AI Weekly.
+P2.5 content-depth decision: RSS/index/changelog entries are discovery metadata by default. Unless an entry demonstrably contains the full article body, the adapter must fetch the canonical article/detail URL or official structured detail payload before emitting a decision-grade `InternalItem`. Summary-only content may still be emitted as a degraded fallback, but it must be marked with source-neutral `content_depth`; export/read derives `content_completeness` as `complete`, `partial`, or `summary_only`, and only `complete` counts as source-ready for AI Weekly.
 
 ## 4. Boundaries
 
@@ -228,7 +228,7 @@ Current flow:
 2. Parse entries.
 3. Emit `InternalItem` from RSS entry content/summary.
 
-OpenAI used the RSS entry directly in the MVP flow. For P2.5 and later, this is no longer sufficient unless the feed entry contains the full article body. Current readiness status is explicit defer: observed RSS entries are summary-only, and unauthenticated canonical detail fetches return a managed browser challenge instead of stable article HTML. Until an official structured detail surface or compliant detail-fetch path exists, keep OpenAI records `content_depth=summary_only` and out of source-ready counts.
+OpenAI used the RSS entry directly in the MVP flow. For P2.5 and later, this is no longer sufficient unless the feed entry contains the full article body. Current readiness status is explicit defer: observed RSS entries are summary-only, and unauthenticated canonical detail fetches return a managed browser challenge instead of stable article HTML. Until an official structured detail surface or compliant detail-fetch path exists, keep OpenAI records `content_depth=summary_only`, derived `content_completeness=summary_only`, and out of source-ready counts.
 
 ## 11. HTTP policy
 
