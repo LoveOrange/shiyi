@@ -51,7 +51,7 @@ Required v1 schema semantics:
 - `content_hash`: deterministic SHA-256 over normalized payload material. It is for traceability/change detection, not source dedupe.
 - `provenance`: adapter name/version, source item ID, and fetch timestamp.
 - `idempotency_key`: stable logical dedupe key for replay safety.
-- `metadata`: source/item descriptive metadata. This is not pipeline processing state. Source-neutral content-depth markers may live here until a dedicated content-quality model exists. Use `content_depth` with one of `full_page`, `feed_full_content`, `summary_only`, `partial`, or `blocked`; export/read derives `content_completeness` as `complete`, `partial`, or `summary_only`, and only `complete` is decision-grade by default.
+- `metadata`: source/item descriptive metadata. This is not pipeline processing state. Source-neutral content-depth markers may live here until a dedicated content-quality model exists. Use `content_depth` with one of `complete`, `partial`, or `summary_only`; export/read derives `content_completeness` from the same three-state contract, and only `complete` is decision-grade by default. Capture path and fetch blocker details belong in source metadata or defer/blocker status, not in `content_depth`.
 
 Version policy: because Shiyi is still MVP, breaking schema changes rename/update the v1 contract directly across code, tests, and docs. Add a new schema version only when a real external consumer needs two versions to coexist.
 
@@ -251,7 +251,7 @@ Rules:
 
 - Normalization is optional.
 - Normalizer input is the validated `InternalItem`; normalizers must not depend on third-party feed/page structures.
-- Normalized output for source-ready built-ins should reflect the full article/detail payload rather than a discovery/feed snippet. If input is `summary_only`, `partial`, or `blocked`, the normalized artifact should export as incomplete `content_completeness` and must not pretend to be decision-grade full content.
+- Normalized output for source-ready built-ins should reflect the full article/detail payload rather than a discovery/feed snippet. If input is `summary_only` or `partial`, the normalized artifact should export as incomplete `content_completeness` and must not pretend to be decision-grade full content.
 - A normalized output is an `ArtifactWrite` with `kind="normalized"`, canonical media type, bytes content, and optional normalizer metadata.
 - If no normalizer is configured, the pipeline still persists raw and event-record state.
 - If the normalizer returns `None`, no normalized artifact is written; this means the payload is unsupported or already canonical, not failure.

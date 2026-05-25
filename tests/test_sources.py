@@ -8,6 +8,7 @@ from shiyi import (
     SOURCE_BACKLOG,
     AuthorityTier,
     ContentCompleteness,
+    ContentDepth,
     SourceCategory,
     SourceDefinition,
     SourceName,
@@ -48,7 +49,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert microsoft.detail_capture_mode == "listing-only"
     assert microsoft.content_completeness == "complete"
     assert microsoft.readiness_status == "ready"
-    assert microsoft.default_content_depth == "feed_full_content"
+    assert microsoft.default_content_depth == "complete"
     assert microsoft.source_ready is True
     assert microsoft.counts_as_official_source_ready is True
     assert openai.source_ready is False
@@ -63,13 +64,13 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert huggingface.detail_capture_mode == "canonical-detail"
     assert huggingface.content_completeness == "complete"
     assert huggingface.readiness_status == "ready"
-    assert huggingface.default_content_depth == "full_page"
+    assert huggingface.default_content_depth == "complete"
     assert huggingface.source_ready is True
     assert huggingface.defer_reason is None
     assert huggingface.counts_as_official_source_ready is True
     assert google_research.detail_capture_mode == "canonical-detail"
     assert google_research.readiness_status == "ready"
-    assert google_research.default_content_depth == "full_page"
+    assert google_research.default_content_depth == "complete"
     assert google_research.source_ready is True
     assert google_research.defer_reason is None
     assert all(summary.defer_reason for summary in summaries if summary.source_ready is False)
@@ -121,6 +122,7 @@ def test_source_registry_readiness_contract_covers_review_states() -> None:
 def test_source_registry_uses_minimal_taxonomies_and_derived_readiness() -> None:
     source_definition_fields = {field.name for field in fields(SourceDefinition)}
 
+    assert get_args(ContentDepth) == ("complete", "partial", "summary_only")
     assert get_args(ContentCompleteness) == ("complete", "partial", "summary_only")
     assert get_args(SourceCategory) == ("official", "community", "social_media")
     assert get_args(AuthorityTier) == ("primary", "secondary", "unverified")

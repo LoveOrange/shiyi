@@ -295,7 +295,7 @@ def _metadata(article: DeepMindArticle) -> dict[str, str]:
     metadata = {
         "title": article.title,
         "link": article.canonical_url,
-        "content_depth": "full_page",
+        "content_depth": "complete",
     }
     if article.author:
         metadata["author"] = article.author

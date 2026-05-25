@@ -157,7 +157,7 @@ def _extract_detail(html: str) -> _Detail:
         router_data, "loaderData", "(locale$)/blog/(id)/page", "data", "article"
     )
     content = _string_value(page_data.get("ContentZh")) or _string_value(page_data.get("ContentEn"))
-    return _Detail(content_html=content, content_depth="full_page" if content else "summary_only")
+    return _Detail(content_html=content, content_depth="complete" if content else "summary_only")
 
 
 def _entry_payload(*, index_item: _IndexItem, detail: _Detail) -> HtmlPayload | TextPayload:

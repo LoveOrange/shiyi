@@ -41,7 +41,7 @@ A built-in source should not be merged into default source lists unless it has:
 - pipeline integration smoke when the source is part of built-in capture;
 - export/read smoke proving consumer output excludes source-specific raw DTO fields;
 - normalized/exported content quality assertions proving consumers receive full article/detail content, not merely RSS/index summaries;
-- explicit item-level `content_completeness` derived from source-neutral `content_depth`, collapsed to `complete`, `partial`, or `summary_only`, so consumers can exclude incomplete records from decision-grade source-ready counts;
+- explicit item-level `content_completeness` derived from source-neutral MVP `content_depth` (`complete`, `partial`, or `summary_only`), so consumers can exclude incomplete records from decision-grade source-ready counts;
 - opt-in live smoke if the source is public and brittle enough to warrant reachability checks.
 
 If a source cannot satisfy this gate yet, keep it experimental and out of default source lists.
@@ -56,8 +56,8 @@ readiness. Every row must expose:
   enough, especially future social-media accounts;
 - `detail_capture_mode`: `listing-only`, `summary-only`, `canonical-detail`, or
   `structured-api`;
-- `default_content_depth`: one of Shiyi's source-neutral content-depth values when the
-  source is built in;
+- `default_content_depth`: `complete`, `partial`, or `summary_only` when the source is
+  built in;
 - `content_completeness`: `complete`, `partial`, or `summary_only` when a built-in source
   emits normalized items; deferred backlog rows keep this null until implemented;
 - derived `readiness_status`: `ready`, `degraded`, or `deferred`;
@@ -176,8 +176,8 @@ Recommended candidates:
 
 Overseas official Slice B implementation outcome:
 
-- `huggingface-blog` — Hugging Face Blog RSS at `https://huggingface.co/blog/feed.xml` is used only as discovery. Emitted source identity is the canonical blog article URL such as `https://huggingface.co/blog/open-r1`; normalized/exported content comes from the article detail body and carries `content_depth=full_page`.
-- `google-research-blog` — Google Research Blog RSS at `https://research.google/blog/rss/` is used only as discovery. Emitted source identity is the canonical research blog URL such as `https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources`; normalized/exported content comes from the canonical detail page and carries `content_depth=full_page`.
+- `huggingface-blog` — Hugging Face Blog RSS at `https://huggingface.co/blog/feed.xml` is used only as discovery. Emitted source identity is the canonical blog article URL such as `https://huggingface.co/blog/open-r1`; normalized/exported content comes from the article detail body and carries `content_depth=complete`.
+- `google-research-blog` — Google Research Blog RSS at `https://research.google/blog/rss/` is used only as discovery. Emitted source identity is the canonical research blog URL such as `https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources`; normalized/exported content comes from the canonical detail page and carries `content_depth=complete`.
 - `deepmind-blog` — Google DeepMind Blog RSS at `https://deepmind.google/blog/rss.xml` is used only as discovery. Emitted source identity is the canonical article URL such as `https://deepmind.google/blog/alphaevolve-impact/`; normalized/exported content comes from the article-scoped detail body, not the feed summary or whole page chrome.
 
 Deferred with explicit reason:

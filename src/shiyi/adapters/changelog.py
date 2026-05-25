@@ -76,7 +76,7 @@ class ArticleDetail:
     body: str
     link: str
     document_link: str | None = None
-    content_depth: ContentDepth = "full_page"
+    content_depth: ContentDepth = "complete"
     occurred_at: datetime | None = None
 
 
@@ -133,7 +133,7 @@ class ChangelogPageAdapter:
                     source_item_id=entry.entry_id,
                 ),
                 idempotency_key=item_id,
-                metadata={"title": entry.title, "link": link, "content_depth": "feed_full_content"},
+                metadata={"title": entry.title, "link": link, "content_depth": "complete"},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -905,10 +905,10 @@ def _article_metadata(*, entry: ArticleIndexEntry, detail: ArticleDetail) -> dic
 
 def _article_content_depth(*, body: str, fallback_body: str) -> ContentDepth:
     if body.strip():
-        return "full_page"
+        return "complete"
     if fallback_body.strip():
         return "summary_only"
-    return "blocked"
+    return "partial"
 
 
 def _body_without_duplicate_title(*, title: str, body: str) -> str:

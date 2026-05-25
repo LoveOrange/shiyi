@@ -4,7 +4,7 @@
   "id": "mistral-news:vibe-remote-agents-mistral-medium-3-5",
   "idempotency_key": "mistral-news:vibe-remote-agents-mistral-medium-3-5",
   "metadata": {
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "index_title": "Remote agents in Vibe. Powered by Mistral Medium 3.5.",
     "link": "https://mistral.ai/news/vibe-remote-agents-mistral-medium-3-5",
     "title": "Remote agents in Vibe. Powered by Mistral Medium 3.5."

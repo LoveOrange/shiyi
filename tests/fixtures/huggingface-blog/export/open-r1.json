@@ -15,7 +15,7 @@
     "content_hash": "5ba2607579b6e1a0d1ee4a47983712fc2ddc9fd269fee26c3aa4ea50bc803ab0",
     "adapter_name": "huggingface-blog-detail",
     "adapter_version": "0.1.0",
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/c6/c661ece7b137ab25b81c032367caf43095773c2f3507158578fe6574fdad4ba8",

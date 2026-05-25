@@ -4,7 +4,7 @@
   "id": "moonshot-kimi-changelog:2025-11-06",
   "idempotency_key": "moonshot-kimi-changelog:2025-11-06",
   "metadata": {
-    "content_depth": "feed_full_content",
+    "content_depth": "complete",
     "link": "https://platform.kimi.com/blog/posts/changelog#2025-11-06",
     "title": "Kimi K2 Think 模型及其 turbo 版本模型正式发布"
   },

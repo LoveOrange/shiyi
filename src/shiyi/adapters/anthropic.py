@@ -79,7 +79,7 @@ class AnthropicNewsAdapter:
                     source_item_id=article_id,
                 ),
                 idempotency_key=f"anthropic-news:{article_id}",
-                metadata={"title": title, "link": url, "content_depth": "full_page"},
+                metadata={"title": title, "link": url, "content_depth": "complete"},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:

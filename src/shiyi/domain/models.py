@@ -9,15 +9,13 @@ from typing import Annotated, Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
-ContentDepth = Literal["full_page", "feed_full_content", "summary_only", "partial", "blocked"]
+ContentDepth = Literal["complete", "partial", "summary_only"]
 ContentCompleteness = Literal["complete", "partial", "summary_only"]
-SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("full_page", "feed_full_content"))
+SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("complete",))
 CONTENT_DEPTH_COMPLETENESS: dict[ContentDepth, ContentCompleteness] = {
-    "full_page": "complete",
-    "feed_full_content": "complete",
+    "complete": "complete",
     "summary_only": "summary_only",
     "partial": "partial",
-    "blocked": "partial",
 }
 
 
@@ -132,7 +130,7 @@ def is_source_ready_content_depth(content_depth: ContentDepth | str | None) -> b
 def content_completeness_from_depth(
     content_depth: ContentDepth | str | None,
 ) -> ContentCompleteness | None:
-    """Collapse low-level content depth into the item-level completeness contract."""
+    """Derive item-level completeness from the MVP content-depth contract."""
     if content_depth is None:
         return None
     if content_depth not in CONTENT_DEPTH_COMPLETENESS:

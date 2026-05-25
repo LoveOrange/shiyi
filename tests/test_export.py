@@ -193,16 +193,10 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
     records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
     events = (
         _event(
-            "evt_full",
+            "evt_complete",
             "blog",
             datetime(2026, 5, 12, 12, tzinfo=UTC),
-            content_depth="full_page",
-        ),
-        _event(
-            "evt_feed_full",
-            "blog",
-            datetime(2026, 5, 12, 11, tzinfo=UTC),
-            content_depth="feed_full_content",
+            content_depth="complete",
         ),
         _event(
             "evt_summary",
@@ -215,12 +209,6 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
             "blog",
             datetime(2026, 5, 12, 9, tzinfo=UTC),
             content_depth="partial",
-        ),
-        _event(
-            "evt_blocked",
-            "blog",
-            datetime(2026, 5, 12, 8, tzinfo=UTC),
-            content_depth="blocked",
         ),
     )
 
@@ -247,27 +235,21 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
     )
 
     assert depth_by_id == {
-        "evt_full": "full_page",
-        "evt_feed_full": "feed_full_content",
+        "evt_complete": "complete",
         "evt_summary": "summary_only",
         "evt_partial": "partial",
-        "evt_blocked": "blocked",
     }
     assert completeness_by_id == {
-        "evt_full": "complete",
-        "evt_feed_full": "complete",
+        "evt_complete": "complete",
         "evt_summary": "summary_only",
         "evt_partial": "partial",
-        "evt_blocked": "partial",
     }
     assert source_ready_by_id == {
-        "evt_full": True,
-        "evt_feed_full": True,
+        "evt_complete": True,
         "evt_summary": False,
         "evt_partial": False,
-        "evt_blocked": False,
     }
-    assert [item.event_id for item in source_ready_only] == ["evt_full", "evt_feed_full"]
+    assert [item.event_id for item in source_ready_only] == ["evt_complete"]
 
 
 def test_exported_item_derives_readiness_from_content_depth() -> None:
@@ -280,7 +262,7 @@ def test_exported_item_derives_readiness_from_content_depth() -> None:
         content_hash="abc",
         adapter_name="test",
         adapter_version="0.1.0",
-        content_depth="full_page",
+        content_depth="complete",
         normalized_content="# Hello\n",
     )
 
@@ -296,7 +278,7 @@ def test_exported_item_derives_readiness_from_content_depth() -> None:
             content_hash="abc",
             adapter_name="test",
             adapter_version="0.1.0",
-            content_depth="full_page",
+            content_depth="complete",
             content_completeness="summary_only",
             normalized_content="# Hello\n",
         )

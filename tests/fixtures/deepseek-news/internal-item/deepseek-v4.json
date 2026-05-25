@@ -4,7 +4,7 @@
   "id": "deepseek-news:2026-04-24-deepseek-v4",
   "idempotency_key": "deepseek-news:2026-04-24-deepseek-v4",
   "metadata": {
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "index_title": "DeepSeek-V4",
     "link": "https://api-docs.deepseek.com/news/news260424",
     "title": "DeepSeek V4 Preview Release"

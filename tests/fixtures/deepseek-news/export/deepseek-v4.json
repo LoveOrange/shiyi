@@ -5,7 +5,7 @@
     "captured_at": "2026-05-14T08:30:00+00:00",
     "occurred_at": "2026-04-24T00:00:00+00:00",
     "published_at": "2026-04-24T00:00:00+00:00",
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "content_completeness": "complete",
     "content_hash": "603edf867ef5a6c1b1f2d49005669dd075c268b5609700f89d1deaa913ddbd3d",
     "event_id": "deepseek-news:2026-04-24-deepseek-v4",

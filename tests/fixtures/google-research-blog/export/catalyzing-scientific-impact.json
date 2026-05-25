@@ -15,7 +15,7 @@
     "content_hash": "78f4760ce63726e34403c3335157cd4326edfd91630306398b1b98387aa5dd84",
     "adapter_name": "google-research-blog-detail",
     "adapter_version": "0.1.0",
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/9b/9b14d084df35947ebd40b38e431e701bad21788e29957e14f2d0acd60a74b3a7",

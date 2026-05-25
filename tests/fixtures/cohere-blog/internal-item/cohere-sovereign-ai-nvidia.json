@@ -4,7 +4,7 @@
   "id": "cohere-blog:cohere-sovereign-ai-nvidia",
   "idempotency_key": "cohere-blog:cohere-sovereign-ai-nvidia",
   "metadata": {
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "index_title": "Cohere advances sovereign AI capabilities with NVIDIA",
     "link": "https://cohere.com/blog/cohere-sovereign-ai-nvidia",
     "title": "Cohere advances sovereign AI capabilities with NVIDIA"

@@ -5,7 +5,7 @@
   "idempotency_key": "deepmind-blog:alphaevolve-impact",
   "metadata": {
     "author": "AlphaEvolve team",
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "link": "https://deepmind.google/blog/alphaevolve-impact/",
     "modified_at": "2026-05-15T16:15:41.193589+00:00",
     "title": "AlphaEvolve: How our Gemini-powered coding agent is scaling impact across fields"

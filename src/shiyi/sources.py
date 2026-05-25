@@ -448,7 +448,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=ANTHROPIC_NEWS_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="index discovery plus official article detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -464,7 +464,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://huggingface.co/blog/feed.xml",
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="RSS discovery plus canonical blog detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -480,7 +480,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url="https://research.google/blog/rss/",
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="RSS discovery plus canonical blog detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -496,7 +496,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPMIND_BLOG_RSS_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="RSS discovery plus canonical article detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -512,7 +512,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPSEEK_UPDATES_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="official updates page used as discovery index",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -528,7 +528,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=Z_AI_RELEASE_NOTES_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="release-note discovery plus official blog detail payload",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -544,7 +544,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=MOONSHOT_KIMI_CHANGELOG_URL,
-        default_content_depth="feed_full_content",
+        default_content_depth="complete",
         notes="official changelog; downstream should treat as engineering radar by default",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -560,7 +560,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="structured-api",
         entry_url=BYTEDANCE_SEED_BLOG_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="official SSR embedded-data index plus article detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -576,7 +576,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=GEMINI_API_CHANGELOG_URL,
-        default_content_depth="feed_full_content",
+        default_content_depth="complete",
         notes="official changelog; downstream should treat as engineering radar by default",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -592,7 +592,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=MISTRAL_NEWS_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="static news index plus official article detail pages",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -608,7 +608,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="listing-only",
         entry_url=MICROSOFT_AI_BLOG_FEED_URL,
-        default_content_depth="feed_full_content",
+        default_content_depth="complete",
         notes="WordPress RSS currently carries decision-grade feed content",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
@@ -624,7 +624,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         source_category="official",
         detail_capture_mode="canonical-detail",
         entry_url=COHERE_BLOG_URL,
-        default_content_depth="full_page",
+        default_content_depth="complete",
         notes="official blog, but downstream may demote high-level partnership/marketing posts",
         traceability_refs=(
             "docs/SOURCE_STRATEGY.md#built-in-source-status",

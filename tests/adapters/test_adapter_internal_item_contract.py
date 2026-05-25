@@ -344,7 +344,7 @@ RSS_BUILTIN_CASES = (
         feed_url=MICROSOFT_AI_BLOG_FEED_URL,
         source_kind="microsoft-ai-blog",
         adapter_name="microsoft-ai-blog-rss",
-        content_depth="feed_full_content",
+        content_depth="complete",
         build_adapter=lambda feed, window: microsoft_ai_blog_adapter(
             rss_fetcher=FakeRssFetcher({MICROSOFT_AI_BLOG_FEED_URL: feed}), window=window
         ),
@@ -542,7 +542,7 @@ def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:
     assert item.metadata == {
         "title": "Minimal Anthropic Item",
         "link": ANTHROPIC_MINIMAL_URL,
-        "content_depth": "full_page",
+        "content_depth": "complete",
     }
     assert isinstance(item.payload, HtmlPayload)
     assert str(item.payload.url) == ANTHROPIC_MINIMAL_URL

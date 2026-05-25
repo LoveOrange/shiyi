@@ -182,7 +182,7 @@ class RssDetailAdapter:
                 metadata={
                     "title": article.title,
                     "link": article.canonical_url,
-                    "content_depth": "full_page",
+                    "content_depth": "complete",
                 },
             )
             emitted += 1
@@ -551,5 +551,5 @@ def microsoft_ai_blog_adapter(
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
-        content_depth="feed_full_content",
+        content_depth="complete",
     )

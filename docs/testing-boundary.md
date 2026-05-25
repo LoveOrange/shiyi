@@ -135,7 +135,7 @@ Tests should catch:
 
 - adapter fixtures that only exercise teaser/summary/listing content while a detail page exists
 - normalized content that is materially shorter or less informative than the source detail payload
-- records lacking source-neutral `content_depth` and derived `content_completeness` metadata when they are summary-only, partial, or blocked
+- records lacking source-neutral `content_depth` and derived `content_completeness` metadata when they are summary-only or partial
 - AI Weekly readiness checks counting `partial` or `summary_only` records as full source coverage
 
 ### 4.6 Export/read is a consumer contract

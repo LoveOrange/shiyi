@@ -193,7 +193,7 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     assert microsoft["readiness_status"] == "ready"
     assert microsoft["detail_capture_mode"] == "listing-only"
     assert microsoft["content_completeness"] == "complete"
-    assert microsoft["default_content_depth"] == "feed_full_content"
+    assert microsoft["default_content_depth"] == "complete"
     assert microsoft["counts_as_official_source_ready"] is True
     qwen = next(row for row in payload if row["name"] == "qwen-research")
     assert qwen["readiness_status"] == "deferred"
@@ -225,7 +225,7 @@ def test_main_export_prints_normalized_items(
                 content_hash="abc",
                 adapter_name="test",
                 adapter_version="0.1.0",
-                content_depth="full_page",
+                content_depth="complete",
                 source_ready=True,
                 normalized_artifact_uri="normalized/ab/abc",
                 normalized_media_type="text/markdown",
@@ -254,7 +254,7 @@ def test_main_export_prints_normalized_items(
 
     payload = json.loads(capsys.readouterr().out)
     assert payload[0]["event_id"] == "evt_1"
-    assert payload[0]["content_depth"] == "full_page"
+    assert payload[0]["content_depth"] == "complete"
     assert payload[0]["content_completeness"] == "complete"
     assert payload[0]["source_ready"] is True
     assert payload[0]["normalized_content"] == "# Hello\n"
