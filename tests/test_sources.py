@@ -1,6 +1,6 @@
 from dataclasses import fields
 from pathlib import Path
-from typing import get_args
+from typing import cast, get_args
 
 import pytest
 
@@ -8,14 +8,17 @@ from shiyi import (
     BUILTIN_SOURCE_NAMES,
     SOURCE_BACKLOG,
     Adapter,
+    AdapterAdmissionCandidate,
     AuthorityTier,
     ContentCompleteness,
     ContentDepth,
     SourceCategory,
     SourceDefinition,
     SourceName,
+    SourceSummary,
     StructuredApiReadinessEvidence,
     build_source_adapter,
+    classify_adapter_admission,
     iter_builtin_sources,
     source_definition,
     source_summaries,
@@ -218,6 +221,125 @@ def test_high_noise_community_backlog_never_counts_as_official_source_ready() ->
     } <= official_coverage_names
 
 
+def test_us05_adapter_admission_classifies_core_official_examples() -> None:
+    summaries = {summary.name: summary for summary in source_summaries(include_backlog=True)}
+
+    assert (
+        classify_adapter_admission(
+            _admission_candidate_from_summary(
+                summaries["cursor-changelog"],
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+            )
+        )
+        == "core_official"
+    )
+    assert (
+        classify_adapter_admission(
+            _admission_candidate_from_summary(
+                summaries["github-copilot-changelog"],
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+            )
+        )
+        == "core_official"
+    )
+
+
+def test_us05_adapter_admission_classifies_deferred_official_examples() -> None:
+    summaries = {summary.name: summary for summary in source_summaries(include_backlog=True)}
+
+    assert (
+        classify_adapter_admission(
+            _admission_candidate_from_summary(
+                summaries["openai"],
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+            )
+        )
+        == "deferred_official"
+    )
+    for name in (
+        "kiro-changelog",
+        "google-antigravity-changelog",
+        "qwen-research",
+        "minimax-news",
+    ):
+        assert (
+            classify_adapter_admission(
+                _admission_candidate_from_summary(
+                    summaries[name],
+                    has_bounded_fixtures=False,
+                    has_repeatable_tests=False,
+                    has_stable_identity=False,
+                )
+            )
+            == "deferred_official"
+        )
+
+
+def test_us05_adapter_admission_separates_optional_private_and_m3_future() -> None:
+    assert (
+        classify_adapter_admission(
+            AdapterAdmissionCandidate(
+                name="public-official-with-heavy-runtime",
+                source_category="official",
+                content_completeness="complete",
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+                requires_non_default_runtime=True,
+            )
+        )
+        == "optional_official"
+    )
+    assert (
+        classify_adapter_admission(
+            AdapterAdmissionCandidate(
+                name="private-official-portal",
+                source_category="official",
+                content_completeness="complete",
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+                requires_credentials=True,
+            )
+        )
+        == "private_closed"
+    )
+    assert (
+        classify_adapter_admission(
+            AdapterAdmissionCandidate(
+                name="credentialed-browser-state-source",
+                source_category="official",
+                content_completeness="complete",
+                has_bounded_fixtures=True,
+                has_repeatable_tests=True,
+                has_stable_identity=True,
+                requires_browser_state=True,
+            )
+        )
+        == "private_closed"
+    )
+    assert (
+        classify_adapter_admission(
+            AdapterAdmissionCandidate(
+                name="high-noise-community-feed",
+                source_category="community",
+                content_completeness=None,
+                has_bounded_fixtures=False,
+                has_repeatable_tests=False,
+                has_stable_identity=False,
+                needs_downstream_aggregation=True,
+            )
+        )
+        == "bfl_m3_future"
+    )
+
+
 def test_source_registry_rejects_unknown_source() -> None:
     with pytest.raises(ValueError, match="unknown source"):
         source_definition("not-a-source")
@@ -247,3 +369,29 @@ def test_structured_api_builtins_must_pass_readiness_gate() -> None:
                 traceability_refs=("tests/test_sources.py",),
             ),
         )
+
+
+def _admission_candidate_from_summary(
+    summary: SourceSummary,
+    *,
+    has_bounded_fixtures: bool,
+    has_repeatable_tests: bool,
+    has_stable_identity: bool,
+) -> AdapterAdmissionCandidate:
+    if summary.source_category not in get_args(SourceCategory):
+        msg = f"unexpected source_category: {summary.source_category!r}"
+        raise AssertionError(msg)
+    if summary.content_completeness is not None and summary.content_completeness not in get_args(
+        ContentCompleteness
+    ):
+        msg = f"unexpected content_completeness: {summary.content_completeness!r}"
+        raise AssertionError(msg)
+    source_category = cast(SourceCategory, summary.source_category)
+    return AdapterAdmissionCandidate(
+        name=summary.name,
+        source_category=source_category,
+        content_completeness=summary.content_completeness,
+        has_bounded_fixtures=has_bounded_fixtures,
+        has_repeatable_tests=has_repeatable_tests,
+        has_stable_identity=has_stable_identity,
+    )

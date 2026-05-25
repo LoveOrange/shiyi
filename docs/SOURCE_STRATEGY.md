@@ -91,6 +91,43 @@ repeatable extraction tests, and traceability references. `qwen-research`,
 embedded-data backlog rows until these checks are proven; `bytedance-seed-blog` is the
 current ready structured/SSR example.
 
+### 2.2 US05 adapter admission/package boundary
+
+US05 hardens the boundary around the existing normalized/export contract. It does not
+redesign the Shiyi -> AI Weekly handoff. The handoff remains `internal-item.v1` inside
+Shiyi and `shiyi-export-item.v1` for downstream consumers.
+
+Candidate adapters should be classified before implementation:
+
+- `core_official`: public official source, no credentials, no private data, no browser
+  state, no heavy non-default runtime, bounded fixtures, repeatable tests, stable IDs or
+  URLs and timestamps, and `content_completeness=complete`.
+- `optional_official`: public official source with the same neutral contract and test
+  evidence as core, but requiring a non-default runtime or dependency that must not bloat
+  default Shiyi. Optional official adapters are not required for US06.
+- `private_closed`: source access depends on credentials, private account data, browser
+  state, closed workspace state, or other user-specific authorization. These adapters must
+  not enter Shiyi core or US06 source-ready coverage.
+- `deferred_official`: official source whose endpoint, IDs, timestamps, canonical URLs,
+  complete payloads, fixtures, or repeatable tests are not proven yet, or whose current
+  output is only `partial` or `summary_only`.
+- `bfl_m3_future`: community, social-media, media, or other high-noise sources that need
+  downstream aggregation, topic merging, discussion weighting, or ranking before they are
+  useful.
+
+Current examples:
+
+- Cursor and GitHub Copilot remain `core_official` examples from US04.
+- OpenAI remains a degraded/deferred official source-ready example because current
+  unauthenticated evidence is summary-only.
+- Kiro, Antigravity, Qwen, and MiniMax remain `deferred_official`.
+- GitHub Trending/community feeds remain `bfl_m3_future`.
+
+The adapter admission policy is intentionally not a plugin mechanism. Until an actual
+optional/private adapter is approved, package placement stays at documentation and policy
+level. Default Shiyi must remain credential-free, private-data-free, browser-state-free,
+and free of heavy optional runtime requirements.
+
 ## 3. Adapter families
 
 ### 3.1 RSS / Atom feed sources

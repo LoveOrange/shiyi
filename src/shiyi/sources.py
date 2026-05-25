@@ -75,6 +75,13 @@ SourceFamily: TypeAlias = Literal[
     "ssr-detail",
 ]
 SourceCategory: TypeAlias = Literal["official", "community", "social_media"]
+AdapterAdmissionClass: TypeAlias = Literal[
+    "core_official",
+    "optional_official",
+    "private_closed",
+    "deferred_official",
+    "bfl_m3_future",
+]
 DetailCaptureMode: TypeAlias = Literal[
     "listing-only",
     "summary-only",
@@ -102,6 +109,53 @@ class SourceAdapterFactory(Protocol):
     ) -> Adapter:
         """Build an adapter for one capture window."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterAdmissionCandidate:
+    """Review input for classifying a candidate adapter before implementation."""
+
+    name: str
+    source_category: SourceCategory
+    content_completeness: ContentCompleteness | None
+    has_bounded_fixtures: bool
+    has_repeatable_tests: bool
+    has_stable_identity: bool
+    public_official_source: bool = True
+    requires_credentials: bool = False
+    requires_private_data: bool = False
+    requires_browser_state: bool = False
+    requires_non_default_runtime: bool = False
+    needs_downstream_aggregation: bool = False
+
+
+def classify_adapter_admission(
+    candidate: AdapterAdmissionCandidate,
+) -> AdapterAdmissionClass:
+    """Classify a candidate adapter under the US05 admission/package boundary."""
+    if candidate.source_category != "official" or candidate.needs_downstream_aggregation:
+        return "bfl_m3_future"
+    if (
+        not candidate.public_official_source
+        or candidate.requires_credentials
+        or candidate.requires_private_data
+        or candidate.requires_browser_state
+    ):
+        return "private_closed"
+    if not _has_core_source_readiness_evidence(candidate):
+        return "deferred_official"
+    if candidate.requires_non_default_runtime:
+        return "optional_official"
+    return "core_official"
+
+
+def _has_core_source_readiness_evidence(candidate: AdapterAdmissionCandidate) -> bool:
+    return (
+        candidate.content_completeness == "complete"
+        and candidate.has_bounded_fixtures
+        and candidate.has_repeatable_tests
+        and candidate.has_stable_identity
+    )
 
 
 @dataclass(frozen=True, slots=True)

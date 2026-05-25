@@ -149,6 +149,24 @@ Tests should catch:
 - source-kind or time-range filters returning incorrect records
 - empty exports crashing or returning non-contract output
 
+### 4.7 Adapter admission stays outside downstream product logic
+
+US05 adapter admission tests protect package placement, not report behavior. A candidate
+must be categorizable before implementation as core official, optional official,
+private-closed, deferred official, or BFL-M3 future. The classification is based on public
+official status, credential/private/browser-state requirements, non-default runtime
+requirements, bounded fixtures, repeatable tests, stable identity/timestamps/URLs, and
+derived `content_completeness`.
+
+Tests should catch:
+
+- credentialed, private-data, or browser-state adapters entering default Shiyi core
+- heavy optional runtimes becoming default dependencies
+- incomplete or unproven official sources being counted as core official
+- community/high-noise sources being promoted before downstream aggregation policy exists
+- AI Weekly projection, topic-link, ranking, report-entry, renderer, or editorial fields
+  leaking into `shiyi-export-item.v1`
+
 ## 5. Required P2 test areas
 
 ### P2-01 Test Boundary Constitution and CI gate
