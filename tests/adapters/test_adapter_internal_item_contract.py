@@ -27,7 +27,7 @@ from shiyi import (
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
-from shiyi.ports.fetcher import RssEntry, RssFeed
+from shiyi.ports.fetcher import FetcherError, RssEntry, RssFeed
 from shiyi.sources import BUILTIN_SOURCE_NAMES
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
@@ -511,6 +511,58 @@ def test_rss_builtin_filters_out_of_window_entries_before_required_field_validat
     items = asyncio.run(_collect_items(adapter.discover()))
 
     assert [item.idempotency_key for item in items] == [f"{case.source_kind}:valid-in-window"]
+
+
+def test_rss_detail_fetch_failure_fails_closed_without_complete_item() -> None:
+    feed = _rss_feed(
+        feed_url=HUGGINGFACE_RSS_URL,
+        entries=(
+            RssEntry(
+                entry_id=HUGGINGFACE_OPEN_R1_URL,
+                title="Open-R1",
+                link=HUGGINGFACE_OPEN_R1_URL,
+                html="<p>feed summary only</p>",
+                published_at=FETCHED_AT,
+            ),
+        ),
+    )
+    adapter = huggingface_blog_adapter(
+        rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}),
+        web_fetcher=FakeWebFetcher({}, fetched_at=FETCHED_AT),
+    )
+
+    with pytest.raises(FetcherError, match="No fake response configured"):
+        asyncio.run(_collect_items(adapter.discover()))
+
+
+def test_rss_detail_parser_failure_fails_closed_without_summary_only_promotion() -> None:
+    feed = _rss_feed(
+        feed_url=HUGGINGFACE_RSS_URL,
+        entries=(
+            RssEntry(
+                entry_id=HUGGINGFACE_OPEN_R1_URL,
+                title="Open-R1",
+                link=HUGGINGFACE_OPEN_R1_URL,
+                html="<p>feed summary only</p>",
+                published_at=FETCHED_AT,
+            ),
+        ),
+    )
+    adapter = huggingface_blog_adapter(
+        rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}),
+        web_fetcher=FakeWebFetcher(
+            {
+                HUGGINGFACE_OPEN_R1_URL: (
+                    "<html><head><title>Open-R1</title></head>"
+                    "<body><main>No article body</main></body></html>"
+                )
+            },
+            fetched_at=FETCHED_AT,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="missing content container"):
+        asyncio.run(_collect_items(adapter.discover()))
 
 
 def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:

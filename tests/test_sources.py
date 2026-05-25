@@ -1,4 +1,5 @@
 from dataclasses import fields
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -6,12 +7,14 @@ import pytest
 from shiyi import (
     BUILTIN_SOURCE_NAMES,
     SOURCE_BACKLOG,
+    Adapter,
     AuthorityTier,
     ContentCompleteness,
     ContentDepth,
     SourceCategory,
     SourceDefinition,
     SourceName,
+    StructuredApiReadinessEvidence,
     build_source_adapter,
     iter_builtin_sources,
     source_definition,
@@ -44,6 +47,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     google_research = next(
         summary for summary in summaries if summary.name == "google-research-blog"
     )
+    bytedance = next(summary for summary in summaries if summary.name == "bytedance-seed-blog")
     assert microsoft.status == "built-in"
     assert microsoft.source_category == "official"
     assert microsoft.detail_capture_mode == "listing-only"
@@ -73,6 +77,10 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert google_research.default_content_depth == "complete"
     assert google_research.source_ready is True
     assert google_research.defer_reason is None
+    assert bytedance.detail_capture_mode == "structured-api"
+    assert bytedance.structured_api_gate == "ready"
+    assert bytedance.structured_api_blockers == ()
+    assert bytedance.structured_api_traceability_refs
     assert all(summary.defer_reason for summary in summaries if summary.source_ready is False)
     assert all(summary.traceability_refs for summary in summaries)
     assert all(not hasattr(summary, "factory") for summary in summaries)
@@ -96,6 +104,16 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     assert qwen.counts_as_official_source_ready is False
     assert qwen.defer_reason == qwen.notes
     assert qwen.traceability_refs
+    assert qwen.structured_api_gate == "blocked"
+    assert set(qwen.structured_api_blockers) == {
+        "stable_official_endpoint",
+        "stable_item_ids",
+        "reliable_published_timestamps",
+        "canonical_urls",
+        "complete_payloads",
+        "bounded_fixtures",
+        "repeatable_extraction_tests",
+    }
     assert community.source_category == "community"
     assert community.detail_capture_mode == "listing-only"
     assert community.content_completeness is None
@@ -117,6 +135,8 @@ def test_source_registry_readiness_contract_covers_review_states() -> None:
     assert summaries["microsoft-ai-blog"].detail_capture_mode == "listing-only"
     assert summaries["google-research-blog"].detail_capture_mode == "canonical-detail"
     assert summaries["bytedance-seed-blog"].detail_capture_mode == "structured-api"
+    assert summaries["bytedance-seed-blog"].structured_api_gate == "ready"
+    assert summaries["qwen-research"].structured_api_gate == "blocked"
 
 
 def test_source_registry_uses_minimal_taxonomies_and_derived_readiness() -> None:
@@ -151,3 +171,29 @@ def test_high_noise_community_backlog_never_counts_as_official_source_ready() ->
 def test_source_registry_rejects_unknown_source() -> None:
     with pytest.raises(ValueError, match="unknown source"):
         source_definition("not-a-source")
+
+
+def test_structured_api_builtins_must_pass_readiness_gate() -> None:
+    def factory(*, window: CaptureWindow | None, raw_cache_root: Path | None = None) -> Adapter:
+        _ = window, raw_cache_root
+        msg = "factory should not be called by source definition validation"
+        raise AssertionError(msg)
+
+    with pytest.raises(ValueError, match="structured-api built-in source must pass"):
+        SourceDefinition(
+            name=SourceName.BYTEDANCE_SEED_BLOG,
+            source_kind="example-structured",
+            adapter_name="example-structured",
+            family="ssr-detail",
+            source_category="official",
+            detail_capture_mode="structured-api",
+            entry_url="https://example.com",
+            default_content_depth="complete",
+            notes="invalid structured gate",
+            traceability_refs=("tests/test_sources.py",),
+            factory=factory,
+            structured_api_readiness=StructuredApiReadinessEvidence(
+                stable_official_endpoint=True,
+                traceability_refs=("tests/test_sources.py",),
+            ),
+        )

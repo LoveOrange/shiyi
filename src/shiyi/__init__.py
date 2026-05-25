@@ -61,6 +61,14 @@ from shiyi.ports.ai_provider import AIProvider
 from shiyi.ports.artifact_store import ArtifactStore
 from shiyi.ports.event_record_store import EventRecordStore
 from shiyi.ports.normalizer import Normalizer
+from shiyi.source_readiness import (
+    DEFAULT_STRUCTURED_FIXTURE_MAX_BYTES,
+    FixtureSizeCheck,
+    StructuredApiGateStatus,
+    StructuredApiReadinessBlocker,
+    StructuredApiReadinessEvidence,
+    check_fixture_size,
+)
 from shiyi.sources import (
     BUILTIN_SOURCE_NAMES,
     SOURCE_BACKLOG,
@@ -82,6 +90,7 @@ from shiyi.sources import (
 
 __all__ = [
     "BUILTIN_SOURCE_NAMES",
+    "DEFAULT_STRUCTURED_FIXTURE_MAX_BYTES",
     "SOURCE_BACKLOG",
     "SOURCE_DEFINITIONS",
     "AIProvider",
@@ -111,6 +120,7 @@ __all__ = [
     "EventRecordStore",
     "ExportedItem",
     "ExtractTask",
+    "FixtureSizeCheck",
     "HtmlMarkdownNormalizer",
     "HtmlPayload",
     "InternalItem",
@@ -130,12 +140,16 @@ __all__ = [
     "SourceIdentity",
     "SourceName",
     "SourceSummary",
+    "StructuredApiGateStatus",
+    "StructuredApiReadinessBlocker",
+    "StructuredApiReadinessEvidence",
     "SummarizeTask",
     "TextPayload",
     "TokenUsage",
     "anthropic_news_adapter",
     "build_source_adapter",
     "bytedance_seed_blog_adapter",
+    "check_fixture_size",
     "cohere_blog_adapter",
     "content_completeness_from_depth",
     "content_depth_from_metadata",

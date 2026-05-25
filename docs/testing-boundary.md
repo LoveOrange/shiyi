@@ -298,6 +298,14 @@ summary-only, canonical-detail, and structured-API capture modes, defer reason,
 traceability refs, and the derived official coverage bit. High-noise/community backlog
 rows must be explicit and must never count as official source-ready coverage.
 
+For official structured/API surfaces, tests must also cover the explicit readiness gate:
+stable official endpoint, stable item IDs or deterministic canonical IDs, reliable
+published timestamps, canonical URLs, complete payloads, bounded fixtures, repeatable
+extraction tests, and traceability refs. Fixture-size checks should use a small,
+reviewable payload boundary instead of snapshotting full upstream API responses. Deferred
+structured/API candidates such as Qwen or MiniMax must expose the unmet gate blockers in
+`shiyi sources --include-backlog`.
+
 ## 8. CI expectations
 
 Default CI should run:

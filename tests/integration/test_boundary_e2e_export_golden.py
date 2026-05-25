@@ -298,6 +298,12 @@ def test_fixture_backed_rss_ingest_persist_export_matches_golden(
         source_uri = source.get("uri")
         if isinstance(source_uri, str):
             assert source_uri in normalized_content
+        if case.source_kind == "huggingface-blog":
+            assert exported[0]["content_depth"] == "complete"
+            assert exported[0]["content_completeness"] == "complete"
+            assert exported[0]["source_ready"] is True
+            assert exported[0]["published_at"] == "2026-05-09T09:00:00+00:00"
+            assert source_uri == HUGGINGFACE_OPEN_R1_URL
     else:
         assert entry.title in normalized_content
         if entry.link is not None:

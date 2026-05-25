@@ -64,6 +64,9 @@ readiness. Every row must expose:
 - derived `source_ready`: true only for `content_completeness=complete`;
 - `defer_reason`: required for every incomplete or deferred row;
 - `traceability_refs`: doc/test/fixture references supporting the row;
+- for `structured-api` surfaces, `structured_api_gate`, `structured_api_blockers`,
+  and `structured_api_traceability_refs`, so JSON/API candidates cannot be promoted by
+  adapter optimism alone;
 - derived `counts_as_official_source_ready`: the coverage bit consumers should use for
   official source-ready counts.
 
@@ -74,6 +77,13 @@ review labels derived from that evidence; they are not independent item-level tr
 `degraded`, `deferred`, `community`, `social_media`, and `later-high-noise` backlog rows
 must remain visible for planning, but they do not count toward M2 official source-ready
 coverage.
+
+Structured/API candidates must pass all objective gate checks before they can become
+source-ready: stable official endpoint, stable item IDs or deterministic canonical IDs,
+reliable published timestamps, canonical URLs, complete payloads, bounded fixtures,
+repeatable extraction tests, and traceability references. `qwen-research` and
+`minimax-news` deliberately remain `structured-api` backlog rows until these checks are
+proven; `bytedance-seed-blog` is the current ready structured/SSR example.
 
 ## 3. Adapter families
 
@@ -114,7 +124,7 @@ Examples:
 - arXiv API;
 - Papers with Code or equivalent APIs.
 
-API and embedded-data sources usually need stronger pagination, checkpoint, completeness, and rate-limit tests before being treated as default built-ins. Official-used JSON or SSR payloads are acceptable only when they can be fixture-backed without browser automation.
+API and embedded-data sources usually need stronger pagination, checkpoint, completeness, and rate-limit tests before being treated as default built-ins. Official-used JSON or SSR payloads are acceptable only when they can be fixture-backed without browser automation. The structured/API readiness gate blocks promotion unless the implementation proves stable endpoint identity, stable item IDs, reliable timestamps, canonical URLs, complete payloads, bounded fixtures, repeatable extraction tests, and traceability refs.
 
 ### 3.4 Repository/package ecosystem sources
 

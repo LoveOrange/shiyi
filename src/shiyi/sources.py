@@ -40,6 +40,7 @@ from shiyi.domain.models import (
 )
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.adapter import Adapter
+from shiyi.source_readiness import StructuredApiGateStatus, StructuredApiReadinessEvidence
 
 
 class SourceName(StrEnum):
@@ -114,6 +115,7 @@ class SourceDefinition:
     factory: SourceAdapterFactory = field(repr=False, compare=False)
     authority_tier: AuthorityTier | None = None
     defer_reason: str | None = None
+    structured_api_readiness: StructuredApiReadinessEvidence | None = None
 
     def __post_init__(self) -> None:
         """Validate the source-readiness contract at import time."""
@@ -126,6 +128,11 @@ class SourceDefinition:
             raise ValueError(msg)
         if not self.traceability_refs:
             msg = f"source must carry traceability refs: {self.name.value}"
+            raise ValueError(msg)
+        if self.detail_capture_mode == "structured-api" and (
+            self.structured_api_readiness is None or not self.structured_api_readiness.source_ready
+        ):
+            msg = f"structured-api built-in source must pass readiness gate: {self.name.value}"
             raise ValueError(msg)
 
     @property
@@ -169,8 +176,15 @@ class SourceBacklogItem:
     reason: str
     traceability_refs: tuple[str, ...]
     authority_tier: AuthorityTier | None = None
+    structured_api_readiness: StructuredApiReadinessEvidence | None = None
     readiness_status: Literal["deferred"] = "deferred"
     content_completeness: ContentCompleteness | None = None
+
+    def __post_init__(self) -> None:
+        """Validate deferred structured/API candidates carry explicit gate evidence."""
+        if self.detail_capture_mode == "structured-api" and self.structured_api_readiness is None:
+            msg = f"structured-api backlog source must carry readiness gate: {self.name}"
+            raise ValueError(msg)
 
     @property
     def source_ready(self) -> bool:
@@ -198,6 +212,9 @@ class SourceSummary:
     adapter_name: str | None = None
     default_content_depth: str | None = None
     defer_reason: str | None = None
+    structured_api_gate: StructuredApiGateStatus | None = None
+    structured_api_blockers: tuple[str, ...] = ()
+    structured_api_traceability_refs: tuple[str, ...] = ()
     bucket: str | None = None
     notes: str | None = None
 
@@ -275,6 +292,21 @@ def _source_summary(definition: SourceDefinition) -> SourceSummary:
         defer_reason=definition.defer_reason,
         notes=definition.notes,
         traceability_refs=definition.traceability_refs,
+        structured_api_gate=(
+            definition.structured_api_readiness.status
+            if definition.structured_api_readiness
+            else None
+        ),
+        structured_api_blockers=(
+            definition.structured_api_readiness.blockers
+            if definition.structured_api_readiness
+            else ()
+        ),
+        structured_api_traceability_refs=(
+            definition.structured_api_readiness.traceability_refs
+            if definition.structured_api_readiness
+            else ()
+        ),
     )
 
 
@@ -293,6 +325,15 @@ def _backlog_summary(item: SourceBacklogItem) -> SourceSummary:
         defer_reason=item.reason,
         notes=item.reason,
         traceability_refs=item.traceability_refs,
+        structured_api_gate=(
+            item.structured_api_readiness.status if item.structured_api_readiness else None
+        ),
+        structured_api_blockers=(
+            item.structured_api_readiness.blockers if item.structured_api_readiness else ()
+        ),
+        structured_api_traceability_refs=(
+            item.structured_api_readiness.traceability_refs if item.structured_api_readiness else ()
+        ),
     )
 
 
@@ -566,6 +607,20 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
             "docs/SOURCE_STRATEGY.md#built-in-source-status",
             "tests/fixtures/bytedance-seed-blog/export/seed3d-2-0.json",
         ),
+        structured_api_readiness=StructuredApiReadinessEvidence(
+            stable_official_endpoint=True,
+            stable_item_ids=True,
+            reliable_published_timestamps=True,
+            canonical_urls=True,
+            complete_payloads=True,
+            bounded_fixtures=True,
+            repeatable_extraction_tests=True,
+            traceability_refs=(
+                "tests/adapters/test_adapter_internal_item_contract.py",
+                "tests/integration/test_boundary_e2e_export_golden.py",
+                "tests/test_source_readiness.py",
+            ),
+        ),
         factory=_bytedance_seed_blog_adapter,
     ),
     SourceDefinition(
@@ -652,6 +707,9 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
             "before becoming built-in"
         ),
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
+        structured_api_readiness=StructuredApiReadinessEvidence(
+            traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
+        ),
     ),
     SourceBacklogItem(
         name="minimax-news",
@@ -664,6 +722,9 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
             "in P2.5 audit"
         ),
         traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
+        structured_api_readiness=StructuredApiReadinessEvidence(
+            traceability_refs=("docs/SOURCE_STRATEGY.md#batch-1--official-ai-source-coverage",),
+        ),
     ),
     SourceBacklogItem(
         name="langchain-blog",
