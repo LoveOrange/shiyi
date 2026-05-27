@@ -20,6 +20,7 @@
       "uri": "https://seed.bytedance.com/zh/blog/seed3d-2-0%E5%8F%91%E5%B8%83-%E6%9B%B4%E9%AB%98%E7%B2%BE%E5%BA%A6-%E6%9B%B4%E5%BC%BA%E5%8F%AF%E7%94%A8%E6%80%A7"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "blog"
   }
 ]

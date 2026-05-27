@@ -20,6 +20,7 @@
       "uri": "https://ai.google.dev/gemini-api/docs/changelog.md.txt"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "changelog"
   }
 ]

@@ -20,6 +20,7 @@
       "uri": "https://openai.com/news/rss.xml"
     },
     "source_ready": false,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "news"
   }
 ]

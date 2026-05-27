@@ -20,6 +20,7 @@
       "uri": "https://z.ai/blog/glm-5.1"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "release_notes"
   }
 ]

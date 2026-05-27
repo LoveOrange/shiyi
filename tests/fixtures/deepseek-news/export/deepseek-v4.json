@@ -20,6 +20,7 @@
       "uri": "https://api-docs.deepseek.com/news/news260424"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "news"
   }
 ]

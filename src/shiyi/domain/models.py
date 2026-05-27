@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 NonEmptyString = Annotated[str, Field(min_length=1)]
 ContentDepth = Literal["complete", "partial", "summary_only"]
 ContentCompleteness = Literal["complete", "partial", "summary_only"]
+SourceType = Literal["changelog", "release_notes", "blog", "docs", "research", "news", "unknown"]
 SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("complete",))
 CONTENT_DEPTH_COMPLETENESS: dict[ContentDepth, ContentCompleteness] = {
     "complete": "complete",

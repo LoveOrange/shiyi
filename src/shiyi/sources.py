@@ -39,6 +39,7 @@ from shiyi.domain.models import (
     CaptureWindow,
     ContentCompleteness,
     ContentDepth,
+    SourceType,
     content_completeness_from_depth,
     is_item_ready_content_completeness,
 )
@@ -167,6 +168,7 @@ class SourceDefinition:
     adapter_name: str
     fetcher_family: SourceFamily
     source_category: SourceCategory
+    source_type: SourceType
     detail_capture_mode: DetailCaptureMode
     entry_url: str
     default_content_depth: ContentDepth
@@ -236,6 +238,7 @@ class SourceBacklogItem:
     name: str
     bucket: BacklogBucket
     source_category: SourceCategory
+    source_type: SourceType
     detail_capture_mode: DetailCaptureMode
     entry_url: str
     reason: str
@@ -267,6 +270,7 @@ class SourceSummary:
     family: str
     entry_url: str
     source_category: SourceCategory | None = None
+    source_type: SourceType | None = None
     fetcher_family: str | None = None
     authority_tier: AuthorityTier | None = None
     detail_capture_mode: DetailCaptureMode | None = None
@@ -353,6 +357,7 @@ def _source_summary(definition: SourceDefinition) -> SourceSummary:
         family=definition.family,
         fetcher_family=definition.fetcher_family,
         source_category=definition.source_category,
+        source_type=definition.source_type,
         authority_tier=definition.authority_tier,
         detail_capture_mode=definition.detail_capture_mode,
         content_completeness=definition.default_content_completeness,
@@ -387,6 +392,7 @@ def _backlog_summary(item: SourceBacklogItem) -> SourceSummary:
         family=item.fetcher_family,
         fetcher_family=item.fetcher_family,
         source_category=item.source_category,
+        source_type=item.source_type,
         authority_tier=item.authority_tier,
         detail_capture_mode=item.detail_capture_mode,
         content_completeness=item.content_completeness,
@@ -554,6 +560,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="openai-news-rss",
         fetcher_family="rss",
         source_category="official",
+        source_type="news",
         detail_capture_mode="summary-only",
         entry_url="https://openai.com/news/rss.xml",
         default_content_depth="summary_only",
@@ -576,6 +583,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="anthropic-news-index",
         fetcher_family="article-index",
         source_category="official",
+        source_type="news",
         detail_capture_mode="canonical-detail",
         entry_url=ANTHROPIC_NEWS_URL,
         default_content_depth="complete",
@@ -592,6 +600,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="huggingface-blog-detail",
         fetcher_family="rss-detail",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="canonical-detail",
         entry_url="https://huggingface.co/blog/feed.xml",
         default_content_depth="complete",
@@ -608,6 +617,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="google-research-blog-detail",
         fetcher_family="rss-detail",
         source_category="official",
+        source_type="research",
         detail_capture_mode="canonical-detail",
         entry_url="https://research.google/blog/rss/",
         default_content_depth="complete",
@@ -624,6 +634,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="deepmind-blog-detail",
         fetcher_family="rss-detail",
         source_category="official",
+        source_type="research",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPMIND_BLOG_RSS_URL,
         default_content_depth="complete",
@@ -640,6 +651,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="deepseek-news-article",
         fetcher_family="article-index",
         source_category="official",
+        source_type="news",
         detail_capture_mode="canonical-detail",
         entry_url=DEEPSEEK_UPDATES_URL,
         default_content_depth="complete",
@@ -656,6 +668,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="z-ai-blog-article",
         fetcher_family="article-index",
         source_category="official",
+        source_type="release_notes",
         detail_capture_mode="canonical-detail",
         entry_url=Z_AI_RELEASE_NOTES_URL,
         default_content_depth="complete",
@@ -672,6 +685,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="moonshot-kimi-changelog-page",
         fetcher_family="changelog",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="listing-only",
         entry_url=MOONSHOT_KIMI_CHANGELOG_URL,
         default_content_depth="complete",
@@ -688,6 +702,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="bytedance-seed-blog-ssr",
         fetcher_family="ssr-detail",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="structured-api",
         entry_url=BYTEDANCE_SEED_BLOG_URL,
         default_content_depth="complete",
@@ -718,6 +733,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="gemini-api-changelog-page",
         fetcher_family="changelog",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="listing-only",
         entry_url=GEMINI_API_CHANGELOG_URL,
         default_content_depth="complete",
@@ -734,6 +750,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="mistral-news-article",
         fetcher_family="article-index",
         source_category="official",
+        source_type="news",
         detail_capture_mode="canonical-detail",
         entry_url=MISTRAL_NEWS_URL,
         default_content_depth="complete",
@@ -750,6 +767,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="microsoft-ai-blog-rss",
         fetcher_family="rss",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="listing-only",
         entry_url=MICROSOFT_AI_BLOG_FEED_URL,
         default_content_depth="complete",
@@ -766,6 +784,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="cohere-blog-article",
         fetcher_family="article-index",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="canonical-detail",
         entry_url=COHERE_BLOG_URL,
         default_content_depth="complete",
@@ -782,6 +801,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="cursor-changelog-page",
         fetcher_family="changelog",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="listing-only",
         entry_url=CURSOR_CHANGELOG_URL,
         default_content_depth="complete",
@@ -798,6 +818,7 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
         adapter_name="github-copilot-changelog-rss",
         fetcher_family="rss",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="listing-only",
         entry_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
         default_content_depth="complete",
@@ -823,6 +844,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="qwen-research",
         bucket="p3-json-api-fetcher",
         source_category="official",
+        source_type="research",
         detail_capture_mode="structured-api",
         entry_url="https://qwen.ai/research",
         reason=(
@@ -839,6 +861,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="minimax-news",
         bucket="p3-json-api-fetcher",
         source_category="official",
+        source_type="news",
         detail_capture_mode="structured-api",
         entry_url="https://www.minimax.io/news",
         reason=(
@@ -855,6 +878,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="kiro-changelog",
         bucket="p3-registry-candidate",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="canonical-detail",
         entry_url="https://kiro.dev/changelog/feed.rss",
         reason=(
@@ -869,6 +893,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="google-antigravity-changelog",
         bucket="p3-json-api-fetcher",
         source_category="official",
+        source_type="changelog",
         detail_capture_mode="structured-api",
         entry_url="https://antigravity.google/changelog?app=antigravity-ide",
         reason=(
@@ -886,6 +911,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="langchain-blog",
         bucket="p3-registry-candidate",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="canonical-detail",
         entry_url="https://blog.langchain.com/",
         reason=(
@@ -899,6 +925,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="llamaindex-blog",
         bucket="p3-registry-candidate",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="canonical-detail",
         entry_url="https://www.llamaindex.ai/blog",
         reason="tooling ecosystem source; candidate after source registry/config exists",
@@ -909,6 +936,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="vercel-ai-sdk",
         bucket="p3-registry-candidate",
         source_category="official",
+        source_type="blog",
         detail_capture_mode="canonical-detail",
         entry_url="https://vercel.com/blog",
         reason=(
@@ -922,6 +950,7 @@ SOURCE_BACKLOG: tuple[SourceBacklogItem, ...] = (
         name="github-trending-or-community-feeds",
         bucket="later-high-noise",
         source_category="community",
+        source_type="unknown",
         detail_capture_mode="listing-only",
         entry_url="https://github.com/trending",
         reason="high-noise community signal; defer until higher-noise source policy exists",

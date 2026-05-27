@@ -60,6 +60,7 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
     assert exported[0].captured_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].occurred_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].published_at == "2026-05-12T10:00:00+00:00"
+    assert exported[0].source_type == "unknown"
     assert exported[0].normalized_media_type == "text/markdown"
     assert exported[0].normalized_content is not None
     assert "# evt\\_1" in exported[0].normalized_content
@@ -80,6 +81,7 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "normalized_media_type",
         "schema_version",
         "source",
+        "source_type",
         "source_ready",
         "status",
     }
@@ -250,6 +252,23 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
         "evt_partial": False,
     }
     assert [item.event_id for item in source_ready_only] == ["evt_complete"]
+
+
+def test_export_items_adds_source_type_from_builtin_registry(tmp_path: Path) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event(
+        "evt_copilot",
+        "github-copilot-changelog",
+        datetime(2026, 5, 12, 10, tzinfo=UTC),
+        content_depth="complete",
+    )
+    asyncio.run(_save_event(artifacts=artifacts, records=records, event=event, normalized=True))
+
+    [item] = export_items(workspace=tmp_path, sources=("github-copilot-changelog",), limit=10)
+
+    assert item.source_type == "changelog"
+    assert item.model_dump(mode="json")["source_type"] == "changelog"
 
 
 def test_exported_item_derives_readiness_from_content_depth() -> None:

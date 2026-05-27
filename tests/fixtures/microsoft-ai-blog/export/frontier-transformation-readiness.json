@@ -20,6 +20,7 @@
       "uri": "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "blog"
   }
 ]

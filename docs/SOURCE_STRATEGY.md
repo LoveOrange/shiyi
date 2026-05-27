@@ -55,6 +55,10 @@ readiness. Every row must expose:
 - `fetcher_family`: the adapter/fetcher technical shape, such as `rss`,
   `rss-detail`, `article-index`, `changelog`, `ssr-detail`, or a deferred
   structured/embedded-data candidate label;
+- `source_type`: the objective source surface/publishing shape exported to downstream
+  consumers. The stable M2 enum is `changelog`, `release_notes`, `blog`, `docs`,
+  `research`, `news`, or `unknown`. This is separate from both provenance/trust
+  (`source_category`) and capture mechanics (`fetcher_family`);
 - optional `authority_tier` for within-category source authority when category alone is not
   enough, especially future social-media accounts;
 - compatibility `family` may remain in JSON temporarily as an alias for `fetcher_family`;

@@ -20,6 +20,7 @@
       "uri": "https://cursor.com/changelog"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "changelog"
   }
 ]

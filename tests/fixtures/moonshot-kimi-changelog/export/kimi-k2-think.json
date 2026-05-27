@@ -20,6 +20,7 @@
       "uri": "https://platform.kimi.com/blog/posts/changelog"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "changelog"
   }
 ]

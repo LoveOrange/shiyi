@@ -20,6 +20,7 @@
       "uri": "https://mistral.ai/news/vibe-remote-agents-mistral-medium-3-5"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "news"
   }
 ]

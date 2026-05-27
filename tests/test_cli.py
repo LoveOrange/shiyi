@@ -190,6 +190,7 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     microsoft = next(row for row in payload if row["name"] == "microsoft-ai-blog")
     assert microsoft["status"] == "built-in"
     assert microsoft["source_category"] == "official"
+    assert microsoft["source_type"] == "blog"
     assert microsoft["fetcher_family"] == "rss"
     assert microsoft["family"] == "rss"
     assert microsoft["readiness_status"] == "ready"
@@ -199,6 +200,7 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     assert microsoft["counts_as_official_source_ready"] is True
     bytedance = next(row for row in payload if row["name"] == "bytedance-seed-blog")
     assert bytedance["detail_capture_mode"] == "structured-api"
+    assert bytedance["source_type"] == "blog"
     assert bytedance["fetcher_family"] == "ssr-detail"
     assert bytedance["structured_api_gate"] == "ready"
     assert bytedance["structured_api_blockers"] == []
@@ -207,6 +209,7 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     assert qwen["fetcher_family"] == "structured-api"
     assert qwen["detail_capture_mode"] == "structured-api"
     assert qwen["source_category"] == "official"
+    assert qwen["source_type"] == "research"
     assert qwen["content_completeness"] is None
     assert qwen["counts_as_official_source_ready"] is False
     assert qwen["structured_api_gate"] == "blocked"
@@ -214,11 +217,13 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     cursor = next(row for row in payload if row["name"] == "cursor-changelog")
     assert cursor["status"] == "built-in"
     assert cursor["fetcher_family"] == "changelog"
+    assert cursor["source_type"] == "changelog"
     assert cursor["content_completeness"] == "complete"
     assert cursor["counts_as_official_source_ready"] is True
     kiro = next(row for row in payload if row["name"] == "kiro-changelog")
     assert kiro["status"] == "deferred"
     assert kiro["fetcher_family"] == "rss-detail"
+    assert kiro["source_type"] == "changelog"
 
 
 def test_main_export_prints_normalized_items(

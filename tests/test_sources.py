@@ -16,6 +16,7 @@ from shiyi import (
     SourceDefinition,
     SourceName,
     SourceSummary,
+    SourceType,
     StructuredApiReadinessEvidence,
     build_source_adapter,
     classify_adapter_admission,
@@ -53,6 +54,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     bytedance = next(summary for summary in summaries if summary.name == "bytedance-seed-blog")
     assert microsoft.status == "built-in"
     assert microsoft.source_category == "official"
+    assert microsoft.source_type == "blog"
     assert microsoft.fetcher_family == "rss"
     assert microsoft.family == "rss"
     assert microsoft.detail_capture_mode == "listing-only"
@@ -62,6 +64,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert microsoft.source_ready is True
     assert microsoft.counts_as_official_source_ready is True
     assert openai.source_ready is False
+    assert openai.source_type == "news"
     assert openai.detail_capture_mode == "summary-only"
     assert openai.content_completeness == "summary_only"
     assert openai.readiness_status == "degraded"
@@ -70,6 +73,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert openai.defer_reason is not None
     assert "canonical detail" in openai.defer_reason
     assert huggingface.source_category == "official"
+    assert huggingface.source_type == "blog"
     assert huggingface.detail_capture_mode == "canonical-detail"
     assert huggingface.content_completeness == "complete"
     assert huggingface.readiness_status == "ready"
@@ -78,6 +82,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert huggingface.defer_reason is None
     assert huggingface.counts_as_official_source_ready is True
     assert google_research.detail_capture_mode == "canonical-detail"
+    assert google_research.source_type == "research"
     assert google_research.readiness_status == "ready"
     assert google_research.default_content_depth == "complete"
     assert google_research.source_ready is True
@@ -98,11 +103,13 @@ def test_source_registry_summaries_expose_us04_ai_coding_sources() -> None:
     copilot = next(summary for summary in summaries if summary.name == "github-copilot-changelog")
 
     assert cursor.fetcher_family == "changelog"
+    assert cursor.source_type == "changelog"
     assert cursor.detail_capture_mode == "listing-only"
     assert cursor.content_completeness == "complete"
     assert cursor.source_ready is True
     assert cursor.counts_as_official_source_ready is True
     assert copilot.fetcher_family == "rss"
+    assert copilot.source_type == "changelog"
     assert copilot.detail_capture_mode == "listing-only"
     assert copilot.content_completeness == "complete"
     assert copilot.source_ready is True
@@ -125,6 +132,7 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     assert qwen.bucket == "p3-json-api-fetcher"
     assert qwen.fetcher_family == "structured-api"
     assert qwen.source_category == "official"
+    assert qwen.source_type == "research"
     assert qwen.detail_capture_mode == "structured-api"
     assert qwen.content_completeness is None
     assert qwen.readiness_status == "deferred"
@@ -144,17 +152,20 @@ def test_source_registry_handoff_backlog_separates_deferred_sources() -> None:
     }
     assert kiro.status == "deferred"
     assert kiro.source_category == "official"
+    assert kiro.source_type == "changelog"
     assert kiro.fetcher_family == "rss-detail"
     assert kiro.detail_capture_mode == "canonical-detail"
     assert "summary-only descriptions" in (kiro.defer_reason or "")
     assert antigravity.status == "deferred"
     assert antigravity.bucket == "p3-json-api-fetcher"
     assert antigravity.source_category == "official"
+    assert antigravity.source_type == "changelog"
     assert antigravity.fetcher_family == "structured-api"
     assert antigravity.detail_capture_mode == "structured-api"
     assert antigravity.structured_api_gate == "blocked"
     assert "stable_item_ids" in antigravity.structured_api_blockers
     assert community.source_category == "community"
+    assert community.source_type == "unknown"
     assert community.fetcher_family == "listing"
     assert community.detail_capture_mode == "listing-only"
     assert community.content_completeness is None
@@ -177,8 +188,11 @@ def test_source_registry_readiness_contract_covers_review_states() -> None:
     assert summaries["google-research-blog"].detail_capture_mode == "canonical-detail"
     assert summaries["bytedance-seed-blog"].detail_capture_mode == "structured-api"
     assert summaries["cursor-changelog"].readiness_status == "ready"
+    assert summaries["cursor-changelog"].source_type == "changelog"
     assert summaries["cursor-changelog"].fetcher_family == "changelog"
     assert summaries["github-copilot-changelog"].readiness_status == "ready"
+    assert summaries["github-copilot-changelog"].source_type == "changelog"
+    assert summaries["github-copilot-changelog"].fetcher_family == "rss"
     assert summaries["kiro-changelog"].readiness_status == "deferred"
     assert summaries["google-antigravity-changelog"].readiness_status == "deferred"
     assert summaries["bytedance-seed-blog"].structured_api_gate == "ready"
@@ -190,9 +204,19 @@ def test_source_registry_uses_minimal_taxonomies_and_derived_readiness() -> None
 
     assert get_args(ContentDepth) == ("complete", "partial", "summary_only")
     assert get_args(ContentCompleteness) == ("complete", "partial", "summary_only")
+    assert get_args(SourceType) == (
+        "changelog",
+        "release_notes",
+        "blog",
+        "docs",
+        "research",
+        "news",
+        "unknown",
+    )
     assert get_args(SourceCategory) == ("official", "community", "social_media")
     assert get_args(AuthorityTier) == ("primary", "secondary", "unverified")
     assert "fetcher_family" in source_definition_fields
+    assert "source_type" in source_definition_fields
     assert "family" not in source_definition_fields
     assert "readiness_status" not in source_definition_fields
     assert "source_ready" not in source_definition_fields
@@ -358,6 +382,7 @@ def test_structured_api_builtins_must_pass_readiness_gate() -> None:
             adapter_name="example-structured",
             fetcher_family="ssr-detail",
             source_category="official",
+            source_type="blog",
             detail_capture_mode="structured-api",
             entry_url="https://example.com",
             default_content_depth="complete",

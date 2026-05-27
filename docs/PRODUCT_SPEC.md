@@ -163,9 +163,10 @@ The P2.5 slices are still deliberately small; source registry/config and broader
 
 P2.5 source readiness now requires full-content capture. A built-in source is not ready for AI Weekly consumption if its normalized/exported content is only a feed summary, index excerpt, or changelog teaser while a canonical detail page or official detail payload exists.
 
-The public source-status model uses `source_category` plus `fetcher_family`; legacy
-`family` and `detail_capture_mode` remain compatibility/status evidence only during
-migration and must not be used as manual readiness premises.
+The public source-status model uses `source_category`, `fetcher_family`, and
+`source_type` as separate fields. Legacy `family` and `detail_capture_mode` remain
+compatibility/status evidence only during migration and must not be used as manual
+readiness premises.
 
 ### 7.2 Near-term expansion policy
 
