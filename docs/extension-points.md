@@ -24,6 +24,27 @@ Responsibilities:
 
 Adapters should not decide final storage schema or silently mutate provider results. If only partial or summary content is available, adapters should mark that source-neutrally instead of presenting it as full article content.
 
+### Adapter admission and package placement
+
+Built-in core adapters are the narrowest class: public official sources with no
+credentials, no private data, no browser state, no heavy default dependency, bounded
+fixtures, repeatable tests, stable replay identity, stable timestamps/URLs when ready,
+and source-neutral complete content.
+
+Adapters that fail one of those gates do not automatically create a new package system:
+
+- public official adapters with complete evidence but non-default runtime needs stay
+  `optional_official` until a real optional packaging requirement is approved;
+- credentialed, browser-state, private-workspace, or account-bound adapters stay
+  `private_closed`;
+- official sources without complete payload/readiness evidence stay `deferred_official`;
+- community/social/high-noise sources that need aggregation or ranking stay
+  `bfl_m3_future`.
+
+The Shiyi -> downstream boundary remains the neutral normalized/export contract. Adapter
+placement must not add AI Weekly projections, topic links, ranked candidates, report
+entries, renderer fields, or editorial decisions to Shiyi.
+
 ## Normalizer
 
 Normalizers convert source payloads into canonical content.

@@ -129,13 +129,14 @@ Tests should catch:
 ### 4.5 Content depth is part of source readiness
 
 RSS/index/changelog snippets are discovery metadata by default. A built-in source should be source-ready only when Shiyi captures the canonical article/detail page or official structured detail payload when one exists.
+Consumer-facing readiness uses three item-level completeness states derived from content depth: `complete`, `partial`, and `summary_only`.
 
 Tests should catch:
 
 - adapter fixtures that only exercise teaser/summary/listing content while a detail page exists
 - normalized content that is materially shorter or less informative than the source detail payload
-- records lacking source-neutral `content_depth` metadata when they are summary-only, partial, or blocked
-- AI Weekly readiness checks counting `summary_only`, `partial`, or `blocked` records as full source coverage
+- records lacking source-neutral `content_depth` and derived `content_completeness` metadata when they are summary-only or partial
+- AI Weekly readiness checks counting `partial` or `summary_only` records as full source coverage
 
 ### 4.6 Export/read is a consumer contract
 
@@ -147,6 +148,24 @@ Tests should catch:
 - unstable default ordering
 - source-kind or time-range filters returning incorrect records
 - empty exports crashing or returning non-contract output
+
+### 4.7 Adapter admission stays outside downstream product logic
+
+US05 adapter admission tests protect package placement, not report behavior. A candidate
+must be categorizable before implementation as core official, optional official,
+private-closed, deferred official, or BFL-M3 future. The classification is based on public
+official status, credential/private/browser-state requirements, non-default runtime
+requirements, bounded fixtures, repeatable tests, stable identity/timestamps/URLs, and
+derived `content_completeness`.
+
+Tests should catch:
+
+- credentialed, private-data, or browser-state adapters entering default Shiyi core
+- heavy optional runtimes becoming default dependencies
+- incomplete or unproven official sources being counted as core official
+- community/high-noise sources being promoted before downstream aggregation policy exists
+- AI Weekly projection, topic-link, ranking, report-entry, renderer, or editorial fields
+  leaking into `shiyi-export-item.v1`
 
 ## 5. Required P2 test areas
 
@@ -234,7 +253,7 @@ Must cover:
 6. Empty result returns a stable empty output, not a crash.
 7. Fixture-backed E2E smoke runs ingest to persist to read/export.
 8. Golden export output changes only when the contract intentionally changes.
-9. Export/read output includes source-neutral `content_depth` metadata so consumers can exclude `summary_only`, `partial`, and `blocked` degraded records from decision-grade workflows.
+9. Export/read output includes source-neutral `content_depth` plus derived `content_completeness` metadata so consumers can exclude incomplete records from decision-grade workflows.
 
 ## 6. Fixture and golden-output policy
 
@@ -286,9 +305,25 @@ A new Adapter/source should not be merged until it has:
 - fake-source or mocked Fetcher contract coverage
 - fixture-backed pipeline integration smoke, when the source is part of built-in capture
 - export/read smoke proving downstream output does not expose third-party DTOs
-- export/read smoke proving `summary_only`, `partial`, and `blocked` degraded records are marked source-neutrally with `content_depth` and do not count as AI Weekly source-ready
+- export/read smoke proving incomplete records are marked source-neutrally with `content_depth` plus derived `content_completeness` and do not count as AI Weekly source-ready
 
 If a source cannot satisfy this gate yet, merge it behind an explicit experimental path and keep it out of default source lists.
+
+The `shiyi sources --include-backlog` review contract must also stay covered by
+regression tests. The JSON rows should distinguish source category, `fetcher_family`,
+optional authority tier, content completeness, derived ready/degraded/deferred review
+labels, compatibility capture evidence (`detail_capture_mode` while it exists), defer
+reason, traceability refs, and the derived official coverage bit. High-noise/community
+backlog rows must be explicit and must never count as official source-ready coverage.
+Legacy `family` may be emitted only as a compatibility alias for `fetcher_family`.
+
+For official structured/API surfaces, tests must also cover the explicit readiness gate:
+stable official endpoint, stable item IDs or deterministic canonical IDs, reliable
+published timestamps, canonical URLs, complete payloads, bounded fixtures, repeatable
+extraction tests, and traceability refs. Fixture-size checks should use a small,
+reviewable payload boundary instead of snapshotting full upstream API responses. Deferred
+structured/API candidates such as Qwen or MiniMax must expose the unmet gate blockers in
+`shiyi sources --include-backlog`.
 
 ## 8. CI expectations
 

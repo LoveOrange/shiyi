@@ -16,7 +16,7 @@ SECOND_URL = "https://deepmind.google/blog/second-in-window/"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
-def test_deepmind_blog_adapter_emits_article_scoped_full_page_payload() -> None:
+def test_deepmind_blog_adapter_emits_article_scoped_complete_payload() -> None:
     rss_fetcher = FakeRssFetcher(
         {
             DEEPMIND_RSS_URL: RssFeed.model_validate_json(
@@ -43,7 +43,7 @@ def test_deepmind_blog_adapter_emits_article_scoped_full_page_payload() -> None:
     assert item.id == "deepmind-blog:alphaevolve-impact"
     assert item.source.kind == "deepmind-blog"
     assert str(item.source.uri) == ALPHAEVOLVE_URL
-    assert item.metadata["content_depth"] == "full_page"
+    assert item.metadata["content_depth"] == "complete"
     assert (
         item.metadata["title"]
         == "AlphaEvolve: How our Gemini-powered coding agent is scaling impact across fields"

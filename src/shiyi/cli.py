@@ -176,7 +176,7 @@ def _build_parser() -> argparse.ArgumentParser:
     export.add_argument(
         "--source-ready-only",
         action="store_true",
-        help="Only export records whose content_depth is source-ready.",
+        help="Only export records whose derived content_completeness is source-ready.",
     )
     sources = subcommands.add_parser("sources", help="List registered sources and handoff backlog")
     sources.add_argument(

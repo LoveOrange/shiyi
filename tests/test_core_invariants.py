@@ -113,6 +113,37 @@ def test_export_contract_rejects_raw_or_source_specific_dto_fields() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "editorial_enrichment",
+        "signal_projection",
+        "topic_links",
+        "ranked_candidates",
+        "report_entries",
+        "ranking_reasons",
+        "renderer_fields",
+        "weekly_summary",
+    ),
+)
+def test_export_contract_rejects_downstream_ai_weekly_fields(field_name: str) -> None:
+    valid_export = {
+        "event_id": "openai-news:item-1",
+        "idempotency_key": "openai-news:item-1",
+        "status": "persisted",
+        "source": {"kind": "openai-news", "uri": "https://openai.com/news/rss.xml"},
+        "captured_at": "2026-05-13T01:30:00+00:00",
+        "content_hash": "hash",
+        "adapter_name": "openai-news-rss",
+        "adapter_version": "0.2.0",
+        "content_depth": "complete",
+        "normalized_content": "# Hello\n",
+    }
+
+    with pytest.raises(ValidationError):
+        ExportedItem.model_validate(valid_export | {field_name: "AI Weekly owns this"})
+
+
 def _item(*, entry_id: str, title: str) -> InternalItem:
     payload = HtmlPayload(html=f"<article><h1>{title}</h1></article>")
     return InternalItem(

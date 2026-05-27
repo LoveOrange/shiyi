@@ -5,7 +5,8 @@
     "captured_at": "2026-05-14T08:30:00+00:00",
     "occurred_at": "2026-03-16T20:28:39+00:00",
     "published_at": "2026-03-16T20:28:39+00:00",
-    "content_depth": "full_page",
+    "content_depth": "complete",
+    "content_completeness": "complete",
     "content_hash": "ad0b529fdfd0116240a02a37f2641599eaad794c72c7cf400b86f928638772ab",
     "event_id": "cohere-blog:cohere-sovereign-ai-nvidia",
     "idempotency_key": "cohere-blog:cohere-sovereign-ai-nvidia",
@@ -19,6 +20,7 @@
       "uri": "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "blog"
   }
 ]

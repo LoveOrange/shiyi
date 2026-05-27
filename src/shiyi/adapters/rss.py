@@ -31,6 +31,7 @@ _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 MICROSOFT_AI_BLOG_FEED_URL = (
     "https://www.microsoft.com/en-us/microsoft-cloud/blog/topic/ai-resources/feed/"
 )
+GITHUB_COPILOT_CHANGELOG_FEED_URL = "https://github.blog/changelog/label/copilot/feed/"
 _HUGGINGFACE_SKIP_CLASS_FRAGMENTS = (
     "not-prose",
     "overview-card-wrapper",
@@ -182,7 +183,7 @@ class RssDetailAdapter:
                 metadata={
                     "title": article.title,
                     "link": article.canonical_url,
-                    "content_depth": "full_page",
+                    "content_depth": "complete",
                 },
             )
             emitted += 1
@@ -551,5 +552,23 @@ def microsoft_ai_blog_adapter(
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
-        content_depth="feed_full_content",
+        content_depth="complete",
+    )
+
+
+def github_copilot_changelog_adapter(
+    *,
+    limit: int | None = None,
+    window: CaptureWindow | None = None,
+    rss_fetcher: RssFetcher | None = None,
+) -> RssFeedAdapter:
+    """Create the default GitHub Copilot official changelog adapter."""
+    return RssFeedAdapter(
+        name="github-copilot-changelog-rss",
+        feed_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
+        source_kind="github-copilot-changelog",
+        limit=limit,
+        window=window,
+        rss_fetcher=rss_fetcher,
+        content_depth="complete",
     )

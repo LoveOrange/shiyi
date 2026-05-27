@@ -5,7 +5,8 @@
     "captured_at": "2026-05-14T08:30:00+00:00",
     "occurred_at": "2026-05-07T16:00:00+00:00",
     "published_at": "2026-05-07T16:00:00+00:00",
-    "content_depth": "full_page",
+    "content_depth": "complete",
+    "content_completeness": "complete",
     "content_hash": "318afb3d310d39d6827af2f1ca2113530efdaf94dc5a39d80ffe0cd834554f7c",
     "event_id": "deepmind-blog:alphaevolve-impact",
     "idempotency_key": "deepmind-blog:alphaevolve-impact",
@@ -19,6 +20,7 @@
       "uri": "https://deepmind.google/blog/alphaevolve-impact/"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "research"
   }
 ]

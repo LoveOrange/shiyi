@@ -13,9 +13,11 @@ from shiyi import (
     anthropic_news_adapter,
     bytedance_seed_blog_adapter,
     cohere_blog_adapter,
+    cursor_changelog_adapter,
     deepmind_blog_adapter,
     deepseek_news_adapter,
     gemini_api_changelog_adapter,
+    github_copilot_changelog_adapter,
     google_research_blog_adapter,
     huggingface_blog_adapter,
     microsoft_ai_blog_adapter,
@@ -25,9 +27,10 @@ from shiyi import (
     z_ai_blog_adapter,
 )
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
+from shiyi.adapters.changelog import parse_cursor_changelog
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
-from shiyi.ports.fetcher import RssEntry, RssFeed
+from shiyi.ports.fetcher import FetcherError, RssEntry, RssFeed
 from shiyi.sources import BUILTIN_SOURCE_NAMES
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures"
@@ -44,6 +47,8 @@ MISTRAL_NEWS_FIXTURE_ROOT = FIXTURE_ROOT / "mistral-news"
 MICROSOFT_AI_BLOG_FIXTURE_ROOT = FIXTURE_ROOT / "microsoft-ai-blog"
 COHERE_BLOG_FIXTURE_ROOT = FIXTURE_ROOT / "cohere-blog"
 ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
+CURSOR_CHANGELOG_FIXTURE_ROOT = FIXTURE_ROOT / "cursor-changelog"
+GITHUB_COPILOT_CHANGELOG_FIXTURE_ROOT = FIXTURE_ROOT / "github-copilot-changelog"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
 GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
@@ -74,6 +79,8 @@ CLAUDE_DESIGN_URL = "https://www.anthropic.com/news/claude-design-anthropic-labs
 ANTHROPIC_MINIMAL_URL = "https://www.anthropic.com/news/minimal-contract"
 ANTHROPIC_SECOND_URL = "https://www.anthropic.com/news/second-contract"
 ANTHROPIC_MILLISECOND_URL = "https://www.anthropic.com/news/millisecond-contract"
+CURSOR_CHANGELOG_URL = "https://cursor.com/changelog"
+GITHUB_COPILOT_CHANGELOG_FEED_URL = "https://github.blog/changelog/label/copilot/feed/"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
@@ -309,6 +316,43 @@ CONTRACT_CASES = (
         ),
     ),
     ContractCase(
+        source_name="cursor-changelog",
+        build_adapter=lambda: cursor_changelog_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    CURSOR_CHANGELOG_URL: (
+                        CURSOR_CHANGELOG_FIXTURE_ROOT / "raw" / "changelog.html"
+                    ).read_text()
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(
+            CURSOR_CHANGELOG_FIXTURE_ROOT
+            / "internal-item"
+            / "improvements-to-cursor-automations.json",
+        ),
+    ),
+    ContractCase(
+        source_name="github-copilot-changelog",
+        build_adapter=lambda: github_copilot_changelog_adapter(
+            limit=1,
+            rss_fetcher=FakeRssFetcher(
+                {
+                    GITHUB_COPILOT_CHANGELOG_FEED_URL: RssFeed.model_validate_json(
+                        (GITHUB_COPILOT_CHANGELOG_FIXTURE_ROOT / "raw" / "feed.json").read_text()
+                    )
+                }
+            ),
+        ),
+        expected_paths=(
+            GITHUB_COPILOT_CHANGELOG_FIXTURE_ROOT
+            / "internal-item"
+            / "github-copilot-for-eclipse-is-open-source.json",
+        ),
+    ),
+    ContractCase(
         source_name="anthropic",
         build_adapter=lambda: anthropic_news_adapter(
             limit=1,
@@ -344,9 +388,19 @@ RSS_BUILTIN_CASES = (
         feed_url=MICROSOFT_AI_BLOG_FEED_URL,
         source_kind="microsoft-ai-blog",
         adapter_name="microsoft-ai-blog-rss",
-        content_depth="feed_full_content",
+        content_depth="complete",
         build_adapter=lambda feed, window: microsoft_ai_blog_adapter(
             rss_fetcher=FakeRssFetcher({MICROSOFT_AI_BLOG_FEED_URL: feed}), window=window
+        ),
+    ),
+    RssBuiltinCase(
+        source_name="github-copilot-changelog",
+        feed_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
+        source_kind="github-copilot-changelog",
+        adapter_name="github-copilot-changelog-rss",
+        content_depth="complete",
+        build_adapter=lambda feed, window: github_copilot_changelog_adapter(
+            rss_fetcher=FakeRssFetcher({GITHUB_COPILOT_CHANGELOG_FEED_URL: feed}), window=window
         ),
     ),
 )
@@ -354,6 +408,31 @@ RSS_BUILTIN_CASES = (
 
 def test_every_builtin_source_has_executable_contract_case() -> None:
     assert {case.source_name for case in CONTRACT_CASES} == set(BUILTIN_SOURCE_NAMES)
+
+
+def test_cursor_changelog_parser_deduplicates_stable_links_and_preserves_same_day_ids() -> None:
+    entries = parse_cursor_changelog(
+        (CURSOR_CHANGELOG_FIXTURE_ROOT / "raw" / "changelog.html").read_text()
+    )
+
+    entry_ids = [entry.entry_id for entry in entries]
+    links = [entry.link for entry in entries]
+
+    assert len(entry_ids) == len(set(entry_ids))
+    assert len(links) == len(set(links))
+    assert {"changelog-05-13-26", "changelog-3-4"} <= set(entry_ids)
+
+
+def test_cursor_changelog_missing_body_fails_closed_without_complete_item() -> None:
+    html = """
+    <article>
+      <time datetime="2026-05-20T00:00:00.000Z">May 20, 2026</time>
+      <h1><a href="/changelog/empty">Empty Cursor entry</a></h1>
+      <div class="prose"></div>
+    </article>
+    """
+
+    assert parse_cursor_changelog(html) == ()
 
 
 @pytest.mark.parametrize("case", CONTRACT_CASES, ids=lambda case: case.source_name)
@@ -513,6 +592,58 @@ def test_rss_builtin_filters_out_of_window_entries_before_required_field_validat
     assert [item.idempotency_key for item in items] == [f"{case.source_kind}:valid-in-window"]
 
 
+def test_rss_detail_fetch_failure_fails_closed_without_complete_item() -> None:
+    feed = _rss_feed(
+        feed_url=HUGGINGFACE_RSS_URL,
+        entries=(
+            RssEntry(
+                entry_id=HUGGINGFACE_OPEN_R1_URL,
+                title="Open-R1",
+                link=HUGGINGFACE_OPEN_R1_URL,
+                html="<p>feed summary only</p>",
+                published_at=FETCHED_AT,
+            ),
+        ),
+    )
+    adapter = huggingface_blog_adapter(
+        rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}),
+        web_fetcher=FakeWebFetcher({}, fetched_at=FETCHED_AT),
+    )
+
+    with pytest.raises(FetcherError, match="No fake response configured"):
+        asyncio.run(_collect_items(adapter.discover()))
+
+
+def test_rss_detail_parser_failure_fails_closed_without_summary_only_promotion() -> None:
+    feed = _rss_feed(
+        feed_url=HUGGINGFACE_RSS_URL,
+        entries=(
+            RssEntry(
+                entry_id=HUGGINGFACE_OPEN_R1_URL,
+                title="Open-R1",
+                link=HUGGINGFACE_OPEN_R1_URL,
+                html="<p>feed summary only</p>",
+                published_at=FETCHED_AT,
+            ),
+        ),
+    )
+    adapter = huggingface_blog_adapter(
+        rss_fetcher=FakeRssFetcher({HUGGINGFACE_RSS_URL: feed}),
+        web_fetcher=FakeWebFetcher(
+            {
+                HUGGINGFACE_OPEN_R1_URL: (
+                    "<html><head><title>Open-R1</title></head>"
+                    "<body><main>No article body</main></body></html>"
+                )
+            },
+            fetched_at=FETCHED_AT,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="missing content container"):
+        asyncio.run(_collect_items(adapter.discover()))
+
+
 def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:
     fetcher = FakeWebFetcher(
         {
@@ -542,7 +673,7 @@ def test_anthropic_minimal_raw_payload_maps_to_valid_internal_item() -> None:
     assert item.metadata == {
         "title": "Minimal Anthropic Item",
         "link": ANTHROPIC_MINIMAL_URL,
-        "content_depth": "full_page",
+        "content_depth": "complete",
     }
     assert isinstance(item.payload, HtmlPayload)
     assert str(item.payload.url) == ANTHROPIC_MINIMAL_URL

@@ -9,8 +9,15 @@ from typing import Annotated, Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 NonEmptyString = Annotated[str, Field(min_length=1)]
-ContentDepth = Literal["full_page", "feed_full_content", "summary_only", "partial", "blocked"]
-SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("full_page", "feed_full_content"))
+ContentDepth = Literal["complete", "partial", "summary_only"]
+ContentCompleteness = Literal["complete", "partial", "summary_only"]
+SourceType = Literal["changelog", "release_notes", "blog", "docs", "research", "news", "unknown"]
+SOURCE_READY_CONTENT_DEPTHS: frozenset[ContentDepth] = frozenset(("complete",))
+CONTENT_DEPTH_COMPLETENESS: dict[ContentDepth, ContentCompleteness] = {
+    "complete": "complete",
+    "summary_only": "summary_only",
+    "partial": "partial",
+}
 
 
 class StrictModel(BaseModel):
@@ -118,7 +125,26 @@ def content_depth_from_metadata(metadata: dict[str, Any]) -> ContentDepth | None
 
 def is_source_ready_content_depth(content_depth: ContentDepth | str | None) -> bool:
     """Return whether content depth is decision-grade for AI Weekly by default."""
-    return content_depth in SOURCE_READY_CONTENT_DEPTHS
+    return content_completeness_from_depth(content_depth) == "complete"
+
+
+def content_completeness_from_depth(
+    content_depth: ContentDepth | str | None,
+) -> ContentCompleteness | None:
+    """Derive item-level completeness from the MVP content-depth contract."""
+    if content_depth is None:
+        return None
+    if content_depth not in CONTENT_DEPTH_COMPLETENESS:
+        msg = f"unsupported content_depth: {content_depth!r}"
+        raise ValueError(msg)
+    return CONTENT_DEPTH_COMPLETENESS[content_depth]
+
+
+def is_item_ready_content_completeness(
+    content_completeness: ContentCompleteness | str | None,
+) -> bool:
+    """Return whether content completeness is decision-grade by default."""
+    return content_completeness == "complete"
 
 
 class ClassifyTask(StrictModel):

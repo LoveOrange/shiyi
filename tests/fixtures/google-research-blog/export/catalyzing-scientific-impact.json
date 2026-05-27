@@ -15,10 +15,12 @@
     "content_hash": "78f4760ce63726e34403c3335157cd4326edfd91630306398b1b98387aa5dd84",
     "adapter_name": "google-research-blog-detail",
     "adapter_version": "0.1.0",
-    "content_depth": "full_page",
+    "content_depth": "complete",
+    "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/9b/9b14d084df35947ebd40b38e431e701bad21788e29957e14f2d0acd60a74b3a7",
     "normalized_media_type": "text/markdown",
-    "normalized_content": "# Catalyzing scientific impact through global partnerships and open resources\n\nPublished: 2026-05-01\n\nCanonical link: <https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources>\n\nAuthor: The Google Research Science team\n\nOur approach to open science is built on responsible, inclusive, and rigorous research\nso more teams can build on high-impact discoveries.\n\nA scientific breakthrough reaches its full potential when other researchers can\nreplicate and extend the work.\n\n## Partnerships and ecosystem collaboration\n\nGoogle Research works with specialized institutions to expand access to tools,\ndatasets, and reproducible methods.\n\n* Shared benchmarks and open datasets.\n* Cross-disciplinary collaboration with research partners.\n"
+    "normalized_content": "# Catalyzing scientific impact through global partnerships and open resources\n\nPublished: 2026-05-01\n\nCanonical link: <https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources>\n\nAuthor: The Google Research Science team\n\nOur approach to open science is built on responsible, inclusive, and rigorous research\nso more teams can build on high-impact discoveries.\n\nA scientific breakthrough reaches its full potential when other researchers can\nreplicate and extend the work.\n\n## Partnerships and ecosystem collaboration\n\nGoogle Research works with specialized institutions to expand access to tools,\ndatasets, and reproducible methods.\n\n* Shared benchmarks and open datasets.\n* Cross-disciplinary collaboration with research partners.\n",
+    "source_type": "research"
   }
 ]

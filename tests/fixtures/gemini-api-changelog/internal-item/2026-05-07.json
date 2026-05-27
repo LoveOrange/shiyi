@@ -4,7 +4,7 @@
   "id": "gemini-api-changelog:2026-05-07",
   "idempotency_key": "gemini-api-changelog:2026-05-07",
   "metadata": {
-    "content_depth": "feed_full_content",
+    "content_depth": "complete",
     "link": "https://ai.google.dev/gemini-api/docs/changelog#05-07-2026",
     "title": "Released gemini-3.1-flash-lite, the generally available (GA) version of Gemini Flash Lite"
   },

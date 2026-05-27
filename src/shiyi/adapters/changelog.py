@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import unescape
 from typing import cast
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from defusedxml import ElementTree
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from shiyi.domain.models import (
     CaptureWindow,
@@ -37,6 +37,8 @@ MISTRAL_NEWS_URL = "https://mistral.ai/news"
 MISTRAL_NEWS_BASE_URL = "https://mistral.ai"
 COHERE_BLOG_URL = "https://cohere.com/blog"
 COHERE_BLOG_BASE_URL = "https://cohere.com"
+CURSOR_CHANGELOG_URL = "https://cursor.com/changelog"
+CURSOR_BASE_URL = "https://cursor.com"
 INVISIBLE_TEXT_CHARS = str.maketrans("", "", "\u200b\u200c\u200d\ufeff")
 HTTP_NOT_FOUND = 404
 MIN_Z_AI_PARAGRAPH_CHARS = 60
@@ -76,7 +78,7 @@ class ArticleDetail:
     body: str
     link: str
     document_link: str | None = None
-    content_depth: ContentDepth = "full_page"
+    content_depth: ContentDepth = "complete"
     occurred_at: datetime | None = None
 
 
@@ -133,7 +135,7 @@ class ChangelogPageAdapter:
                     source_item_id=entry.entry_id,
                 ),
                 idempotency_key=item_id,
-                metadata={"title": entry.title, "link": link, "content_depth": "feed_full_content"},
+                metadata={"title": entry.title, "link": link, "content_depth": "complete"},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -355,6 +357,62 @@ def cohere_blog_adapter(
         window=window,
         web_fetcher=web_fetcher,
     )
+
+
+def cursor_changelog_adapter(
+    *,
+    limit: int | None = None,
+    window: CaptureWindow | None = None,
+    web_fetcher: WebFetcher | None = None,
+) -> ChangelogPageAdapter:
+    """Create the default Cursor official changelog adapter."""
+    return ChangelogPageAdapter(
+        name="cursor-changelog-page",
+        page_url=CURSOR_CHANGELOG_URL,
+        source_kind="cursor-changelog",
+        parser=parse_cursor_changelog,
+        limit=limit,
+        window=window,
+        web_fetcher=web_fetcher,
+    )
+
+
+def parse_cursor_changelog(content: str) -> tuple[ChangelogEntry, ...]:
+    """Parse Cursor's official changelog page into complete dated entries."""
+    parser = HTMLParser(content)
+    entries: list[ChangelogEntry] = []
+    seen_links: set[str] = set()
+    for article in parser.css("article"):
+        time_node = article.css_first("time[datetime]")
+        title_node = article.css_first("h1")
+        link_node = title_node.css_first("a") if title_node is not None else None
+        href = link_node.attributes.get("href") if link_node is not None else None
+        raw_datetime = time_node.attributes.get("datetime") if time_node is not None else None
+        title = (
+            _clean_text(title_node.text(separator=" ", strip=True))
+            if title_node is not None
+            else ""
+        )
+        if not raw_datetime or not title or not href:
+            continue
+        link = urljoin(CURSOR_BASE_URL, href)
+        if link in seen_links:
+            continue
+        body = _cursor_article_body(article, title=title)
+        if not body:
+            continue
+        seen_links.add(link)
+        occurred_at = _datetime_utc(raw_datetime)
+        entries.append(
+            ChangelogEntry(
+                entry_id=_cursor_entry_id(link=link, title=title, occurred_at=occurred_at),
+                title=title,
+                occurred_at=occurred_at,
+                body=body,
+                link=link,
+            )
+        )
+    return tuple(entries)
 
 
 def parse_gemini_api_changelog(content: str) -> tuple[ChangelogEntry, ...]:
@@ -672,6 +730,26 @@ def _cohere_blog_sitemap_entries(content: str) -> tuple[ArticleIndexEntry, ...]:
     return tuple(entries)
 
 
+def _cursor_article_body(article: Node, *, title: str) -> str:
+    container = article.css_first(".prose") or article
+    lines: list[str] = []
+    for node in container.iter():
+        if node.tag not in {"p", "h2", "h3", "h4", "ul", "ol", "pre", "blockquote"}:
+            continue
+        text = _clean_text(node.text(separator=" ", strip=True))
+        if not text or _looks_like_duplicate_title(text, (title,)):
+            continue
+        lines.append(text)
+    return "\n".join(lines)
+
+
+def _cursor_entry_id(*, link: str, title: str, occurred_at: datetime) -> str:
+    path = urlparse(link).path.strip("/")
+    if path:
+        return re.sub(r"[^a-z0-9]+", "-", path.casefold()).strip("-")
+    return _slug_or_value(occurred_at.date().isoformat(), title)
+
+
 def _parse_month_day_year(value: str) -> str:
     parsed = datetime.strptime(value, "%B %d, %Y").replace(tzinfo=UTC)
     return parsed.date().isoformat()
@@ -905,10 +983,10 @@ def _article_metadata(*, entry: ArticleIndexEntry, detail: ArticleDetail) -> dic
 
 def _article_content_depth(*, body: str, fallback_body: str) -> ContentDepth:
     if body.strip():
-        return "full_page"
+        return "complete"
     if fallback_body.strip():
         return "summary_only"
-    return "blocked"
+    return "partial"
 
 
 def _body_without_duplicate_title(*, title: str, body: str) -> str:

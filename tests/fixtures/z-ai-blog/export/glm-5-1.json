@@ -5,7 +5,8 @@
     "captured_at": "2026-05-14T08:30:00+00:00",
     "occurred_at": "2026-04-07T00:00:00+00:00",
     "published_at": "2026-04-07T00:00:00+00:00",
-    "content_depth": "full_page",
+    "content_depth": "complete",
+    "content_completeness": "complete",
     "content_hash": "5a0af613c1128bd2eb92edf15eefc6a070ec22021ff16d74c163d2ae34caf30e",
     "event_id": "z-ai-blog:2026-04-07-glm-5-1",
     "idempotency_key": "z-ai-blog:2026-04-07-glm-5-1",
@@ -19,6 +20,7 @@
       "uri": "https://z.ai/blog/glm-5.1"
     },
     "source_ready": true,
-    "status": "persisted"
+    "status": "persisted",
+    "source_type": "release_notes"
   }
 ]

@@ -4,7 +4,7 @@
   "id": "z-ai-blog:2026-04-07-glm-5-1",
   "idempotency_key": "z-ai-blog:2026-04-07-glm-5-1",
   "metadata": {
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "document_link": "https://docs.z.ai/guides/llm/glm-5.1",
     "index_title": "GLM-5.1",
     "link": "https://z.ai/blog/glm-5.1",

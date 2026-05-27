@@ -1,7 +1,7 @@
 # Shiyi Source Strategy
 
 - Status: Canonical source expansion strategy
-- Last updated: 2026-05-16
+- Last updated: 2026-05-25
 - Owners: Lin, Kana, Kurisu
 
 Shiyi's long-term goal is broad source coverage. The strategy is to add many sources through stable adapter families and readiness gates, not through fragile one-off scrapers.
@@ -41,10 +41,96 @@ A built-in source should not be merged into default source lists unless it has:
 - pipeline integration smoke when the source is part of built-in capture;
 - export/read smoke proving consumer output excludes source-specific raw DTO fields;
 - normalized/exported content quality assertions proving consumers receive full article/detail content, not merely RSS/index summaries;
-- explicit degraded-state metadata via source-neutral `content_depth` for `summary_only`, `partial`, or `blocked` records so consumers can exclude them from decision-grade source-ready counts;
+- explicit item-level `content_completeness` derived from source-neutral MVP `content_depth` (`complete`, `partial`, or `summary_only`), so consumers can exclude incomplete records from decision-grade source-ready counts;
 - opt-in live smoke if the source is public and brittle enough to warrant reachability checks.
 
 If a source cannot satisfy this gate yet, keep it experimental and out of default source lists.
+
+### 2.1 Registry/status review contract
+
+`shiyi sources --include-backlog` is the machine-readable review surface for source
+readiness. Every row must expose:
+
+- `source_category`: initially `official`, `community`, or `social_media`;
+- `fetcher_family`: the adapter/fetcher technical shape, such as `rss`,
+  `rss-detail`, `article-index`, `changelog`, `ssr-detail`, or a deferred
+  structured/embedded-data candidate label;
+- `source_type`: the objective source surface/publishing shape exported to downstream
+  consumers. The stable M2 enum is `changelog`, `release_notes`, `blog`, `docs`,
+  `research`, `news`, or `unknown`. This is separate from both provenance/trust
+  (`source_category`) and capture mechanics (`fetcher_family`);
+- optional `authority_tier` for within-category source authority when category alone is not
+  enough, especially future social-media accounts;
+- compatibility `family` may remain in JSON temporarily as an alias for `fetcher_family`;
+- compatibility `detail_capture_mode`: `listing-only`, `summary-only`,
+  `canonical-detail`, or `structured-api`, emitted only as derived capture evidence/status
+  during migration, not as a manual readiness premise;
+- `default_content_depth`: `complete`, `partial`, or `summary_only` when the source is
+  built in;
+- `content_completeness`: `complete`, `partial`, or `summary_only` when a built-in source
+  emits normalized items; deferred backlog rows keep this null until implemented;
+- derived `readiness_status`: `ready`, `degraded`, or `deferred`;
+- derived `source_ready`: true only for `content_completeness=complete`;
+- `defer_reason`: required for every incomplete or deferred row;
+- `traceability_refs`: doc/test/fixture references supporting the row;
+- for `structured-api` surfaces, `structured_api_gate`, `structured_api_blockers`,
+  and `structured_api_traceability_refs`, so JSON/API candidates cannot be promoted by
+  adapter optimism alone;
+- derived `counts_as_official_source_ready`: the coverage bit consumers should use for
+  official source-ready counts.
+
+Only rows with `source_category=official`, `content_completeness=complete`,
+non-empty `traceability_refs`, and no defer/blocker state count as official source-ready
+coverage. `readiness_status`, `source_ready`, and `counts_as_official_source_ready` are
+review labels derived from that evidence; they are not independent item-level truths.
+`degraded`, `deferred`, `community`, `social_media`, and `later-high-noise` backlog rows
+must remain visible for planning, but they do not count toward M2 official source-ready
+coverage.
+
+Structured/API candidates must pass all objective gate checks before they can become
+source-ready: stable official endpoint, stable item IDs or deterministic canonical IDs,
+reliable published timestamps, canonical URLs, complete payloads, bounded fixtures,
+repeatable extraction tests, and traceability references. `qwen-research`,
+`minimax-news`, and `google-antigravity-changelog` deliberately remain structured/API or
+embedded-data backlog rows until these checks are proven; `bytedance-seed-blog` is the
+current ready structured/SSR example.
+
+### 2.2 US05 adapter admission/package boundary
+
+US05 hardens the boundary around the existing normalized/export contract. It does not
+redesign the Shiyi -> AI Weekly handoff. The handoff remains `internal-item.v1` inside
+Shiyi and `shiyi-export-item.v1` for downstream consumers.
+
+Candidate adapters should be classified before implementation:
+
+- `core_official`: public official source, no credentials, no private data, no browser
+  state, no heavy non-default runtime, bounded fixtures, repeatable tests, stable IDs or
+  URLs and timestamps, and `content_completeness=complete`.
+- `optional_official`: public official source with the same neutral contract and test
+  evidence as core, but requiring a non-default runtime or dependency that must not bloat
+  default Shiyi. Optional official adapters are not required for US06.
+- `private_closed`: source access depends on credentials, private account data, browser
+  state, closed workspace state, or other user-specific authorization. These adapters must
+  not enter Shiyi core or US06 source-ready coverage.
+- `deferred_official`: official source whose endpoint, IDs, timestamps, canonical URLs,
+  complete payloads, fixtures, or repeatable tests are not proven yet, or whose current
+  output is only `partial` or `summary_only`.
+- `bfl_m3_future`: community, social-media, media, or other high-noise sources that need
+  downstream aggregation, topic merging, discussion weighting, or ranking before they are
+  useful.
+
+Current examples:
+
+- Cursor and GitHub Copilot remain `core_official` examples from US04.
+- OpenAI remains a degraded/deferred official source-ready example because current
+  unauthenticated evidence is summary-only.
+- Kiro, Antigravity, Qwen, and MiniMax remain `deferred_official`.
+- GitHub Trending/community feeds remain `bfl_m3_future`.
+
+The adapter admission policy is intentionally not a plugin mechanism. Until an actual
+optional/private adapter is approved, package placement stays at documentation and policy
+level. Default Shiyi must remain credential-free, private-data-free, browser-state-free,
+and free of heavy optional runtime requirements.
 
 ## 3. Adapter families
 
@@ -85,7 +171,7 @@ Examples:
 - arXiv API;
 - Papers with Code or equivalent APIs.
 
-API and embedded-data sources usually need stronger pagination, checkpoint, completeness, and rate-limit tests before being treated as default built-ins. Official-used JSON or SSR payloads are acceptable only when they can be fixture-backed without browser automation.
+API and embedded-data sources usually need stronger pagination, checkpoint, completeness, and rate-limit tests before being treated as default built-ins. Official-used JSON or SSR payloads are acceptable only when they can be fixture-backed without browser automation. The structured/API readiness gate blocks promotion unless the implementation proves stable endpoint identity, stable item IDs, reliable timestamps, canonical URLs, complete payloads, bounded fixtures, repeatable extraction tests, and traceability refs.
 
 ### 3.4 Repository/package ecosystem sources
 
@@ -125,7 +211,13 @@ Current built-ins:
 - `deepseek-news` — DeepSeek official news pages discovered from API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
-- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages.
+- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages;
+- `gemini-api-changelog` — Gemini API official changelog text page;
+- `mistral-news` — static news index plus official article detail pages;
+- `microsoft-ai-blog` — Microsoft AI Blog WordPress feed with decision-grade feed content;
+- `cohere-blog` — Cohere official blog index plus official detail payload;
+- `cursor-changelog` — Cursor official changelog page with SSR article entries and canonical changelog URLs;
+- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full `content:encoded` changelog bodies.
 
 These provide four patterns: reusable feed capture, RSS-discovery/detail-page capture, index/page capture, and stable official changelog/embedded-data capture.
 The P2.5 slices intentionally keep implementation hand-wired; source registry/config belongs to P3.
@@ -147,8 +239,8 @@ Recommended candidates:
 
 Overseas official Slice B implementation outcome:
 
-- `huggingface-blog` — Hugging Face Blog RSS at `https://huggingface.co/blog/feed.xml` is used only as discovery. Emitted source identity is the canonical blog article URL such as `https://huggingface.co/blog/open-r1`; normalized/exported content comes from the article detail body and carries `content_depth=full_page`.
-- `google-research-blog` — Google Research Blog RSS at `https://research.google/blog/rss/` is used only as discovery. Emitted source identity is the canonical research blog URL such as `https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources`; normalized/exported content comes from the canonical detail page and carries `content_depth=full_page`.
+- `huggingface-blog` — Hugging Face Blog RSS at `https://huggingface.co/blog/feed.xml` is used only as discovery. Emitted source identity is the canonical blog article URL such as `https://huggingface.co/blog/open-r1`; normalized/exported content comes from the article detail body and carries `content_depth=complete`.
+- `google-research-blog` — Google Research Blog RSS at `https://research.google/blog/rss/` is used only as discovery. Emitted source identity is the canonical research blog URL such as `https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources`; normalized/exported content comes from the canonical detail page and carries `content_depth=complete`.
 - `deepmind-blog` — Google DeepMind Blog RSS at `https://deepmind.google/blog/rss.xml` is used only as discovery. Emitted source identity is the canonical article URL such as `https://deepmind.google/blog/alphaevolve-impact/`; normalized/exported content comes from the article-scoped detail body, not the feed summary or whole page chrome.
 
 Deferred with explicit reason:
@@ -185,6 +277,10 @@ Goal: capture engineering/tooling signals for developer-oriented weekly reports 
 
 Candidate sources:
 
+- Cursor changelog;
+- Kiro changelog;
+- Google Antigravity changelog;
+- GitHub Copilot changelog;
 - LangChain;
 - LlamaIndex;
 - Vercel AI SDK;
@@ -198,6 +294,26 @@ Selection rule:
 - prefer official changelog/blog/release feeds;
 - avoid deriving importance inside Shiyi;
 - consumers decide whether a tool update is weekly-report worthy.
+
+US04 AI-coding official source outcome:
+
+- `cursor-changelog` is built in as a ready official changelog source. The adapter parses
+  SSR changelog articles from `https://cursor.com/changelog`, deduplicates repeated
+  entries by canonical URL, and derives stable IDs from canonical changelog paths so
+  same-day posts do not collide.
+- `github-copilot-changelog` is built in as a ready official RSS source. The adapter uses
+  the Copilot label feed at `https://github.blog/changelog/label/copilot/feed/`; current
+  WordPress entries carry complete `content:encoded` article bodies and stable GUIDs.
+- `kiro-changelog` stays deferred. The official feed has timestamps and canonical links,
+  but several descriptions are summary-only with ellipses, and patch links require
+  fixture-backed complete detail extraction for fragment-specific entries before source-ready
+  promotion.
+- `google-antigravity-changelog` stays deferred. The official changelog shell is
+  JS-rendered; promotion requires stable embedded-data extraction with stable IDs,
+  timestamps, canonical URLs, complete payloads, bounded fixtures, and repeatable parser
+  tests. Curling a minified bundle is not enough evidence for readiness.
+- `vercel-ai-sdk` and `langchain-blog` remain pending/deferred; they are useful ecosystem
+  sources but not the near-term AI-coding bottleneck for US04.
 
 ### Batch 3 — Research and community signals
 

@@ -4,7 +4,7 @@
   "id": "microsoft-ai-blog:frontier-transformation-readiness",
   "idempotency_key": "microsoft-ai-blog:frontier-transformation-readiness",
   "metadata": {
-    "content_depth": "feed_full_content",
+    "content_depth": "complete",
     "link": "https://www.microsoft.com/en-us/microsoft-cloud/blog/2026/05/14/from-ai-ambition-to-frontier-transformation-readiness-defines-the-leaders/",
     "title": "From AI ambition to Frontier Transformation: Readiness defines the leaders"
   },

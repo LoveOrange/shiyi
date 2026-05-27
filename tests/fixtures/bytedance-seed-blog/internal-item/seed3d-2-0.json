@@ -4,7 +4,7 @@
   "id": "bytedance-seed-blog:1776683179376",
   "idempotency_key": "bytedance-seed-blog:1776683179376",
   "metadata": {
-    "content_depth": "full_page",
+    "content_depth": "complete",
     "english_link": "https://seed.bytedance.com/en/blog/seed3d-2-0-released",
     "language": "zh",
     "link": "https://seed.bytedance.com/zh/blog/seed3d-2-0发布-更高精度-更强可用性",

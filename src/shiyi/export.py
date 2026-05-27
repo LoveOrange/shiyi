@@ -6,18 +6,22 @@ import sqlite3
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from shiyi._time import utc_isoformat
 from shiyi.domain.models import (
     ArtifactRef,
+    ContentCompleteness,
     ContentDepth,
     SourceIdentity,
+    SourceType,
     StrictModel,
-    is_source_ready_content_depth,
+    content_completeness_from_depth,
+    is_item_ready_content_completeness,
 )
+from shiyi.sources import iter_builtin_sources
 
 DEFAULT_EXPORT_LIMIT = 20
 
@@ -30,6 +34,7 @@ class ExportedItem(StrictModel):
     idempotency_key: str
     status: str
     source: SourceIdentity | None
+    source_type: SourceType = "unknown"
     captured_at: str | None
     occurred_at: str | None = None
     published_at: str | None = None
@@ -37,10 +42,40 @@ class ExportedItem(StrictModel):
     adapter_name: str | None
     adapter_version: str | None
     content_depth: ContentDepth | None = None
+    content_completeness: ContentCompleteness | None = None
     source_ready: bool = False
     normalized_artifact_uri: str | None = None
     normalized_media_type: str | None = None
     normalized_content: str | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def derive_readiness_labels(cls, data: object) -> object:
+        """Derive item readiness labels from content depth to avoid split truth."""
+        if not isinstance(data, dict):
+            return data
+        content_depth = cast(str | None, data.get("content_depth"))
+        content_completeness = content_completeness_from_depth(content_depth)
+        supplied_completeness = cast(str | None, data.get("content_completeness"))
+        if supplied_completeness is not None and supplied_completeness != content_completeness:
+            msg = (
+                "content_completeness must be derived from content_depth: "
+                f"{supplied_completeness!r} != {content_completeness!r}"
+            )
+            raise ValueError(msg)
+        source_ready = is_item_ready_content_completeness(content_completeness)
+        supplied_source_ready = data.get("source_ready")
+        if supplied_source_ready is not None and supplied_source_ready != source_ready:
+            msg = (
+                "source_ready must be derived from content_completeness: "
+                f"{supplied_source_ready!r} != {source_ready!r}"
+            )
+            raise ValueError(msg)
+        return {
+            **data,
+            "content_completeness": content_completeness,
+            "source_ready": source_ready,
+        }
 
 
 def export_items(  # noqa: PLR0913
@@ -77,7 +112,8 @@ def export_items(  # noqa: PLR0913
             continue
         normalized_ref = _artifact_from_json(row["normalized_artifact_json"])
         content_depth = row["content_depth"]
-        source_ready = is_source_ready_content_depth(content_depth)
+        content_completeness = content_completeness_from_depth(content_depth)
+        source_ready = is_item_ready_content_completeness(content_completeness)
         if source_ready_only and not source_ready:
             continue
         exported.append(
@@ -86,6 +122,7 @@ def export_items(  # noqa: PLR0913
                 idempotency_key=str(row["idempotency_key"]),
                 status=str(row["status"]),
                 source=source,
+                source_type=_source_type_for_source(source),
                 captured_at=row["captured_at"],
                 occurred_at=row["occurred_at"],
                 published_at=row["occurred_at"],
@@ -93,6 +130,7 @@ def export_items(  # noqa: PLR0913
                 adapter_name=row["adapter_name"],
                 adapter_version=row["adapter_version"],
                 content_depth=content_depth,
+                content_completeness=content_completeness,
                 source_ready=source_ready,
                 normalized_artifact_uri=normalized_ref.uri if normalized_ref else None,
                 normalized_media_type=normalized_ref.media_type if normalized_ref else None,
@@ -179,6 +217,19 @@ def _source_from_json(value: str | None) -> SourceIdentity | None:
     if value is None:
         return None
     return SourceIdentity.model_validate_json(value)
+
+
+def _source_type_for_source(source: SourceIdentity | None) -> SourceType:
+    if source is None:
+        return "unknown"
+    return _SOURCE_TYPES_BY_IDENTITY.get(source.kind, "unknown")
+
+
+_SOURCE_TYPES_BY_IDENTITY: dict[str, SourceType] = {
+    identity: definition.source_type
+    for definition in iter_builtin_sources()
+    for identity in (definition.name.value, definition.source_kind)
+}
 
 
 def _read_artifact_text(root: Path, ref: ArtifactRef | None) -> str | None:

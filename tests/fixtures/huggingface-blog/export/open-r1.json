@@ -15,10 +15,12 @@
     "content_hash": "5ba2607579b6e1a0d1ee4a47983712fc2ddc9fd269fee26c3aa4ea50bc803ab0",
     "adapter_name": "huggingface-blog-detail",
     "adapter_version": "0.1.0",
-    "content_depth": "full_page",
+    "content_depth": "complete",
+    "content_completeness": "complete",
     "source_ready": true,
     "normalized_artifact_uri": "normalized/c6/c661ece7b137ab25b81c032367caf43095773c2f3507158578fe6574fdad4ba8",
     "normalized_media_type": "text/markdown",
-    "normalized_content": "# Open-R1: a fully open reproduction of DeepSeek-R1\n\nPublished: 2026-05-09\n\nCanonical link: <https://huggingface.co/blog/open-r1>\n\nAuthor: Elie Bakouch, Leandro von Werra, Lewis Tunstall\n\nOpen-R1 is a fully open reproduction of DeepSeek-R1 with a transparent training recipe\nand reproducible reasoning experiments.\n\nDeepSeek-R1 showed that test-time reasoning can materially improve mathematics, coding,\nand logic performance.\n\n## What is DeepSeek-R1?\n\n## Open-R1: the missing pieces\n\n* Open datasets for reasoning traces.\n* Open training recipes for reinforcement learning.\n"
+    "normalized_content": "# Open-R1: a fully open reproduction of DeepSeek-R1\n\nPublished: 2026-05-09\n\nCanonical link: <https://huggingface.co/blog/open-r1>\n\nAuthor: Elie Bakouch, Leandro von Werra, Lewis Tunstall\n\nOpen-R1 is a fully open reproduction of DeepSeek-R1 with a transparent training recipe\nand reproducible reasoning experiments.\n\nDeepSeek-R1 showed that test-time reasoning can materially improve mathematics, coding,\nand logic performance.\n\n## What is DeepSeek-R1?\n\n## Open-R1: the missing pieces\n\n* Open datasets for reasoning traces.\n* Open training recipes for reinforcement learning.\n",
+    "source_type": "blog"
   }
 ]

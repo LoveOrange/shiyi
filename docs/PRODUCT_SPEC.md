@@ -109,7 +109,7 @@ contract gate complete -> low-noise source expansion -> registry/ops -> higher-n
 3. **Raw capture is first-class.** Raw payloads, fetch metadata, and provenance must remain auditable.
 4. **Full content beats previews.** For source-ready built-in adapters, RSS/index/changelog snippets are discovery metadata by default. When discovery starts from RSS or another listing surface, Shiyi should dereference to the canonical article/detail page before exposing an item as decision-grade. Official structured detail payloads remain acceptable when they are the stable canonical detail surface.
 5. **Normalized content is consumer-safe.** Downstream products should read stable Shiyi output without knowing source-specific DTOs.
-6. **Partial content is explicit.** Summary-only or partial records may exist as degraded fallback, but they must be marked source-neutrally with `content_depth` and must not count as AI Weekly source-ready evidence. Allowed `content_depth` values are `full_page`, `feed_full_content`, `summary_only`, `partial`, and `blocked`; only the first two are decision-grade by default.
+6. **Partial content is explicit.** Summary-only or partial records may exist as degraded fallback, but they must be marked source-neutrally with `content_depth` and derived `content_completeness`, and must not count as AI Weekly source-ready evidence. MVP `content_depth` is intentionally limited to `complete`, `partial`, and `summary_only`; only `complete` is decision-grade by default. Capture path details such as canonical detail pages, structured APIs, RSS, feeds, or blocker/defer states belong in source metadata and review status, not in item content depth.
 7. **Neutral preprocessing only.** Optional AI work inside Shiyi may summarize, extract entities, detect language, chunk, embed, or provide generic quality signals; it must not decide business importance.
 8. **Official low-noise sources come first.** P2.5 and adjacent source-expansion work should prioritize reusable official low-noise sources before community, social, or media coverage.
 9. **Aggregation belongs downstream.** Cross-source topic merging, discussion-volume weighting, and other importance/ranking logic belong to downstream consumers, not Shiyi core.
@@ -150,12 +150,23 @@ Current built-in sources:
 - `deepseek-news` — DeepSeek official news article pages, discovered from the API docs updates page;
 - `z-ai-blog` — Z.ai / GLM official blog posts, discovered from the Mintlify release notes page;
 - `moonshot-kimi-changelog` — Kimi Open Platform static changelog page;
-- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata.
+- `bytedance-seed-blog` — ByteDance Seed SSR blog index plus article detail pages, with Chinese primary and English retained as fallback metadata;
+- `gemini-api-changelog` — Gemini API official changelog text page;
+- `mistral-news` — Mistral static news index plus official article detail pages;
+- `microsoft-ai-blog` — Microsoft AI Blog WordPress feed with decision-grade feed content;
+- `cohere-blog` — Cohere official blog index plus official detail payload;
+- `cursor-changelog` — Cursor official changelog page for AI-coding product updates;
+- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full changelog bodies.
 
 These prove four adapter patterns: reusable feed-style capture, RSS-discovery/detail-page capture, index-page/article capture, and stable official changelog/embedded-data capture.
 The P2.5 slices are still deliberately small; source registry/config and broader batch scale-out remain P3 work.
 
 P2.5 source readiness now requires full-content capture. A built-in source is not ready for AI Weekly consumption if its normalized/exported content is only a feed summary, index excerpt, or changelog teaser while a canonical detail page or official detail payload exists.
+
+The public source-status model uses `source_category`, `fetcher_family`, and
+`source_type` as separate fields. Legacy `family` and `detail_capture_mode` remain
+compatibility/status evidence only during migration and must not be used as manual
+readiness premises.
 
 ### 7.2 Near-term expansion policy
 
