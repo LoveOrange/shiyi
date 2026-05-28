@@ -14,8 +14,11 @@ from shiyi.cli import (
     main,
 )
 from shiyi.domain.models import SourceIdentity
+from shiyi.enrichments.hacker_news_external import ExternalTargetEnrichmentSummary
 from shiyi.export import ExportedItem
 from shiyi.sources import SourceName
+
+EXPECTED_HN_EXTERNAL_PROCESSED = 2
 
 
 def test_format_summary_outputs_json_line() -> None:
@@ -220,6 +223,12 @@ def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
     assert cursor["source_type"] == "changelog"
     assert cursor["content_completeness"] == "complete"
     assert cursor["counts_as_official_source_ready"] is True
+    hacker_news = next(row for row in payload if row["name"] == "hacker-news")
+    assert hacker_news["status"] == "built-in"
+    assert hacker_news["source_category"] == "community"
+    assert hacker_news["fetcher_family"] == "structured-api"
+    assert hacker_news["structured_api_gate"] == "ready"
+    assert hacker_news["counts_as_official_source_ready"] is False
     kiro = next(row for row in payload if row["name"] == "kiro-changelog")
     assert kiro["status"] == "deferred"
     assert kiro["fetcher_family"] == "rss-detail"
@@ -281,3 +290,48 @@ def test_main_export_prints_normalized_items(
     assert payload[0]["content_completeness"] == "complete"
     assert payload[0]["source_ready"] is True
     assert payload[0]["normalized_content"] == "# Hello\n"
+
+
+def test_main_enrich_hn_external_targets_prints_summary(
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    async def fake_enrich_hacker_news_external_targets(
+        **kwargs: object,
+    ) -> ExternalTargetEnrichmentSummary:
+        assert kwargs["workspace"] == tmp_path
+        assert kwargs["limit"] == EXPECTED_HN_EXTERNAL_PROCESSED
+        assert kwargs["overwrite"] is True
+        return ExternalTargetEnrichmentSummary(
+            source="hacker-news",
+            workspace=str(tmp_path),
+            processed=EXPECTED_HN_EXTERNAL_PROCESSED,
+            enriched=1,
+            skipped=0,
+            failed=1,
+            artifacts=EXPECTED_HN_EXTERNAL_PROCESSED,
+            errors=("hacker-news:2: timeout",),
+        )
+
+    monkeypatch.setattr(
+        "shiyi.cli.enrich_hacker_news_external_targets",
+        fake_enrich_hacker_news_external_targets,
+    )
+
+    main(
+        [
+            "enrich-hn-external-targets",
+            "--workspace",
+            str(tmp_path),
+            "--limit",
+            str(EXPECTED_HN_EXTERNAL_PROCESSED),
+            "--overwrite",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source"] == "hacker-news"
+    assert payload["processed"] == EXPECTED_HN_EXTERNAL_PROCESSED
+    assert payload["enriched"] == 1
+    assert payload["failed"] == 1

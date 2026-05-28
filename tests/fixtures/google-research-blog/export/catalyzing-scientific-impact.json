@@ -1,26 +1,32 @@
 [
   {
-    "schema_version": "shiyi-export-item.v1",
-    "event_id": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
-    "idempotency_key": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
-    "status": "persisted",
-    "source": {
-      "kind": "google-research-blog",
-      "uri": "https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources",
-      "account_id": null
-    },
-    "captured_at": "2026-05-14T08:30:00+00:00",
-    "occurred_at": "2026-05-01T00:00:00+00:00",
-    "published_at": "2026-05-01T00:00:00+00:00",
-    "content_hash": "78f4760ce63726e34403c3335157cd4326edfd91630306398b1b98387aa5dd84",
     "adapter_name": "google-research-blog-detail",
     "adapter_version": "0.1.0",
-    "content_depth": "complete",
+    "canonical_discussion_url": null,
+    "captured_at": "2026-05-14T08:30:00+00:00",
     "content_completeness": "complete",
-    "source_ready": true,
+    "content_depth": "complete",
+    "content_hash": "78f4760ce63726e34403c3335157cd4326edfd91630306398b1b98387aa5dd84",
+    "event_id": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
+    "external_target_url": null,
+    "idempotency_key": "google-research-blog:https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources/",
     "normalized_artifact_uri": "normalized/9b/9b14d084df35947ebd40b38e431e701bad21788e29957e14f2d0acd60a74b3a7",
-    "normalized_media_type": "text/markdown",
     "normalized_content": "# Catalyzing scientific impact through global partnerships and open resources\n\nPublished: 2026-05-01\n\nCanonical link: <https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources>\n\nAuthor: The Google Research Science team\n\nOur approach to open science is built on responsible, inclusive, and rigorous research\nso more teams can build on high-impact discoveries.\n\nA scientific breakthrough reaches its full potential when other researchers can\nreplicate and extend the work.\n\n## Partnerships and ecosystem collaboration\n\nGoogle Research works with specialized institutions to expand access to tools,\ndatasets, and reproducible methods.\n\n* Shared benchmarks and open datasets.\n* Cross-disciplinary collaboration with research partners.\n",
-    "source_type": "research"
+    "normalized_media_type": "text/markdown",
+    "occurred_at": "2026-05-01T00:00:00+00:00",
+    "published_at": "2026-05-01T00:00:00+00:00",
+    "schema_version": "shiyi-export-item.v1",
+    "source": {
+      "account_id": null,
+      "kind": "google-research-blog",
+      "uri": "https://research.google/blog/catalyzing-scientific-impact-through-global-partnerships-and-open-resources"
+    },
+    "source_category": "official",
+    "source_metrics": {},
+    "source_ready": true,
+    "source_type": "research",
+    "status": "persisted",
+    "upstream_id": null,
+    "upstream_parent_id": null
   }
 ]

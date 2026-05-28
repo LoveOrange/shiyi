@@ -19,6 +19,7 @@ from shiyi import (
     gemini_api_changelog_adapter,
     github_copilot_changelog_adapter,
     google_research_blog_adapter,
+    hacker_news_topstories_adapter,
     huggingface_blog_adapter,
     microsoft_ai_blog_adapter,
     mistral_news_adapter,
@@ -28,6 +29,7 @@ from shiyi import (
 )
 from shiyi.adapters.anthropic import ANTHROPIC_NEWS_URL
 from shiyi.adapters.changelog import parse_cursor_changelog
+from shiyi.adapters.hacker_news import HACKER_NEWS_ITEM_URL_TEMPLATE, HACKER_NEWS_TOP_STORIES_URL
 from shiyi.domain.models import CaptureWindow, HtmlPayload, TextPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
 from shiyi.ports.fetcher import FetcherError, RssEntry, RssFeed
@@ -49,6 +51,7 @@ COHERE_BLOG_FIXTURE_ROOT = FIXTURE_ROOT / "cohere-blog"
 ANTHROPIC_FIXTURE_ROOT = FIXTURE_ROOT / "anthropic-news"
 CURSOR_CHANGELOG_FIXTURE_ROOT = FIXTURE_ROOT / "cursor-changelog"
 GITHUB_COPILOT_CHANGELOG_FIXTURE_ROOT = FIXTURE_ROOT / "github-copilot-changelog"
+HACKER_NEWS_FIXTURE_ROOT = FIXTURE_ROOT / "hacker-news"
 OPENAI_RSS_URL = "https://openai.com/news/rss.xml"
 HUGGINGFACE_RSS_URL = "https://huggingface.co/blog/feed.xml"
 GOOGLE_RESEARCH_RSS_URL = "https://research.google/blog/rss/"
@@ -351,6 +354,24 @@ CONTRACT_CASES = (
             / "internal-item"
             / "github-copilot-for-eclipse-is-open-source.json",
         ),
+    ),
+    ContractCase(
+        source_name="hacker-news",
+        build_adapter=lambda: hacker_news_topstories_adapter(
+            limit=1,
+            web_fetcher=FakeWebFetcher(
+                {
+                    HACKER_NEWS_TOP_STORIES_URL: (
+                        HACKER_NEWS_FIXTURE_ROOT / "raw" / "topstories.json"
+                    ).read_text(),
+                    HACKER_NEWS_ITEM_URL_TEMPLATE.format(item_id=44123456): (
+                        HACKER_NEWS_FIXTURE_ROOT / "raw" / "44123456.json"
+                    ).read_text(),
+                },
+                fetched_at=FETCHED_AT,
+            ),
+        ),
+        expected_paths=(HACKER_NEWS_FIXTURE_ROOT / "internal-item" / "hn-44123456.json",),
     ),
     ContractCase(
         source_name="anthropic",

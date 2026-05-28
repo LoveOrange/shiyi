@@ -64,7 +64,10 @@ def test_sqlite_event_record_store_persists_content_depth(
     tmp_path: Path,
 ) -> None:
     store = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
-    event = _event(content_depth="summary_only")
+    event = _event(
+        content_depth="summary_only",
+        metadata={"upstream_id": "44123456", "source_metrics": {"score": 512}},
+    )
     artifact = _artifact()
 
     record = asyncio.run(
@@ -77,8 +80,14 @@ def test_sqlite_event_record_store_persists_content_depth(
     found = asyncio.run(store.find_by_idempotency_key(event.idempotency_key))
 
     assert record.content_depth == "summary_only"
+    assert record.metadata == {
+        "content_depth": "summary_only",
+        "source_metrics": {"score": 512},
+        "upstream_id": "44123456",
+    }
     assert found is not None
     assert found.content_depth == "summary_only"
+    assert found.metadata == record.metadata
 
 
 def test_sqlite_event_record_store_persists_captured_at_as_utc_text(
@@ -143,6 +152,7 @@ def test_sqlite_event_record_store_adds_trace_columns_to_existing_events_table(
         "adapter_name",
         "adapter_version",
         "content_depth",
+        "metadata_json",
     }.issubset(columns)
 
 
@@ -166,12 +176,17 @@ def _create_legacy_events_table(database_path: Path) -> None:
 
 
 def _event(
-    captured_at: datetime | None = None, *, content_depth: str | None = None
+    captured_at: datetime | None = None,
+    *,
+    content_depth: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> InternalItem:
     payload = HtmlPayload(html="<article>hello</article>")
     if captured_at is None:
         captured_at = datetime(2026, 5, 12, tzinfo=UTC)
-    metadata = {"content_depth": content_depth} if content_depth is not None else {}
+    event_metadata = dict(metadata or {})
+    if content_depth is not None:
+        event_metadata["content_depth"] = content_depth
     return InternalItem(
         id="evt_1",
         source=SourceIdentity(kind="blog"),
@@ -185,7 +200,7 @@ def _event(
             fetched_at=captured_at,
         ),
         idempotency_key="blog:evt_1",
-        metadata=metadata,
+        metadata=event_metadata,
     )
 
 

@@ -23,6 +23,7 @@ from shiyi import (
     gemini_api_changelog_adapter,
     github_copilot_changelog_adapter,
     google_research_blog_adapter,
+    hacker_news_topstories_adapter,
     huggingface_blog_adapter,
     microsoft_ai_blog_adapter,
     mistral_news_adapter,
@@ -30,6 +31,7 @@ from shiyi import (
     openai_news_adapter,
     z_ai_blog_adapter,
 )
+from shiyi.adapters.hacker_news import HACKER_NEWS_ITEM_URL_TEMPLATE, HACKER_NEWS_TOP_STORIES_URL
 from shiyi.domain.models import EnrichmentResult, EnrichmentTask
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFeed
@@ -65,6 +67,7 @@ COHERE_BLOG_URL = "https://cohere.com/blog"
 COHERE_BLOG_ARTICLE_URL = "https://cohere.com/blog/cohere-sovereign-ai-nvidia"
 CURSOR_CHANGELOG_URL = "https://cursor.com/changelog"
 GITHUB_COPILOT_CHANGELOG_FEED_URL = "https://github.blog/changelog/label/copilot/feed/"
+HACKER_NEWS_FIXTURE_ROOT = FIXTURE_ROOT / "hacker-news"
 FETCHED_AT = datetime(2026, 5, 14, 8, 30, tzinfo=UTC)
 
 
@@ -283,6 +286,23 @@ WEB_EXPORT_CASES = (
         build_adapter=lambda fetcher: cursor_changelog_adapter(limit=1, web_fetcher=fetcher),
         expected_excerpt="Cursor Automations are now available in the Agents Window",
     ),
+    WebExportCase(
+        source_kind="hacker-news",
+        pages={
+            HACKER_NEWS_TOP_STORIES_URL: (
+                HACKER_NEWS_FIXTURE_ROOT / "raw" / "topstories.json"
+            ).read_text(),
+            HACKER_NEWS_ITEM_URL_TEMPLATE.format(item_id=44123456): (
+                HACKER_NEWS_FIXTURE_ROOT / "raw" / "44123456.json"
+            ).read_text(),
+        },
+        expected_export_path=HACKER_NEWS_FIXTURE_ROOT / "export" / "hn-44123456.json",
+        build_adapter=lambda fetcher: hacker_news_topstories_adapter(
+            limit=1,
+            web_fetcher=fetcher,
+        ),
+        expected_excerpt="Neutral metrics: score=512; descendants=128; rank=1",
+    ),
 )
 
 
@@ -368,7 +388,10 @@ def test_fixture_backed_web_ingest_persist_export_matches_golden(
     assert summary.processed == 1
     assert _stable_dump(exported) == _read_json(case.expected_export_path)
     assert "raw_payload" not in json.dumps(exported)
-    assert "Canonical link:" in normalized_content
+    if case.source_kind == "hacker-news":
+        assert "Hacker News discussion:" in normalized_content
+    else:
+        assert "Canonical link:" in normalized_content
     if case.expected_excerpt is not None:
         assert case.expected_excerpt in normalized_content
     for excluded_excerpt in case.excluded_excerpts:

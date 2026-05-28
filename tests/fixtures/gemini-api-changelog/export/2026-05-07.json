@@ -2,25 +2,31 @@
   {
     "adapter_name": "gemini-api-changelog-page",
     "adapter_version": "0.1.0",
+    "canonical_discussion_url": null,
     "captured_at": "2026-05-14T08:30:00+00:00",
-    "occurred_at": "2026-05-07T00:00:00+00:00",
-    "published_at": "2026-05-07T00:00:00+00:00",
-    "content_depth": "complete",
     "content_completeness": "complete",
+    "content_depth": "complete",
     "content_hash": "4203b9f28623f8ee69c65737254ab55114c77323cad5f6fc909ad63df7f541c5",
     "event_id": "gemini-api-changelog:2026-05-07",
+    "external_target_url": null,
     "idempotency_key": "gemini-api-changelog:2026-05-07",
     "normalized_artifact_uri": "normalized/b4/b4809df7832731230e7b47714cd4f91966b761b2c4ea05a8838a7ebdf6e08482",
     "normalized_content": "Released gemini-3.1-flash-lite, the generally available (GA) version of Gemini Flash Lite\n\nPublished: 2026-05-07\nCanonical link: https://ai.google.dev/gemini-api/docs/changelog#05-07-2026\n\n- Released `gemini-3.1-flash-lite`, the generally available (GA) version of Gemini Flash Lite.\n- Updated model aliases for production traffic.\n",
     "normalized_media_type": "text/markdown",
+    "occurred_at": "2026-05-07T00:00:00+00:00",
+    "published_at": "2026-05-07T00:00:00+00:00",
     "schema_version": "shiyi-export-item.v1",
     "source": {
       "account_id": null,
       "kind": "gemini-api-changelog",
       "uri": "https://ai.google.dev/gemini-api/docs/changelog.md.txt"
     },
+    "source_category": "official",
+    "source_metrics": {},
     "source_ready": true,
+    "source_type": "changelog",
     "status": "persisted",
-    "source_type": "changelog"
+    "upstream_id": null,
+    "upstream_parent_id": null
   }
 ]
