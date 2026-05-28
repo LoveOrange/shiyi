@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from shiyi._time import datetime_from_isoformat, utc_isoformat
 from shiyi.domain.models import (
@@ -35,7 +37,8 @@ class SQLiteEventRecordStore:
                 """
                 SELECT event_id, idempotency_key, status, raw_artifact_json,
                        normalized_artifact_json, source_json, captured_at, occurred_at,
-                       content_hash, adapter_name, adapter_version, content_depth, last_error
+                       content_hash, adapter_name, adapter_version, content_depth,
+                       metadata_json, last_error
                 FROM events
                 WHERE idempotency_key = ?
                 """,
@@ -63,10 +66,10 @@ class SQLiteEventRecordStore:
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
                   normalized_artifact_json, source_json, captured_at, occurred_at,
-                  content_hash, adapter_name, adapter_version, content_depth, last_error,
-                  created_at, updated_at
+                  content_hash, adapter_name, adapter_version, content_depth, metadata_json,
+                  last_error, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -79,6 +82,7 @@ class SQLiteEventRecordStore:
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
                   content_depth = excluded.content_depth,
+                  metadata_json = excluded.metadata_json,
                   last_error = excluded.last_error,
                   updated_at = excluded.updated_at
                 """,
@@ -95,6 +99,7 @@ class SQLiteEventRecordStore:
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
                     content_depth,
+                    _metadata_to_json(event.metadata),
                     None,
                     now,
                     now,
@@ -125,10 +130,10 @@ class SQLiteEventRecordStore:
                 INSERT INTO events (
                   event_id, idempotency_key, status, raw_artifact_json,
                   normalized_artifact_json, source_json, captured_at, occurred_at,
-                  content_hash, adapter_name, adapter_version, content_depth, last_error,
-                  created_at, updated_at
+                  content_hash, adapter_name, adapter_version, content_depth, metadata_json,
+                  last_error, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(idempotency_key) DO UPDATE SET
                   event_id = excluded.event_id,
                   status = excluded.status,
@@ -141,6 +146,7 @@ class SQLiteEventRecordStore:
                   adapter_name = excluded.adapter_name,
                   adapter_version = excluded.adapter_version,
                   content_depth = excluded.content_depth,
+                  metadata_json = excluded.metadata_json,
                   last_error = excluded.last_error,
                   updated_at = excluded.updated_at
                 """,
@@ -157,6 +163,7 @@ class SQLiteEventRecordStore:
                     event.provenance.adapter_name,
                     event.provenance.adapter_version,
                     content_depth,
+                    _metadata_to_json(event.metadata),
                     error,
                     now,
                     now,
@@ -234,6 +241,7 @@ class SQLiteEventRecordStore:
                   adapter_name TEXT,
                   adapter_version TEXT,
                   content_depth TEXT,
+                  metadata_json TEXT,
                   last_error TEXT,
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL
@@ -267,6 +275,7 @@ def _ensure_events_columns(connection: sqlite3.Connection) -> None:
         "adapter_name": "TEXT",
         "adapter_version": "TEXT",
         "content_depth": "TEXT",
+        "metadata_json": "TEXT",
     }.items():
         if column not in columns:
             connection.execute(f"ALTER TABLE events ADD COLUMN {column} {definition}")
@@ -290,6 +299,7 @@ def _row_to_event_record(row: sqlite3.Row) -> EventRecord:
         adapter_name=row["adapter_name"],
         adapter_version=row["adapter_version"],
         content_depth=row["content_depth"],
+        metadata=_metadata_from_json(row["metadata_json"]),
         last_error=row["last_error"],
     )
 
@@ -310,6 +320,20 @@ def _datetime_from_json(value: str | None) -> datetime | None:
     if value is None:
         return None
     return datetime_from_isoformat(value)
+
+
+def _metadata_to_json(metadata: dict[str, Any]) -> str:
+    return json.dumps(metadata, sort_keys=True)
+
+
+def _metadata_from_json(value: str | None) -> dict[str, Any]:
+    if value is None:
+        return {}
+    decoded = json.loads(value)
+    if not isinstance(decoded, dict):
+        msg = "event metadata must decode to a JSON object"
+        raise TypeError(msg)
+    return decoded
 
 
 def _utc_now() -> str:

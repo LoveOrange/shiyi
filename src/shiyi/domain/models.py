@@ -244,4 +244,5 @@ class EventRecord(StrictModel):
     adapter_name: str | None = None
     adapter_version: str | None = None
     content_depth: ContentDepth | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     last_error: str | None = None

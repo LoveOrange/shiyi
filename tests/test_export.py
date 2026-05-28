@@ -60,7 +60,9 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
     assert exported[0].captured_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].occurred_at == "2026-05-12T10:00:00+00:00"
     assert exported[0].published_at == "2026-05-12T10:00:00+00:00"
+    assert exported[0].source_category is None
     assert exported[0].source_type == "unknown"
+    assert exported[0].source_metrics == {}
     assert exported[0].normalized_media_type == "text/markdown"
     assert exported[0].normalized_content is not None
     assert "# evt\\_1" in exported[0].normalized_content
@@ -76,14 +78,20 @@ def test_export_items_reads_normalized_content_by_time_and_source(tmp_path: Path
         "idempotency_key",
         "occurred_at",
         "published_at",
+        "canonical_discussion_url",
+        "external_target_url",
         "normalized_artifact_uri",
         "normalized_content",
         "normalized_media_type",
         "schema_version",
         "source",
+        "source_category",
+        "source_metrics",
         "source_type",
         "source_ready",
         "status",
+        "upstream_id",
+        "upstream_parent_id",
     }
     assert "third-party" not in exported[0].model_dump_json()
     assert "raw_payload" not in exported[0].model_dump_json()
@@ -254,7 +262,7 @@ def test_export_items_exposes_content_depth_and_can_filter_source_ready_records(
     assert [item.event_id for item in source_ready_only] == ["evt_complete"]
 
 
-def test_export_items_adds_source_type_from_builtin_registry(tmp_path: Path) -> None:
+def test_export_items_adds_source_taxonomy_from_builtin_registry(tmp_path: Path) -> None:
     artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
     records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
     event = _event(
@@ -267,8 +275,39 @@ def test_export_items_adds_source_type_from_builtin_registry(tmp_path: Path) -> 
 
     [item] = export_items(workspace=tmp_path, sources=("github-copilot-changelog",), limit=10)
 
+    assert item.source_category == "official"
     assert item.source_type == "changelog"
+    assert item.model_dump(mode="json")["source_category"] == "official"
     assert item.model_dump(mode="json")["source_type"] == "changelog"
+
+
+def test_export_items_exposes_high_noise_source_metadata(tmp_path: Path) -> None:
+    artifacts = FileSystemArtifactStore(tmp_path / "artifacts")
+    records = SQLiteEventRecordStore(tmp_path / "event-records.sqlite")
+    event = _event(
+        "hacker-news:44123456",
+        "hacker-news",
+        datetime(2026, 5, 14, 8, 30, tzinfo=UTC),
+        content_depth="complete",
+        occurred_at=datetime(2026, 5, 13, 15, 20, tzinfo=UTC),
+        metadata={
+            "upstream_id": "44123456",
+            "canonical_discussion_url": "https://news.ycombinator.com/item?id=44123456",
+            "external_target_url": "https://example.com/agentic-code-review-traces",
+            "source_metrics": {"score": 512, "descendants": 128, "rank": 1},
+        },
+    )
+    asyncio.run(_save_event(artifacts=artifacts, records=records, event=event, normalized=True))
+
+    [item] = export_items(workspace=tmp_path, sources=("hacker-news",), limit=10)
+
+    assert item.source_category == "community"
+    assert item.source_type == "unknown"
+    assert item.upstream_id == "44123456"
+    assert item.canonical_discussion_url == "https://news.ycombinator.com/item?id=44123456"
+    assert item.external_target_url == "https://example.com/agentic-code-review-traces"
+    assert item.source_metrics == {"score": 512, "descendants": 128, "rank": 1}
+    assert item.source_ready is True
 
 
 def test_exported_item_derives_readiness_from_content_depth() -> None:
@@ -411,16 +450,19 @@ def _html_payload(event: InternalItem) -> HtmlPayload:
     return event.payload
 
 
-def _event(
+def _event(  # noqa: PLR0913
     event_id: str,
     source_kind: str,
     captured_at: datetime,
     *,
     content_depth: str | None = None,
     occurred_at: datetime | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> InternalItem:
     payload = HtmlPayload(html=f"<article><h1>{event_id}</h1><p>Hello</p></article>")
-    metadata = {"content_depth": content_depth} if content_depth is not None else {}
+    event_metadata = dict(metadata or {})
+    if content_depth is not None:
+        event_metadata["content_depth"] = content_depth
     return InternalItem(
         id=event_id,
         source=SourceIdentity(kind=source_kind),
@@ -434,5 +476,5 @@ def _event(
             fetched_at=captured_at,
         ),
         idempotency_key=f"{source_kind}:{event_id}",
-        metadata=metadata,
+        metadata=event_metadata,
     )

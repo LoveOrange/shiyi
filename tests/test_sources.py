@@ -42,7 +42,7 @@ def test_source_registry_builds_adapter_without_cli_branching() -> None:
     assert source_definition("microsoft-ai-blog").source_kind == "microsoft-ai-blog"
 
 
-def test_source_registry_summaries_expose_builtin_metadata_without_factories() -> None:
+def test_source_registry_summaries_expose_builtin_metadata_without_factories() -> None:  # noqa: PLR0915
     summaries = source_summaries()
 
     microsoft = next(summary for summary in summaries if summary.name == "microsoft-ai-blog")
@@ -52,6 +52,7 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
         summary for summary in summaries if summary.name == "google-research-blog"
     )
     bytedance = next(summary for summary in summaries if summary.name == "bytedance-seed-blog")
+    hacker_news = next(summary for summary in summaries if summary.name == "hacker-news")
     assert microsoft.status == "built-in"
     assert microsoft.source_category == "official"
     assert microsoft.source_type == "blog"
@@ -91,6 +92,18 @@ def test_source_registry_summaries_expose_builtin_metadata_without_factories() -
     assert bytedance.structured_api_gate == "ready"
     assert bytedance.structured_api_blockers == ()
     assert bytedance.structured_api_traceability_refs
+    assert hacker_news.status == "built-in"
+    assert hacker_news.source_category == "community"
+    assert hacker_news.source_type == "unknown"
+    assert hacker_news.fetcher_family == "structured-api"
+    assert hacker_news.detail_capture_mode == "structured-api"
+    assert hacker_news.content_completeness == "complete"
+    assert hacker_news.readiness_status == "ready"
+    assert hacker_news.source_ready is True
+    assert hacker_news.counts_as_official_source_ready is False
+    assert hacker_news.authority_tier == "secondary"
+    assert hacker_news.structured_api_gate == "ready"
+    assert hacker_news.structured_api_blockers == ()
     assert all(summary.defer_reason for summary in summaries if summary.source_ready is False)
     assert all(summary.traceability_refs for summary in summaries)
     assert all(not hasattr(summary, "factory") for summary in summaries)
@@ -230,6 +243,7 @@ def test_high_noise_community_backlog_never_counts_as_official_source_ready() ->
         summary.name for summary in summaries if summary.counts_as_official_source_ready
     }
     assert "github-trending-or-community-feeds" not in official_coverage_names
+    assert "hacker-news" not in official_coverage_names
     assert "qwen-research" not in official_coverage_names
     assert "openai" not in official_coverage_names
     assert all(

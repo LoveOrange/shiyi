@@ -173,6 +173,22 @@ Examples:
 
 API and embedded-data sources usually need stronger pagination, checkpoint, completeness, and rate-limit tests before being treated as default built-ins. Official-used JSON or SSR payloads are acceptable only when they can be fixture-backed without browser automation. The structured/API readiness gate blocks promotion unless the implementation proves stable endpoint identity, stable item IDs, reliable timestamps, canonical URLs, complete payloads, bounded fixtures, repeatable extraction tests, and traceability refs.
 
+BFL-M3 first high-noise slice:
+
+- `hacker-news` — Hacker News public Firebase API top stories at
+  `https://hacker-news.firebaseio.com/v0/topstories.json`; exported as a neutral
+  `community` source with upstream HN item ID, canonical discussion URL, external
+  target URL when present, event time, and neutral metrics (`score`, `descendants`,
+  `rank`). Shiyi does not infer topic/event, credibility, ranking, or AI Weekly
+  selection from those metrics.
+- `shiyi enrich-hn-external-targets` is a dedicated follow-up enrichment stage for
+  persisted HN items. It fetches only the HN `external_target_url`, stores raw and
+  normalized external-target artifacts, and attaches additive
+  `external_target_enrichment.v1` metadata with target/final URL, external title,
+  external source type, factual summary when fetched, fetch status, external content
+  hash, and provenance. The top-level HN `summary` remains HN-owned and is not
+  overwritten.
+
 ### 3.4 Repository/package ecosystem sources
 
 Use for software/tooling signals.
@@ -217,9 +233,10 @@ Current built-ins:
 - `microsoft-ai-blog` — Microsoft AI Blog WordPress feed with decision-grade feed content;
 - `cohere-blog` — Cohere official blog index plus official detail payload;
 - `cursor-changelog` — Cursor official changelog page with SSR article entries and canonical changelog URLs;
-- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full `content:encoded` changelog bodies.
+- `github-copilot-changelog` — GitHub Blog Copilot label RSS feed with full `content:encoded` changelog bodies;
+- `hacker-news` — Hacker News public Firebase API top-story metadata, source category `community`, captured only as high-noise neutral discussion evidence for downstream Briefly processing; optional external-target enrichment is performed by the separate `enrich-hn-external-targets` stage.
 
-These provide four patterns: reusable feed capture, RSS-discovery/detail-page capture, index/page capture, and stable official changelog/embedded-data capture.
+These provide five patterns: reusable feed capture, RSS-discovery/detail-page capture, index/page capture, stable official changelog/embedded-data capture, and high-noise community structured-API capture.
 The P2.5 slices intentionally keep implementation hand-wired; source registry/config belongs to P3.
 
 ## 5. Recommended expansion batches

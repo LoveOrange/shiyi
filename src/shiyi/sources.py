@@ -26,6 +26,10 @@ from shiyi.adapters.changelog import (
     z_ai_blog_adapter,
 )
 from shiyi.adapters.deepmind import DEEPMIND_BLOG_RSS_URL, deepmind_blog_adapter
+from shiyi.adapters.hacker_news import (
+    HACKER_NEWS_TOP_STORIES_URL,
+    hacker_news_topstories_adapter,
+)
 from shiyi.adapters.rss import (
     GITHUB_COPILOT_CHANGELOG_FEED_URL,
     MICROSOFT_AI_BLOG_FEED_URL,
@@ -66,6 +70,7 @@ class SourceName(StrEnum):
     COHERE_BLOG = "cohere-blog"
     CURSOR_CHANGELOG = "cursor-changelog"
     GITHUB_COPILOT_CHANGELOG = "github-copilot-changelog"
+    HACKER_NEWS = "hacker-news"
 
 
 SourceFamily: TypeAlias = Literal[
@@ -74,6 +79,7 @@ SourceFamily: TypeAlias = Literal[
     "rss-detail",
     "changelog",
     "ssr-detail",
+    "structured-api",
 ]
 SourceCategory: TypeAlias = Literal["official", "community", "social_media"]
 AdapterAdmissionClass: TypeAlias = Literal[
@@ -549,6 +555,15 @@ def _github_copilot_changelog_adapter(
     return github_copilot_changelog_adapter(window=window)
 
 
+def _hacker_news_topstories_adapter(
+    *,
+    window: CaptureWindow | None,
+    raw_cache_root: Path | None = None,
+) -> Adapter:
+    _ignore_raw_cache_root(raw_cache_root)
+    return hacker_news_topstories_adapter(window=window)
+
+
 def _ignore_raw_cache_root(raw_cache_root: Path | None) -> None:
     _ = raw_cache_root
 
@@ -830,6 +845,42 @@ SOURCE_DEFINITIONS: tuple[SourceDefinition, ...] = (
             "tests/fixtures/github-copilot-changelog/export/github-copilot-for-eclipse-is-open-source.json",
         ),
         factory=_github_copilot_changelog_adapter,
+    ),
+    SourceDefinition(
+        name=SourceName.HACKER_NEWS,
+        source_kind="hacker-news",
+        adapter_name="hacker-news-topstories-api",
+        fetcher_family="structured-api",
+        source_category="community",
+        source_type="unknown",
+        authority_tier="secondary",
+        detail_capture_mode="structured-api",
+        entry_url=HACKER_NEWS_TOP_STORIES_URL,
+        default_content_depth="complete",
+        notes=(
+            "public HN discussion signal captured as neutral community metadata; "
+            "Briefly owns topic/event shaping, credibility, and editorial selection"
+        ),
+        traceability_refs=(
+            "docs/SOURCE_STRATEGY.md#33-public-api--embedded-data-sources",
+            "tests/fixtures/hacker-news/export/hn-44123456.json",
+            "tests/adapters/test_hacker_news_adapter.py",
+        ),
+        structured_api_readiness=StructuredApiReadinessEvidence(
+            stable_official_endpoint=True,
+            stable_item_ids=True,
+            reliable_published_timestamps=True,
+            canonical_urls=True,
+            complete_payloads=True,
+            bounded_fixtures=True,
+            repeatable_extraction_tests=True,
+            traceability_refs=(
+                "tests/fixtures/hacker-news/raw/topstories.json",
+                "tests/fixtures/hacker-news/raw/44123456.json",
+                "tests/adapters/test_hacker_news_adapter.py",
+            ),
+        ),
+        factory=_hacker_news_topstories_adapter,
     ),
 )
 BUILTIN_SOURCE_NAMES: tuple[str, ...] = tuple(

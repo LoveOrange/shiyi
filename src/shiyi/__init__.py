@@ -19,6 +19,11 @@ from shiyi.adapters.changelog import (
     z_ai_release_notes_adapter,
 )
 from shiyi.adapters.deepmind import DeepMindArticle, DeepMindBlogAdapter, deepmind_blog_adapter
+from shiyi.adapters.hacker_news import (
+    HackerNewsStory,
+    HackerNewsTopStoriesAdapter,
+    hacker_news_topstories_adapter,
+)
 from shiyi.adapters.rss import (
     RssDetailAdapter,
     RssDetailArticle,
@@ -129,6 +134,8 @@ __all__ = [
     "ExportedItem",
     "ExtractTask",
     "FixtureSizeCheck",
+    "HackerNewsStory",
+    "HackerNewsTopStoriesAdapter",
     "HtmlMarkdownNormalizer",
     "HtmlPayload",
     "InternalItem",
@@ -171,6 +178,7 @@ __all__ = [
     "gemini_api_changelog_adapter",
     "github_copilot_changelog_adapter",
     "google_research_blog_adapter",
+    "hacker_news_topstories_adapter",
     "huggingface_blog_adapter",
     "is_item_ready_content_completeness",
     "is_source_ready_content_depth",

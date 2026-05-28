@@ -24,6 +24,7 @@ from shiyi.domain.models import (
     ModelIdentity,
     SummarizeTask,
 )
+from shiyi.enrichments.hacker_news_external import enrich_hacker_news_external_targets
 from shiyi.export import export_items
 from shiyi.normalizers.html import HtmlMarkdownNormalizer
 from shiyi.pipeline.runner import CapturePipeline, PipelineRunSummary
@@ -117,6 +118,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             source_ready_only=args.source_ready_only,
         )
         sys.stdout.write(_format_json(exported_events))
+    elif args.command == "enrich-hn-external-targets":
+        enrichment_summary = asyncio.run(
+            enrich_hacker_news_external_targets(
+                workspace=args.workspace,
+                limit=args.limit,
+                overwrite=args.overwrite,
+            )
+        )
+        sys.stdout.write(_format_json(enrichment_summary))
     elif args.command == "sources":
         sys.stdout.write(_format_json(source_summaries(include_backlog=args.include_backlog)))
 
@@ -177,6 +187,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source-ready-only",
         action="store_true",
         help="Only export records whose derived content_completeness is source-ready.",
+    )
+    enrich_hn = subcommands.add_parser(
+        "enrich-hn-external-targets",
+        help="Enrich persisted Hacker News items with external target metadata",
+    )
+    enrich_hn.add_argument("--workspace", type=Path, default=Path(".shiyi"))
+    enrich_hn.add_argument("--limit", type=_positive_int, default=None)
+    enrich_hn.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Refresh existing HN external-target enrichment metadata.",
     )
     sources = subcommands.add_parser("sources", help="List registered sources and handoff backlog")
     sources.add_argument(
