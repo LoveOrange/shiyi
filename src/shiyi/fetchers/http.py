@@ -168,6 +168,7 @@ def _rss_entry(entry: Mapping[str, object]) -> RssEntry:
         title=str(entry.get("title", "")).strip(),
         link=str(entry.get("link", "")) or None,
         html=_entry_html(entry),
+        summary_html=_entry_summary_html(entry),
         published_at=_entry_datetime(entry),
     )
 
@@ -193,6 +194,10 @@ def _entry_html(entry: Mapping[str, object]) -> str:
             if isinstance(value, str) and value.strip():
                 return value
 
+    return _entry_summary_html(entry)
+
+
+def _entry_summary_html(entry: Mapping[str, object]) -> str:
     summary = entry.get("summary")
     if isinstance(summary, str) and summary.strip():
         return summary

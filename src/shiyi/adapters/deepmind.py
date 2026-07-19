@@ -17,16 +17,15 @@ from selectolax.parser import HTMLParser, Node
 from shiyi.domain.models import (
     CaptureWindow,
     HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
-    payload_content_hash,
+    Source,
+    SourceItem,
 )
 from shiyi.fetchers.http import HttpRssFetcher, HttpWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFetcher, WebFetcher
 
 DEEPMIND_BLOG_RSS_URL = "https://deepmind.google/blog/rss.xml"
 DEEPMIND_SOURCE_KIND = "deepmind-blog"
+MIN_REDIRECTED_ARTICLE_CHARS = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +39,7 @@ class DeepMindArticle:
     published_at: datetime | None = None
     modified_at: datetime | None = None
     author: str | None = None
+    complete: bool = True
 
 
 class DeepMindBlogAdapter:
@@ -51,21 +51,19 @@ class DeepMindBlogAdapter:
     def __init__(
         self,
         *,
-        feed_url: str = DEEPMIND_BLOG_RSS_URL,
         rss_fetcher: RssFetcher | None = None,
         web_fetcher: WebFetcher | None = None,
         limit: int | None = None,
         window: CaptureWindow | None = None,
     ) -> None:
         """Create a DeepMind blog adapter."""
-        self._feed_url = feed_url
         self._rss_fetcher = rss_fetcher or HttpRssFetcher(HttpWebFetcher())
         self._web_fetcher = web_fetcher or HttpWebFetcher()
         self._window = window or CaptureWindow(max_items=limit)
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch RSS once, filter by capture window, then fetch matching article details."""
-        feed = await self._rss_fetcher.fetch(self._feed_url)
+        feed = await self._rss_fetcher.fetch(source.target)
         emitted = 0
         for entry in feed.entries:
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -85,21 +83,15 @@ class DeepMindBlogAdapter:
                 fallback_url=detail_url,
             )
             payload = HtmlPayload(html=article.html, url=article.canonical_url)
-            item_id = f"{DEEPMIND_SOURCE_KIND}:{article.slug}"
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind=DEEPMIND_SOURCE_KIND, uri=article.canonical_url),
-                captured_at=detail_result.fetched_at,
-                occurred_at=article.published_at or occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=_article_id(article.canonical_url, fallback_url=detail_url),
+                kind=_content_kind(source),
+                canonical_url=article.canonical_url,
+                collected_at=detail_result.fetched_at,
+                published_at=article.published_at or occurred_at,
+                summary=_rss_summary(entry),
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=detail_result.fetched_at,
-                    source_item_id=article.slug,
-                ),
-                idempotency_key=item_id,
                 metadata=_metadata(article),
             )
             emitted += 1
@@ -136,13 +128,20 @@ def _parse_article(html: str, *, fallback_title: str, fallback_url: str) -> Deep
     canonical_url = _extract_canonical_url(
         parser=parser, json_ld=json_ld, fallback_url=fallback_url
     )
-    title = _require_title(
+    extracted_title = _require_title(
         _string_value(json_ld.get("headline"))
         or _first_text(parser, "h1")
         or _title_without_suffix(_first_text(parser, "title"))
         or fallback_title,
         url=canonical_url,
     )
+    main = parser.css_first("main#page-content") or parser.css_first("main")
+    body_length = len(_clean_text(main.text(separator=" ", strip=True))) if main is not None else 0
+    complete = (
+        urlparse(canonical_url).netloc.casefold().endswith("deepmind.google")
+        or body_length >= MIN_REDIRECTED_ARTICLE_CHARS
+    )
+    title = extracted_title if complete else _require_title(fallback_title, url=fallback_url)
     published_at = _parse_datetime(_string_value(json_ld.get("datePublished")))
     modified_at = _parse_datetime(_string_value(json_ld.get("dateModified")))
     author = _author_name(json_ld.get("author"))
@@ -161,6 +160,7 @@ def _parse_article(html: str, *, fallback_title: str, fallback_url: str) -> Deep
         published_at=published_at,
         modified_at=modified_at,
         author=author,
+        complete=complete,
     )
 
 
@@ -291,17 +291,22 @@ def _remove_noise_nodes(node: Node) -> None:
             child.decompose()
 
 
-def _metadata(article: DeepMindArticle) -> dict[str, str]:
+def _metadata(article: DeepMindArticle) -> dict[str, object]:
     metadata = {
         "title": article.title,
         "link": article.canonical_url,
-        "content_depth": "complete",
+        "is_complete": article.complete,
     }
     if article.author:
         metadata["author"] = article.author
     if article.modified_at:
         metadata["modified_at"] = article.modified_at.isoformat()
     return metadata
+
+
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "article")
+    return value if isinstance(value, str) and value else "article"
 
 
 def _first_text(parser: HTMLParser, selector: str) -> str:
@@ -364,12 +369,23 @@ def _canonicalize_url(url: str, *, base_url: str | None = None) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
-def _article_id(url: str) -> str:
+def _article_id(url: str, *, fallback_url: str | None = None) -> str:
     path = urlparse(url).path.strip("/")
     slug = path.removeprefix("blog/").rstrip("/").split("/")[-1]
     if slug:
         return slug
+    if fallback_url is not None:
+        return _article_id(fallback_url)
     return sha256(url.encode()).hexdigest()[:16]
+
+
+def _rss_summary(entry: RssEntry) -> str | None:
+    if not entry.summary_html.strip():
+        return None
+    summary = _clean_text(HTMLParser(entry.summary_html).text(separator=" ", strip=True))
+    if not summary or summary.casefold() == _clean_text(entry.title).casefold():
+        return None
+    return summary
 
 
 def _entry_metadata_hash(*, source: str, url: str) -> str:

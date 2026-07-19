@@ -13,10 +13,8 @@ from selectolax.parser import HTMLParser
 from shiyi.domain.models import (
     CaptureWindow,
     HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
-    payload_content_hash,
+    Source,
+    SourceItem,
 )
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import SitemapFetcher, WebFetcher
@@ -30,10 +28,9 @@ class AnthropicNewsAdapter:
     name = "anthropic-news-index"
     version = "0.2.0"
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
-        index_url: str = ANTHROPIC_NEWS_URL,
         limit: int | None = 10,
         web_fetcher: WebFetcher | None = None,
         sitemap_fetcher: SitemapFetcher | None = None,
@@ -41,18 +38,17 @@ class AnthropicNewsAdapter:
         window: CaptureWindow | None = None,
     ) -> None:
         """Create an Anthropic news adapter."""
-        self._index_url = index_url
         self._web_fetcher = web_fetcher or HttpWebFetcher()
         self._sitemap_fetcher = sitemap_fetcher
         self._sitemap_url = sitemap_url
         self._window = window or CaptureWindow(max_items=limit)
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch Anthropic news index and article pages."""
-        index_result = await self._web_fetcher.fetch(self._index_url)
+        index_result = await self._web_fetcher.fetch(source.target)
         sitemap_dates = await self._sitemap_dates()
         emitted = 0
-        for url in _extract_article_urls(index_result.content, self._index_url):
+        for url in _extract_article_urls(index_result.content, source.target):
             article_result = await self._web_fetcher.fetch(
                 url,
                 source="anthropic-news",
@@ -65,21 +61,16 @@ class AnthropicNewsAdapter:
             article_id = _article_id(url)
             title = _require_title(_extract_title(article_result.content), url=url)
             payload = HtmlPayload(html=article_result.content, url=url)
-            yield InternalItem(
-                id=f"anthropic-news:{article_id}",
-                source=SourceIdentity(kind="anthropic-news", uri=url),
-                captured_at=article_result.fetched_at,
-                occurred_at=occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=article_id,
+                kind=_content_kind(source),
+                canonical_url=url,
+                collected_at=article_result.fetched_at,
+                published_at=occurred_at,
+                summary=_extract_summary(article_result.content),
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=article_result.fetched_at,
-                    source_item_id=article_id,
-                ),
-                idempotency_key=f"anthropic-news:{article_id}",
-                metadata={"title": title, "link": url, "content_depth": "complete"},
+                metadata={"title": title, "link": url, "is_complete": True},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -144,6 +135,11 @@ def _entry_metadata_hash(*, source: str, url: str) -> str:
     return sha256(f"{source}\n{url}".encode()).hexdigest()
 
 
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "article")
+    return value if isinstance(value, str) and value else "article"
+
+
 def _extract_title(html: str) -> str:
     parser = HTMLParser(html)
     for selector in ("h1", "title"):
@@ -153,6 +149,21 @@ def _extract_title(html: str) -> str:
             if text:
                 return text
     return ""
+
+
+def _extract_summary(html: str) -> str | None:
+    parser = HTMLParser(html)
+    for selector in (
+        "meta[name='description']",
+        "meta[property='og:description']",
+        "meta[name='twitter:description']",
+    ):
+        node = parser.css_first(selector)
+        if node is not None and (value := node.attributes.get("content")):
+            summary = " ".join(value.split())
+            if summary:
+                return summary
+    return None
 
 
 def _require_title(title: str, *, url: str) -> str:

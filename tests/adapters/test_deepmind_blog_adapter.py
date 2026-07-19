@@ -3,7 +3,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 
-from shiyi import CaptureWindow, InternalItem, deepmind_blog_adapter
+from shiyi import CaptureWindow, Source, SourceItem
+from shiyi.adapters.deepmind import deepmind_blog_adapter
 from shiyi.domain.models import HtmlPayload
 from shiyi.fetchers.fake import FakeRssFetcher, FakeWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFeed
@@ -34,16 +35,17 @@ def test_deepmind_blog_adapter_emits_article_scoped_complete_payload() -> None:
         web_fetcher=web_fetcher,
     )
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(adapter.capture(_source())))
 
     assert rss_fetcher.calls == [DEEPMIND_RSS_URL]
     assert [call.url for call in web_fetcher.calls] == [ALPHAEVOLVE_URL]
     assert len(items) == 1
     item = items[0]
-    assert item.id == "deepmind-blog:alphaevolve-impact"
-    assert item.source.kind == "deepmind-blog"
-    assert str(item.source.uri) == ALPHAEVOLVE_URL
-    assert item.metadata["content_depth"] == "complete"
+    assert item.source_id == "deepmind-blog"
+    assert item.source_item_id == "alphaevolve-impact"
+    assert str(item.canonical_url) == ALPHAEVOLVE_URL
+    assert item.metadata["is_complete"] is True
+    assert item.summary is not None
     assert (
         item.metadata["title"]
         == "AlphaEvolve: How our Gemini-powered coding agent is scaling impact across fields"
@@ -57,7 +59,7 @@ def test_deepmind_blog_adapter_emits_article_scoped_complete_payload() -> None:
     assert "Your browser does not support the video tag" not in payload_html
 
 
-def test_deepmind_blog_idempotency_and_content_hash_are_stable_per_canonical_url() -> None:
+def test_deepmind_blog_source_item_identity_is_stable_per_canonical_url() -> None:
     feed = RssFeed(
         url=DEEPMIND_RSS_URL,
         fetched_at=FETCHED_AT,
@@ -91,15 +93,14 @@ def test_deepmind_blog_idempotency_and_content_hash_are_stable_per_canonical_url
         ),
     )
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(adapter.capture(_source())))
 
     expected_distinct_items = 2
-    assert [item.idempotency_key for item in items] == [
-        "deepmind-blog:alphaevolve-impact",
-        "deepmind-blog:second-in-window",
+    assert [item.source_item_id for item in items] == [
+        "alphaevolve-impact",
+        "second-in-window",
     ]
-    assert len({item.idempotency_key for item in items}) == expected_distinct_items
-    assert items[0].content_hash != items[1].content_hash
+    assert len({item.source_item_id for item in items}) == expected_distinct_items
 
 
 def test_deepmind_blog_missing_detail_url_fails_clearly() -> None:
@@ -122,7 +123,7 @@ def test_deepmind_blog_missing_detail_url_fails_clearly() -> None:
     )
 
     try:
-        asyncio.run(_collect_items(adapter.discover()))
+        asyncio.run(_collect_items(adapter.capture(_source())))
     except ValueError as error:
         assert "DeepMind RSS entry missing canonical detail URL" in str(error)
     else:  # pragma: no cover - keeps the failure message explicit when the contract regresses.
@@ -174,11 +175,48 @@ def test_deepmind_blog_window_and_limit_gate_detail_fetches() -> None:
         ),
     )
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(adapter.capture(_source())))
 
-    assert [item.id for item in items] == ["deepmind-blog:alphaevolve-impact"]
+    assert [item.source_item_id for item in items] == ["alphaevolve-impact"]
     assert rss_fetcher.calls == [DEEPMIND_RSS_URL]
     assert [call.url for call in web_fetcher.calls] == [ALPHAEVOLVE_URL]
+
+
+def test_deepmind_external_product_redirect_keeps_feed_identity_and_is_not_ready() -> None:
+    feed_url = "https://deepmind.google/blog/introducing-antigravity-2/"
+    feed = RssFeed(
+        url=DEEPMIND_RSS_URL,
+        fetched_at=FETCHED_AT,
+        entries=(
+            RssEntry(
+                entry_id=feed_url,
+                title="Introducing Google Antigravity 2.0",
+                link=feed_url,
+                html="",
+                published_at=datetime(2026, 7, 18, tzinfo=UTC),
+            ),
+        ),
+    )
+    adapter = deepmind_blog_adapter(
+        rss_fetcher=FakeRssFetcher({DEEPMIND_RSS_URL: feed}),
+        web_fetcher=FakeWebFetcher(
+            {
+                feed_url: """
+                <html><head><link rel="canonical" href="https://antigravity.google/"></head>
+                <body><main><h1>Google Antigravity</h1><p>Product landing page.</p></main></body>
+                </html>
+                """
+            },
+            fetched_at=FETCHED_AT,
+        ),
+    )
+
+    [item] = asyncio.run(_collect_items(adapter.capture(_source())))
+
+    assert item.source_item_id == "introducing-antigravity-2"
+    assert str(item.canonical_url) == "https://antigravity.google/"
+    assert item.metadata["title"] == "Introducing Google Antigravity 2.0"
+    assert item.metadata["is_complete"] is False
 
 
 def _entry(*, entry_id: str, title: str, link: str, published_at: datetime) -> RssEntry:
@@ -187,6 +225,7 @@ def _entry(*, entry_id: str, title: str, link: str, published_at: datetime) -> R
         title=title,
         link=link,
         html="summary only",
+        summary_html="summary only",
         published_at=published_at,
     )
 
@@ -215,5 +254,14 @@ def _article_html(*, url: str, title: str, body: str) -> str:
     """
 
 
-async def _collect_items(events: AsyncIterator[InternalItem]) -> list[InternalItem]:
+async def _collect_items(events: AsyncIterator[SourceItem]) -> list[SourceItem]:
     return [event async for event in events]
+
+
+def _source() -> Source:
+    return Source(
+        id="deepmind-blog",
+        adapter="deepmind-blog-detail",
+        target=DEEPMIND_RSS_URL,
+        options={"content_kind": "article"},
+    )

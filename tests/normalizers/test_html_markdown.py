@@ -1,67 +1,69 @@
 import asyncio
 from datetime import UTC, datetime
 
-from shiyi.domain.models import (
-    HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
-    TextPayload,
-    payload_content_hash,
-)
-from shiyi.normalizers.html import HtmlMarkdownNormalizer
+import pytest
+
+from shiyi import BinaryPayload, HtmlPayload, MarkdownContentProcessor, SourceItem
+
+NOW = datetime(2026, 7, 19, tzinfo=UTC)
 
 
-def test_html_markdown_normalizer_extracts_article_markdown() -> None:
-    normalizer = HtmlMarkdownNormalizer()
-    payload = HtmlPayload(
-        html="<html><body><article><h1>Hello</h1><p>World</p></article></body></html>"
-    )
-    event = InternalItem(
-        id="evt_1",
-        source=SourceIdentity(kind="blog"),
-        captured_at=datetime(2026, 5, 12, tzinfo=UTC),
-        occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-        payload=payload,
-        content_hash=payload_content_hash(payload),
-        provenance=Provenance(
-            adapter_name="test",
-            adapter_version="0.1.0",
-            fetched_at=datetime(2026, 5, 12, tzinfo=UTC),
+def test_processor_builds_canonical_markdown_and_promotes_creators() -> None:
+    item = SourceItem(
+        source_id="deepmind-blog",
+        source_item_id="alpha",
+        kind="article",
+        canonical_url="https://deepmind.google/blog/alpha/",
+        collected_at=NOW,
+        published_at=NOW,
+        summary="  A source-provided summary.  ",
+        payload=HtmlPayload(
+            html="<body><nav>Menu</nav><article><h1>Alpha</h1><p>Body.</p></article></body>"
         ),
-        idempotency_key="blog:evt_1",
+        metadata={
+            "title": "Alpha",
+            "author": "DeepMind team",
+            "source_metrics": {"views": 10, "invalid": "no"},
+            "source_only": "kept",
+        },
     )
 
-    artifact = asyncio.run(normalizer.normalize(event))
+    content = asyncio.run(MarkdownContentProcessor(clock=lambda: NOW).process(item, raw_ref=None))
 
-    assert artifact is not None
-    assert artifact.kind == "normalized"
-    assert artifact.media_type == "text/markdown"
-    assert b"# Hello" in artifact.content
-    assert b"World" in artifact.content
+    assert content.title == "Alpha"
+    assert content.creators == ("DeepMind team",)
+    assert content.content == "# Alpha\n\nBody.\n"
+    assert content.metrics == {"views": 10}
+    assert content.summary == "A source-provided summary."
+    assert content.extra == {"source_only": "kept"}
+    assert content.ready_at == NOW
 
 
-def test_html_markdown_normalizer_keeps_text_payloads_exportable() -> None:
-    normalizer = HtmlMarkdownNormalizer()
-    payload = TextPayload(text="hello")
-    event = InternalItem(
-        id="evt_1",
-        source=SourceIdentity(kind="blog"),
-        captured_at=datetime(2026, 5, 12, tzinfo=UTC),
-        occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-        payload=payload,
-        content_hash=payload_content_hash(payload),
-        provenance=Provenance(
-            adapter_name="test",
-            adapter_version="0.1.0",
-            fetched_at=datetime(2026, 5, 12, tzinfo=UTC),
-        ),
-        idempotency_key="blog:evt_1",
+def test_binary_payload_requires_a_dedicated_processor() -> None:
+    item = SourceItem(
+        source_id="video",
+        source_item_id="1",
+        kind="video",
+        collected_at=NOW,
+        payload=BinaryPayload(media_type="video/mp4", bytes_ref="cos://bucket/1"),
+        metadata={"title": "Video"},
     )
 
-    artifact = asyncio.run(normalizer.normalize(event))
+    with pytest.raises(ValueError, match="dedicated ContentProcessor"):
+        asyncio.run(MarkdownContentProcessor().process(item, raw_ref=None))
 
-    assert artifact is not None
-    assert artifact.kind == "normalized"
-    assert artifact.media_type == "text/markdown"
-    assert artifact.content == b"hello\n"
+
+def test_incomplete_source_material_is_persistable_but_not_ready() -> None:
+    item = SourceItem(
+        source_id="openai-news",
+        source_item_id="preview",
+        kind="article",
+        collected_at=NOW,
+        payload=HtmlPayload(html="<article><h1>Preview</h1><p>Short feed preview.</p></article>"),
+        metadata={"title": "Preview", "is_complete": False},
+    )
+
+    content = asyncio.run(MarkdownContentProcessor(clock=lambda: NOW).process(item, raw_ref=None))
+
+    assert content.content
+    assert content.ready_at is None

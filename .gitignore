@@ -13,6 +13,7 @@ build/
 .venv/
 
 # Local config
+.shiyi/
 .env
 .env.*
 !.env.example

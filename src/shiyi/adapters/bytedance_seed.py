@@ -15,13 +15,10 @@ from selectolax.parser import HTMLParser
 
 from shiyi.domain.models import (
     CaptureWindow,
-    ContentDepth,
     HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
+    Source,
+    SourceItem,
     TextPayload,
-    payload_content_hash,
 )
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import WebFetcher
@@ -40,19 +37,17 @@ class ByteDanceSeedBlogAdapter:
     def __init__(
         self,
         *,
-        index_url: str = BYTEDANCE_SEED_BLOG_URL,
         limit: int | None = 10,
         web_fetcher: WebFetcher | None = None,
         window: CaptureWindow | None = None,
     ) -> None:
         """Create a ByteDance Seed blog adapter."""
-        self._index_url = index_url
         self._web_fetcher = web_fetcher or HttpWebFetcher()
         self._window = window or CaptureWindow(max_items=limit)
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch the blog index and article detail payloads."""
-        index_result = await self._web_fetcher.fetch(self._index_url)
+        index_result = await self._web_fetcher.fetch(source.target)
         emitted = 0
         for index_item in _extract_index_items(index_result.content):
             if not self._window.includes(index_item.occurred_at):
@@ -64,32 +59,31 @@ class ByteDanceSeedBlogAdapter:
             )
             detail = _extract_detail(detail_result.content)
             payload = _entry_payload(index_item=index_item, detail=detail)
-            item_id = f"bytedance-seed-blog:{index_item.entry_id}"
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind="bytedance-seed-blog", uri=index_item.link),
-                captured_at=detail_result.fetched_at,
-                occurred_at=index_item.occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=index_item.entry_id,
+                kind=_content_kind(source),
+                canonical_url=index_item.link,
+                collected_at=detail_result.fetched_at,
+                published_at=index_item.occurred_at,
+                summary=index_item.abstract or None,
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=detail_result.fetched_at,
-                    source_item_id=index_item.entry_id,
-                ),
-                idempotency_key=item_id,
                 metadata={
                     "title": index_item.title,
                     "link": index_item.link,
                     "language": "zh",
                     "english_link": index_item.english_link,
-                    "content_depth": detail.content_depth,
+                    "is_complete": detail.complete,
                 },
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
                 break
+
+
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "article")
+    return value if isinstance(value, str) and value else "article"
 
 
 def bytedance_seed_blog_adapter(
@@ -116,7 +110,7 @@ class _IndexItem:
 @dataclass(frozen=True, slots=True)
 class _Detail:
     content_html: str
-    content_depth: ContentDepth
+    complete: bool
 
 
 def _extract_index_items(html: str) -> tuple[_IndexItem, ...]:
@@ -157,7 +151,7 @@ def _extract_detail(html: str) -> _Detail:
         router_data, "loaderData", "(locale$)/blog/(id)/page", "data", "article"
     )
     content = _string_value(page_data.get("ContentZh")) or _string_value(page_data.get("ContentEn"))
-    return _Detail(content_html=content, content_depth="complete" if content else "summary_only")
+    return _Detail(content_html=content, complete=bool(content))
 
 
 def _entry_payload(*, index_item: _IndexItem, detail: _Detail) -> HtmlPayload | TextPayload:

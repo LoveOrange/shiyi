@@ -1,185 +1,117 @@
 # Shiyi Scope SDD
 
-- Status: Review
+- Status: Accepted
 - Owner: Shiyi contributors
-- Last updated: 2026-05-16
-- Scope: product and architectural boundary for Shiyi as shared information capture infrastructure
+- Last updated: 2026-07-19
+- Priority: Briefly-first MVP
+- Architecture: [`../architecture.md`](../architecture.md)
 
 ## 1. Decision
 
-Shiyi is a shared information capture and normalization infrastructure, not a general AI insight product.
-
-The scope boundary is:
+Shiyi is information collection and canonicalization infrastructure. Its stable product boundary is:
 
 ```text
-Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
-Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
+Shiyi = Configure + Capture + Normalize + Optional Neutral AI + Persist ContentItem
+Downstream = Signal + Trend + Opportunity + Ranking + Editorial Output
 ```
 
-Shiyi produces facts, provenance, canonical content, and optional neutral annotations. It must not produce business opinions.
+Shiyi may ingest many content kinds, but it ends at a source-neutral `ContentItem`. It must not turn that content into product-specific insight.
 
-## 2. Why this boundary exists
+## 2. Current goal
 
-Shiyi is intended to support multiple top-level products and workflows:
+Briefly launches after Shiyi can supply data reliably. Therefore the MVP optimizes for:
 
-- Briefly and other vertical information insight products;
-- AI R&D industry monitoring;
-- demand radar and opportunity discovery;
-- future capture consumers that need reliable source ingestion.
+1. stable configured sources needed by Briefly;
+2. complete original content when available;
+3. deterministic normalization and idempotent MongoDB upserts;
+4. a simple readiness contract for Briefly;
+5. optional neutral summary and language processing that cannot break capture.
 
-If Shiyi starts owning product-specific analysis, prompts, scoring, ranking, or editorial decisions, every consumer will push its own business logic into the infrastructure layer. That would turn Shiyi into a mixed insight application instead of a reusable capture substrate.
+Open-source adapter breadth and third-party extension ergonomics are later goals.
 
 ## 3. In scope
 
-### 3.1 Source integration
+### 3.1 Configuration and collection
 
-Shiyi owns reusable source ingestion boundaries:
+- `CaptureConfig` declares enabled `Source` targets.
+- Scheduler or CLI invokes `CaptureRunner`.
+- Runner resolves a `SourceAdapter` for each enabled source.
+- Adapters own authentication, HTTP/API access, pagination, rate limits, checkpoints, and source-specific parsing.
+- Multiple targets may share one adapter; for example, multiple X account sources share `XCaptureAdapter`.
 
-- RSS, web, sitemap, API, social/source adapters;
-- source windows for daily/backfill capture;
-- idempotency keys;
-- source metadata and provenance;
-- source-specific parsing behind adapters;
-- shared fetchers for network policy, timeout, retry, user-agent, and event-level raw cache;
-- full article/detail retrieval for built-in source-ready adapters when a source exposes canonical detail content.
+### 3.2 SourceItem
 
-### 3.2 Raw capture
+`SourceItem` is the transient Adapter -> Processor boundary. It retains source identity, source-native item identity, collection time, canonical URL when known, raw payload, an optional source-provided summary, and source metadata.
 
-Shiyi owns durable raw capture:
+It is not persisted as the public consumer contract.
 
-- raw HTML/feed/API payload artifacts;
-- raw canonical article/detail payload artifacts for source-ready built-ins when available;
-- fetch/source provenance;
-- adapter name/version;
-- fetched time;
-- source item ID or canonical URL;
-- replay/audit-friendly storage.
+### 3.3 ContentItem
 
-### 3.3 Normalize
+`ContentItem` is the only canonical persisted and consumer-facing document. It owns:
 
-Shiyi owns canonical source-independent representations:
+- deterministic Shiyi id;
+- source and source-native identity;
+- content kind and canonical URL;
+- title and optional `creators: string[]` attribution;
+- published and collected timestamps;
+- original language and normalized Markdown content;
+- optional summary and summary language;
+- optional categories, tags, and objective metrics;
+- content hash, source-specific `extra`, and optional `BlobRef`;
+- readiness and update timestamps.
 
-- normalized Markdown/text artifacts;
-- basic article/body extraction from full detail content when available;
-- title/author/published time/link/content-type where available;
-- language and content metadata when source-neutral;
-- stable references from event records to raw and normalized artifacts.
+Missing creators must not block readiness. `Creator` is not a separate MVP model.
 
-### 3.4 Event ledger
+### 3.4 Optional neutral AI
 
-Shiyi owns pipeline bookkeeping:
+AI may produce only reusable neutral fields:
 
-- event records;
-- status transitions;
-- idempotency and replay safety;
-- artifact references;
-- retry/failure metadata when implemented;
-- run summaries and operational counters.
+- language normalization;
+- a configured-language title when needed;
+- neutral summary;
+- simple categories or tags.
 
-### 3.5 Neutral preprocess, optional
+AI output is untrusted until deterministically validated and merged. A non-empty source-provided summary is promoted directly and prevents AI summarization. AI failure must not lose deterministic output.
 
-Shiyi may provide optional neutral preprocessing when it is reusable across consumers and does not encode product-specific judgment.
+### 3.5 Persistence and distribution
 
-Allowed examples:
-
-- language detection;
-- translation helper fields;
-- neutral short summary for preview/indexing;
-- entity extraction: company, product, person, paper, model, organization;
-- coarse topic/category tags;
-- content quality/spam/near-duplicate signals;
-- chunking and embeddings for retrieval.
-
-Neutral preprocess must be configurable and disableable. P0 should not require it.
-
-### 3.6 Distribution
-
-Shiyi should eventually expose captured material to consumers through simple distribution mechanisms:
-
-- CLI list/export;
-- JSONL export;
-- local API;
-- event stream or queue;
-- stable artifact/event-record query interfaces.
+- MongoDB is the canonical hot/query store for `ContentItem`.
+- Filesystem initially, and COS later, stores raw, oversized, or cold bytes referenced by `BlobRef`.
+- Briefly reads canonical items from MongoDB.
+- JSON or CLI export is derived output, not a second authority.
 
 ## 4. Out of scope
 
-Shiyi must not own domain/product decisions such as:
+Shiyi does not own:
 
-- Briefly vertical insight judgment;
-- AI R&D industry trend analysis;
-- demand radar pain-point or opportunity scoring;
-- whether an item deserves inclusion in a weekly report;
-- product-specific ranking, prioritization, or editorial selection;
-- business conclusion generation;
-- domain-specific prompts that only one top-level product understands.
+- signals, trends, opportunities, recommendations, or business conclusions;
+- credibility, importance, ranking, clustering, or editorial selection;
+- Briefly-specific presentation logic;
+- generic extraction tasks, agent workflows, or arbitrary AI jobs;
+- parallel canonical SQLite, filesystem, and MongoDB representations;
+- compatibility layers or a production plugin ecosystem during MVP.
 
-Those belong to consumers that subscribe to Shiyi's normalized artifacts and event records.
+## 5. Acceptance criteria
 
-## 5. Milestone scope
+The MVP boundary is satisfied when:
 
-This section defines logical product scope. The current execution milestone plan lives in [`../MILESTONES.md`](../MILESTONES.md) and is the canonical milestone source of truth.
+1. configured sources repeatedly produce complete, validated `ContentItem` documents;
+2. the same logical source item upserts the same deterministic `ContentItem.id`;
+3. source-specific DTOs do not cross the `SourceItem` boundary;
+4. Briefly needs no adapter, raw payload, runner, or checkpoint knowledge;
+5. AI can be disabled or fail without losing captured deterministic content;
+6. downstream insight concepts do not appear in Shiyi domain contracts.
 
-### P0: Capture + normalize infrastructure
+## 6. Naming
 
-P0 should prove:
+Use `Item` only for `SourceItem` and `ContentItem`.
 
-- source adapters work for first real sources;
-- raw artifacts are persisted;
-- normalized/canonical artifacts are persisted;
-- event records provide idempotency and replay safety;
-- daily/backfill windows are safe;
-- CLI can capture and list results.
+Use:
 
-P0 does not require AI preprocessing.
+- `CaptureRunner`, not a generic pipeline/event orchestrator;
+- `SourceAdapter`, with implementations such as `XCaptureAdapter`;
+- `ContentProcessor`, not a generic enrichment task graph;
+- `ContentItemStore`, not `EventRecordStore`;
+- `BlobStore` and `BlobRef`, not artifact/event families.
 
-### P1: Neutral preprocessing
-
-P1 may add optional neutral preprocessing only after capture semantics are stable.
-
-P1 candidates:
-
-- neutral summary;
-- entity extraction;
-- coarse topics;
-- language detection;
-- chunking/embedding;
-- quality/duplicate signals.
-
-The public API should prefer names such as `PreprocessTask`, `AnnotationTask`, or `ExtractionTask` over `EnrichmentTask`.
-
-### P2: Consumer distribution
-
-P2 should make it easy for product consumers to use Shiyi output:
-
-- JSONL export;
-- API/query layer;
-- event stream;
-- integration examples for Briefly, AI Insight, and Demand Radar.
-
-## 6. Naming guidance
-
-`Enrichment` is a dangerous name for Shiyi core because it suggests business insight.
-
-`EnrichmentTask` and `EnrichmentResult` are the MVP names for neutral, reusable annotation work. Specs must not expand their meaning into product-specific insight generation.
-
-## 7. Pipeline implication
-
-The pipeline MVP uses one direct mode:
-
-1. Raw + normalized artifacts are persisted first.
-2. Configured neutral annotation tasks run next.
-3. The item reaches terminal `enriched` state only after every configured annotation task succeeds.
-
-MVP status semantics stay direct: `persisted` means raw/normalized artifacts were written, `enriched` means all configured neutral annotation tasks completed, and `failed` means the run needs inspection or retry. Rename status concepts directly only when a task explicitly changes the implemented state model.
-
-## 8. Acceptance criteria
-
-A scope or architecture change is acceptable only if:
-
-1. Shiyi remains reusable infrastructure for multiple consumers.
-2. Product-specific ranking, scoring, and insight generation stay outside Shiyi.
-3. Raw and normalized artifacts remain first-class outputs.
-4. Optional AI work is neutral, configurable, and not required for P0 capture correctness.
-5. Names do not imply that Shiyi owns business enrichment.
-6. Consumer products can build their own domain pipelines on top of Shiyi outputs.
+During MVP, rename these boundaries directly across code, tests, and docs without compatibility aliases.

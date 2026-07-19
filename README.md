@@ -1,173 +1,94 @@
 # Shiyi
 
-Shiyi is an open-source information capture and normalization pipeline for turning messy external sources into durable, canonical, replay-safe knowledge artifacts.
+Shiyi collects information from heterogeneous sources and turns it into canonical `ContentItem` documents for Briefly and other downstream consumers.
 
-The project is intentionally scoped as shared capture infrastructure:
+The current priority is a stable Briefly data input. Shiyi may later support a broader open-source adapter ecosystem, but it does not own signals, trends, opportunities, ranking, or editorial decisions.
 
-```text
-Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
-Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
-```
-
-Core extension points:
-
-- **Fetchers** — retrieve web, RSS, and sitemap source material with shared HTTP policy.
-- **Adapters** — parse source-specific data and normalize raw input into internal items.
-- **Normalizers** — turn source payloads into canonical Markdown/text or structured artifacts.
-- **AI Providers** — optionally produce neutral, reusable annotations such as summaries, entities, coarse topics, language, quality signals, chunks, or embeddings.
-- **Artifact Stores and Event Record Stores** — store raw captures, normalized records, optional neutral annotations, idempotency state, and audit metadata in user-selected backends.
-
-> Status: early architecture draft. APIs are not stable yet.
-
-## Design goals
-
-1. **Composable capture pipeline** — sources, normalization, optional neutral preprocessing, and storage should evolve independently.
-2. **Open extension model** — users can bring their own Adapter, Normalizer, AI Provider, Artifact Store, or Event Record Store implementation without forking core.
-3. **Production-grade quality** — typed contracts, deterministic tests, observable runtime, clear error semantics, and simple MVP-first evolution.
-4. **Trustworthy data flow** — raw input, transformations, model outputs, and persistence writes should be traceable and auditable.
-5. **Language-first documentation** — English is the primary documentation language until the design stabilizes; other languages will follow later.
-
-## Architecture at a glance
+## Architecture
 
 ```mermaid
 flowchart LR
-  Source[External Source] --> Fetcher[Fetcher]
-  Fetcher --> Adapter[Adapter]
-  Adapter --> InternalItem[Internal Item]
-  InternalItem --> Pipeline[Capture Pipeline]
-  Pipeline --> Annotation[Optional Neutral Annotation]
-  Pipeline --> Policy[Policy & Validation]
-  Pipeline --> ArtifactStore[Artifact Store]
-  Pipeline --> EventRecordStore[Event Record Store]
-  Annotation --> ArtifactStore
-  Annotation --> EventRecordStore
-  ArtifactStore --> FS[(Filesystem Artifacts)]
-  EventRecordStore --> SQLite[(SQLite Event Records)]
-  Pipeline --> Telemetry[Logs / Metrics / Traces]
+    ENTRY["Scheduler / CLI"] --> RUNNER["CaptureRunner"]
+    CONFIG["CaptureConfig: sources[]"] --> RUNNER
+    RUNNER --> SOURCE["Source"]
+    SOURCE --> ADAPTER["SourceAdapter"]
+    ADAPTER --> SOURCE_ITEM["SourceItem"]
+    SOURCE_ITEM --> PROCESSOR["ContentProcessor"]
+    PROCESSOR --> CONTENT_ITEM["ContentItem"]
+    CONTENT_ITEM -. "optional neutral AI" .-> AI["AI Processor"]
+    CONTENT_ITEM --> MERGE["Validate and merge"]
+    AI --> MERGE
+    MERGE --> STORE[("MongoDB")]
+    SOURCE_ITEM --> BLOB[("Filesystem -> COS Blobs")]
+    STORE --> BRIEFLY["Briefly"]
 ```
 
-Shiyi core owns orchestration and contracts. Integrations live behind ports.
+The full model and component diagrams live in [`docs/architecture.md`](docs/architecture.md).
 
-Repository docs are the source of truth for product and design decisions. Notion may track tasks, owners, dates, and status, but should not be the canonical product spec.
+## Core language
 
-Start with the project-level docs first: [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md), [`docs/MILESTONES.md`](docs/MILESTONES.md), [`docs/SOURCE_STRATEGY.md`](docs/SOURCE_STRATEGY.md), and [`docs/testing-boundary.md`](docs/testing-boundary.md). Use [`docs/architecture.md`](docs/architecture.md), [`docs/extension-points.md`](docs/extension-points.md), and [`docs/specs/*.md`](docs/specs/) for implementation-facing details. Dated progress reviews and process notes should be distilled into these docs, then removed from tracked repository docs.
+- `CaptureConfig` declares what to collect.
+- `Source` is one independently identifiable target and checkpoint boundary.
+- `SourceAdapter` performs source-specific network acquisition.
+- `SourceItem` is the transient adapter boundary.
+- `ContentProcessor` performs deterministic canonicalization.
+- `ContentItem` is the only persisted consumer contract.
+- `ContentItemStore` uses MongoDB for hot/query data.
+- `BlobStore` uses filesystem initially and COS later for raw, large, or cold bytes.
 
-## Repository layout
+Multiple targets can share one adapter. For example, `x:openai` and `x:sama` can both use `XCaptureAdapter` while keeping separate source identities and checkpoints.
 
-```text
-.
-├── docs/
-│   ├── PRODUCT_SPEC.md
-│   ├── MILESTONES.md
-│   ├── SOURCE_STRATEGY.md
-│   ├── architecture.md
-│   ├── extension-points.md
-│   ├── specs/
-│   └── adr/
-├── src/
-│   └── shiyi/
-│       ├── domain/
-│       ├── ports/
-│       └── pipeline/
-└── tests/
-```
-
-## Quickstart
-
-Run a local capture into filesystem artifacts plus SQLite event records:
+## Install
 
 ```bash
-uv sync
-uv run shiyi capture --source openai --workspace .shiyi/openai --max-items 2
-uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --max-items 2
-uv run shiyi capture --source deepseek-news --workspace .shiyi/deepseek-news --max-items 2
+uv sync --dev
 ```
 
-The CLI prints a JSON summary:
+Shiyi requires Python 3.11 or newer.
 
-```json
-{"artifacts": 4, "enriched_events": 1, "enrichments": 2, "processed": 1, "source": "openai", "total_events": 1, "workspace": ".shiyi/openai"}
-```
+## Run
 
-A second run over the same source should return `"processed": 0` for already-complete records. This is the MVP idempotency behavior. Optional local heuristic annotations are recorded as enrichment artifacts.
-
-For daily capture, prefer a date window plus a small overlap instead of an arbitrary item limit:
+Start MongoDB locally or set `SHIYI_MONGO_URI`, then capture one or more built-in sources:
 
 ```bash
-uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
+uv run shiyi capture \
+  --source anthropic \
+  --source deepmind-blog \
+  --workspace .shiyi
 ```
 
-Date windows are half-open: `--since` is inclusive and `--until` is exclusive. For scheduled jobs, use a 2-3 day overlap and let idempotency skip already-complete records. `--limit` remains as a deprecated debug alias for the item cap.
-
-List captured records with the CLI:
+List configured built-ins:
 
 ```bash
-uv run shiyi list --workspace .shiyi/openai
+uv run shiyi sources
 ```
 
-Export normalized content for upstream consumers by captured time and source kind:
+Read ready canonical documents:
 
 ```bash
-uv run shiyi export --workspace .shiyi/openai --since 2026-05-12 --until 2026-05-13 --source blog --limit 20
+uv run shiyi list --limit 20
+uv run shiyi export --source anthropic-news --limit 20
 ```
 
-The export output is JSON and contains Shiyi trace fields plus `normalized_content`; consumers do not need third-party source DTOs.
+MongoDB defaults to `mongodb://localhost:27017`, database `shiyi`, and collection `content_items`. Raw payload Blobs are stored below `.shiyi/blobs` using content-addressed SHA-256 keys.
 
-Or inspect metadata directly with SQLite:
+## ContentItem
 
-```bash
-sqlite3 .shiyi/openai/event-records.sqlite \
-  "select event_id, idempotency_key, status from events;"
-```
+`ContentItem` preserves source identity, source-native identity, kind, canonical URL, title, optional `creators: string[]`, timestamps, original-language Markdown, optional summary/language/labels, objective metrics, content hash, Blob reference, and readiness timestamps.
 
-Artifacts are stored under:
+`ContentItem.id` is the deterministic upsert identity. There is no separate event ledger or duplicate idempotency key.
 
-```text
-.shiyi/<source>/artifacts/raw/
-.shiyi/<source>/artifacts/normalized/
-.shiyi/<source>/artifacts/enrichment/
-```
+## AI boundary
 
-Fetcher raw-cache entries for full article pages are stored separately under:
-
-```text
-.shiyi/<source>/data/raw/{source}/{adapter-defined-raw-key}/raw.html
-```
-
-Adapters define the raw key from entry-level metadata. A cache hit skips the remote full-page fetch, but pipeline event records still control whether an event is normalized and complete.
-
-Current built-in sources:
-
-- `openai` — OpenAI news RSS feed; explicit discovery-grade defer until a compliant canonical detail path is available.
-- `anthropic` — Anthropic news index parser.
-- `huggingface-blog` — Hugging Face Blog RSS discovery plus canonical article detail pages.
-- `google-research-blog` — Google Research Blog RSS discovery plus canonical article detail pages.
-- `deepmind-blog` — Google DeepMind Blog RSS discovery plus canonical article detail pages.
-- `deepseek-news` — DeepSeek official news article pages discovered from API docs updates.
-- `z-ai-blog` — Z.ai / GLM official blog posts discovered from release notes.
-- `moonshot-kimi-changelog` — Kimi Open Platform changelog.
-- `bytedance-seed-blog` — ByteDance Seed official blog, Chinese primary with English fallback metadata.
-
-## Live smoke tests
-
-Network-dependent public-source smoke tests are opt-in:
-
-```bash
-SHIYI_RUN_LIVE_TESTS=1 uv run pytest tests/live/test_public_sources.py
-```
+AI is optional. It may propose neutral language, summary, categories, and tags. Adapters capture an upstream summary when the source supplies one; a non-empty summary skips AI summarization and always wins during deterministic merging. AI cannot overwrite source facts, and AI failure cannot lose captured deterministic content.
 
 ## Development
 
-Shiyi uses Python-first tooling with strict contracts and fast local feedback.
-
 ```bash
-uv sync
-uv run ruff format --check .
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy src tests
 uv run pytest
 ```
 
-## License
-
-Apache-2.0. See [`LICENSE`](LICENSE).
+See [`AGENTS.md`](AGENTS.md) for the MVP design rules and [`docs/specs/scope-sdd.md`](docs/specs/scope-sdd.md) for the accepted product boundary.

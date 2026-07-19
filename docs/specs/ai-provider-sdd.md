@@ -1,79 +1,68 @@
-# Shiyi Neutral Preprocessing Provider SDD
+# Optional AI Processor SDD
 
-- Status: Review
-- Last updated: 2026-05-12
-- Scope: optional neutral preprocessing provider boundary after capture/normalize core
+- Status: Accepted
+- Owner: Shiyi contributors
+- Last updated: 2026-07-19
+- Scope: neutral, optional preprocessing of a deterministic `ContentItem`
 
-## 1. Scope decision
+## 1. Decision
 
-Shiyi is not a domain insight engine. Provider-backed AI work inside Shiyi must be limited to neutral preprocessing that is reusable by multiple downstream products.
+AI is optional preprocessing inside Shiyi. Capture, identity, normalization, hashing, deduplication, readiness policy, and persistence remain deterministic.
 
-Allowed boundary:
+The Briefly-first MVP uses one structured request/response boundary instead of a generic task system.
 
-```text
-Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
-Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
-```
+## 2. Allowed output
 
-## 2. MVP decision
+The processor may propose only:
 
-The MVP can ship without a real LLM provider. The existing `LocalHeuristicAIProvider` is the current deterministic local provider for neutral annotations.
+- language when not already known;
+- neutral summary when the item has no summary;
+- summary language;
+- an optional configured-language title;
+- simple categories;
+- simple tags.
 
-P0 correctness should depend on:
+It must not produce Signal, Trend, Opportunity, ranking, credibility, recommendation, or editorial fields.
 
-- reliable capture;
-- raw artifact persistence;
-- normalized/canonical artifact persistence;
-- event records;
-- idempotent replay.
-
-Neutral preprocessing is optional and belongs to P1.
-
-## 3. Allowed neutral preprocessing
-
-Provider-backed work is in scope only when it is domain-neutral and reusable:
-
-- language detection;
-- translation helper fields;
-- short neutral summary for preview/indexing;
-- entity extraction: companies, products, people, papers, models, organizations;
-- coarse topic/category labels;
-- content quality/spam/near-duplicate signals;
-- chunking and embeddings for retrieval.
-
-## 4. Out of scope
-
-Provider-backed work is out of scope when it creates business opinions or product-specific decisions:
-
-- Briefly vertical insight judgment;
-- AI R&D trend analysis;
-- demand radar pain-point or opportunity scoring;
-- weekly-report inclusion decisions;
-- ranking, prioritization, or editorial selection;
-- business conclusion generation;
-- prompts that only one downstream product understands.
-
-## 5. MVP provider contract
-
-`EnrichmentTask` and `EnrichmentResult` are the MVP names for neutral, reusable annotation work. Do not expand `EnrichmentTask` with product-specific insight behavior. If a downstream product needs domain enrichment, it should run its own pipeline on Shiyi's normalized artifacts.
+## 3. Contract
 
 ```python
-class AIProvider(Protocol):
-    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult: ...
+class AIContentFields(BaseModel):
+    language: str | None = None
+    summary: str | None = None
+    summary_language: str | None = None
+    translated_title: str | None = None
+    categories: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+
+
+class AIProcessor(Protocol):
+    async def process(self, item: ContentItem) -> AIContentFields: ...
 ```
 
-The provider may use `InternalItem` provenance and source metadata, but provider output must remain neutral and reusable.
+Provider identity and token/cost usage may be logged as operational telemetry. They are not part of the canonical `ContentItem` product contract unless a concrete audit requirement appears.
 
-## 6. Design requirements before real provider implementation
+## 4. Merge rules
 
-- Provider configuration must not hard-code secrets.
-- Model identity must be recorded in every result.
-- Usage metadata should include input/output tokens when available.
-- Provider raw responses may be stored as artifacts only when policy allows it.
-- Output must be schema-validated before an annotation is recorded as successful.
-- Rate limits and retry behavior must be explicit.
-- Every provider task must document why it is neutral and reusable.
+Deterministic code validates provider output and owns the merge.
 
-## 7. First real provider candidate
+- AI cannot overwrite ids, provenance, URL, source facts, timestamps, creators, original content, content hash, metrics, or Blob references.
+- Empty, invalid, or over-limit fields are rejected.
+- Categories and tags are bounded and deduplicated.
+- Existing valid source/deterministic language wins over an AI guess.
+- Existing non-empty summary wins. The processor does not request or generate another summary when `ContentItem.summary` is non-empty.
+- Failure preserves the deterministic `ContentItem` and is reported in the run summary.
 
-The first real provider can be a single OpenAI-compatible structured-output implementation, but it should implement neutral preprocessing only. Anthropic can follow once provider config, schema retry, and artifact storage policy are stable.
+## 5. Language policy
+
+Preserve normalized content in its original language. Do not translate every full document during MVP.
+
+When Briefly requires a common reading language, configure the summary language and optionally a translated title. Record both `language` and `summary_language` explicitly.
+
+## 6. MVP non-goals
+
+- classify/extract/summarize task variants;
+- model-specific domain objects in the canonical content schema;
+- enrichment artifact ledgers;
+- agent loops or arbitrary prompt execution;
+- AI as a prerequisite for durable capture.

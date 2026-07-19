@@ -16,13 +16,10 @@ from selectolax.parser import HTMLParser, Node
 
 from shiyi.domain.models import (
     CaptureWindow,
-    ContentDepth,
     HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
+    Source,
+    SourceItem,
     TextPayload,
-    payload_content_hash,
 )
 from shiyi.fetchers.http import HttpRssFetcher, HttpWebFetcher
 from shiyi.ports.fetcher import RssEntry, RssFetcher, WebFetcher
@@ -50,53 +47,47 @@ class RssFeedAdapter:
         self,
         *,
         name: str,
-        feed_url: str,
-        source_kind: str,
         rss_fetcher: RssFetcher | None = None,
         limit: int | None = None,
         window: CaptureWindow | None = None,
-        content_depth: ContentDepth = "summary_only",
+        complete: bool = False,
+        item_id_from_link: bool = False,
     ) -> None:
         """Create an RSS adapter for one feed URL."""
         self._name = name
-        self._feed_url = feed_url
-        self._source_kind = source_kind
         self._rss_fetcher = rss_fetcher or HttpRssFetcher(HttpWebFetcher())
         self._window = window or CaptureWindow(max_items=limit)
-        self._content_depth = content_depth
+        self._complete = complete
+        self._item_id_from_link = item_id_from_link
 
     @property
     def name(self) -> str:
         """Stable adapter name."""
         return self._name
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch and parse the feed into Adapter -> Pipeline internal items."""
-        feed = await self._rss_fetcher.fetch(self._feed_url)
+        feed = await self._rss_fetcher.fetch(source.target)
         emitted = 0
         for entry in feed.entries:
             occurred_at = entry.published_at or feed.fetched_at
             if not self._window.includes(occurred_at):
                 continue
             entry_id = _required_entry_field(entry.entry_id, field="entry_id")
+            if self._item_id_from_link and entry.link:
+                entry_id = _canonicalize_url(entry.link)
             title = _required_entry_field(entry.title, field="title", entry_id=entry_id)
             payload = _rss_payload(title=title, link=entry.link, html=entry.html)
-            item_id = f"{self._source_kind}:{entry_id}"
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind=self._source_kind, uri=self._feed_url),
-                captured_at=feed.fetched_at,
-                occurred_at=occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=entry_id,
+                kind=_content_kind(source),
+                canonical_url=entry.link,
+                collected_at=feed.fetched_at,
+                published_at=occurred_at,
+                summary=_rss_summary(entry),
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=feed.fetched_at,
-                    source_item_id=entry_id,
-                ),
-                idempotency_key=item_id,
-                metadata={"title": title, "link": entry.link, "content_depth": self._content_depth},
+                metadata={"title": title, "link": entry.link, "is_complete": self._complete},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -112,6 +103,7 @@ class RssDetailArticle:
     body_html: str
     published_at: datetime | None = None
     authors: tuple[str, ...] = ()
+    summary: str | None = None
 
 
 RssDetailParser = Callable[[str, RssEntry], RssDetailArticle]
@@ -126,8 +118,6 @@ class RssDetailAdapter:
         self,
         *,
         name: str,
-        feed_url: str,
-        source_kind: str,
         detail_parser: RssDetailParser,
         rss_fetcher: RssFetcher | None = None,
         web_fetcher: WebFetcher | None = None,
@@ -136,8 +126,6 @@ class RssDetailAdapter:
     ) -> None:
         """Create an RSS discovery + detail adapter."""
         self._name = name
-        self._feed_url = feed_url
-        self._source_kind = source_kind
         self._detail_parser = detail_parser
         self._rss_fetcher = rss_fetcher or HttpRssFetcher(HttpWebFetcher())
         self._web_fetcher = web_fetcher or HttpWebFetcher()
@@ -148,9 +136,9 @@ class RssDetailAdapter:
         """Stable adapter name."""
         return self._name
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch RSS once, filter by window, then dereference canonical detail pages."""
-        feed = await self._rss_fetcher.fetch(self._feed_url)
+        feed = await self._rss_fetcher.fetch(source.target)
         emitted = 0
         for entry in feed.entries:
             occurred_at = entry.published_at or feed.fetched_at
@@ -160,30 +148,25 @@ class RssDetailAdapter:
             detail_url = _require_detail_url(entry)
             detail_result = await self._web_fetcher.fetch(
                 detail_url,
-                source=self._source_kind,
-                raw_key=_entry_metadata_hash(source=self._source_kind, url=detail_url),
+                source=source.id,
+                raw_key=_entry_metadata_hash(source=source.id, url=detail_url),
             )
             article = self._detail_parser(detail_result.content, entry)
             payload = HtmlPayload(html=_detail_payload(article), url=article.canonical_url)
-            item_id = f"{self._source_kind}:{entry_id}"
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind=self._source_kind, uri=article.canonical_url),
-                captured_at=detail_result.fetched_at,
-                occurred_at=article.published_at or occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=entry_id,
+                kind=_content_kind(source),
+                canonical_url=article.canonical_url,
+                collected_at=detail_result.fetched_at,
+                published_at=article.published_at or occurred_at,
+                summary=article.summary or _rss_summary(entry),
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=detail_result.fetched_at,
-                    source_item_id=entry_id,
-                ),
-                idempotency_key=item_id,
                 metadata={
                     "title": article.title,
                     "link": article.canonical_url,
-                    "content_depth": "complete",
+                    "creators": article.authors,
+                    "is_complete": True,
                 },
             )
             emitted += 1
@@ -203,6 +186,11 @@ def _rss_payload(*, title: str, link: str | None, html: str) -> HtmlPayload | Te
         escaped_link = escape(link, quote=True)
         parts.append(f'<p>Canonical link: <a href="{escaped_link}">{escape(link)}</a></p>')
     return HtmlPayload(html=f"<article>{''.join(parts)}</article>", url=link)
+
+
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "article")
+    return value if isinstance(value, str) and value else "article"
 
 
 def _detail_payload(article: RssDetailArticle) -> str:
@@ -232,6 +220,19 @@ def _html_contains_text(html: str, text: str) -> bool:
     normalized_haystack = " ".join(plain_html.casefold().split())
     normalized_needle = " ".join(text.casefold().split())
     return normalized_needle in normalized_haystack
+
+
+def _rss_summary(entry: RssEntry) -> str | None:
+    if not entry.summary_html.strip():
+        return None
+    parser = HTMLParser(entry.summary_html)
+    for selector in ("script", "style", "h1", "h2", "title"):
+        for node in parser.css(selector):
+            node.decompose()
+    summary = _clean_text(parser.text(separator=" ", strip=True))
+    if not summary or summary.casefold() == _clean_text(entry.title).casefold():
+        return None
+    return summary
 
 
 def _required_entry_field(value: str, *, field: str, entry_id: str | None = None) -> str:
@@ -402,6 +403,7 @@ def _parse_huggingface_detail(html: str, entry: RssEntry) -> RssDetailArticle:
         body_html=body_html,
         published_at=published_at,
         authors=_author_names(json_ld.get("author")),
+        summary=_string_value(json_ld.get("description")),
     )
 
 
@@ -441,7 +443,12 @@ def _parse_google_research_detail(html: str, entry: RssEntry) -> RssDetailArticl
         body_html=body_html,
         published_at=published_at,
         authors=authors,
+        summary=_google_research_summary(parser),
     )
+
+
+def _google_research_summary(parser: HTMLParser) -> str | None:
+    return _first_text(parser, "section.blog-summary .blog-summary__summary")
 
 
 def _google_research_hero_metadata(parser: HTMLParser) -> tuple[datetime | None, str | None]:
@@ -490,11 +497,11 @@ def openai_news_adapter(
     """Create the default OpenAI news RSS adapter."""
     return RssFeedAdapter(
         name="openai-news-rss",
-        feed_url="https://openai.com/news/rss.xml",
-        source_kind="openai-news",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
+        complete=True,
+        item_id_from_link=True,
     )
 
 
@@ -508,8 +515,6 @@ def huggingface_blog_adapter(
     """Create the default Hugging Face blog adapter."""
     return RssDetailAdapter(
         name="huggingface-blog-detail",
-        feed_url="https://huggingface.co/blog/feed.xml",
-        source_kind="huggingface-blog",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
@@ -528,8 +533,6 @@ def google_research_blog_adapter(
     """Create the default Google Research blog adapter."""
     return RssDetailAdapter(
         name="google-research-blog-detail",
-        feed_url="https://research.google/blog/rss/",
-        source_kind="google-research-blog",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
@@ -547,12 +550,11 @@ def microsoft_ai_blog_adapter(
     """Create the default Microsoft AI blog RSS adapter."""
     return RssFeedAdapter(
         name="microsoft-ai-blog-rss",
-        feed_url=MICROSOFT_AI_BLOG_FEED_URL,
-        source_kind="microsoft-ai-blog",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
-        content_depth="complete",
+        complete=True,
+        item_id_from_link=True,
     )
 
 
@@ -565,10 +567,8 @@ def github_copilot_changelog_adapter(
     """Create the default GitHub Copilot official changelog adapter."""
     return RssFeedAdapter(
         name="github-copilot-changelog-rss",
-        feed_url=GITHUB_COPILOT_CHANGELOG_FEED_URL,
-        source_kind="github-copilot-changelog",
         limit=limit,
         window=window,
         rss_fetcher=rss_fetcher,
-        content_depth="complete",
+        complete=True,
     )

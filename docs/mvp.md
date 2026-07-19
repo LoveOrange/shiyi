@@ -1,92 +1,35 @@
-# Shiyi MVP Definition
+# Shiyi Briefly-first MVP
 
-## MVP promise
+## Outcome
 
-The MVP proves that Shiyi can capture article-like information from real public sources into a local, inspectable, replay-safe workspace.
+Provide a reliable canonical information feed for Briefly before expanding Shiyi's open-source adapter surface.
 
-A successful MVP run must:
+## Included
 
-1. Capture OpenAI news content.
-2. Capture Anthropic news content.
-3. Preserve raw source HTML or feed content as filesystem artifacts.
-4. Normalize HTML into Markdown artifacts.
-5. Store event records and optional neutral annotation references in SQLite.
-6. Produce deterministic CLI summaries.
-7. Skip already-complete records on re-run using idempotency keys.
-8. List captured records from the CLI.
-9. Pass local and CI quality gates.
+- declarative `CaptureConfig` with enabled `Source` targets;
+- `CaptureRunner` as the Scheduler/CLI execution entry;
+- source-specific `SourceAdapter` acquisition;
+- transient `SourceItem` and canonical `ContentItem` contracts;
+- deterministic Markdown normalization, identity, hashing, and idempotent upserts;
+- MongoDB canonical storage;
+- filesystem Blob storage with a future COS implementation boundary;
+- optional neutral language, summary, categories, and tags.
 
-## Included in MVP
+## Excluded
 
-- Python package with strict typing and tests.
-- Filesystem artifact store.
-- SQLite event record store.
-- HTML-to-Markdown normalizer.
-- OpenAI RSS adapter.
-- Anthropic news index adapter.
-- Local heuristic AI provider for neutral annotations. This remains product-neutral and must not become downstream insight/ranking logic.
-- One-shot CLI capture command.
-- README quickstart.
-- Metadata listing CLI.
+- Signal, Trend, Opportunity, ranking, clustering, or editorial output;
+- generic enrichment/extraction task models;
+- event ledgers and artifact families;
+- runtime plugin discovery;
+- broad third-party compatibility guarantees.
 
-## Not included in MVP
+## Launch gate
 
-- Real LLM provider integration.
-- Hosted service or web UI.
-- Scheduler/daemon mode.
-- Checkpoint store.
-- Search or vector index.
-- Notion/PARA sync.
-- Broad web crawler.
+1. Selected Briefly sources run repeatedly without duplicate documents.
+2. Complete source content is normalized into queryable Markdown.
+3. MongoDB indexes and schema validation are installed.
+4. AI can be disabled or unavailable without capture data loss.
+5. Briefly reads only ready canonical documents.
+6. Backups and restore procedures are exercised before production.
 
-## Exit criteria
-
-The MVP is ready when these commands work on a clean checkout:
-
-```bash
-uv sync
-uv run shiyi capture --source openai --workspace .shiyi/openai --max-items 2
-uv run shiyi capture --source anthropic --workspace .shiyi/anthropic --max-items 2
-uv run shiyi list --workspace .shiyi/openai
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy src tests
-uv run pytest
-```
-
-A second capture run for the same source and workspace should report `"processed": 0`.
-
-## Live source smoke tests
-
-Public-source smoke tests are opt-in so normal CI remains deterministic:
-
-```bash
-SHIYI_RUN_LIVE_TESTS=1 uv run pytest tests/live/test_public_sources.py
-```
-
-These tests verify that the current Anthropic news index still exposes article links and that the OpenAI RSS feed is reachable.
-
-
-## Post-MVP v0.2 hardening
-
-Shiyi now supports explicit capture windows for daily/backfill workflows:
-
-```bash
-uv run shiyi capture --source openai --workspace .shiyi/openai --since 2026-05-10 --until 2026-05-13 --max-items 100
-```
-
-`--since` is inclusive and `--until` is exclusive. Daily jobs should use a 2-3 day overlap window and rely on idempotency to avoid duplicate processing.
-
-Fetching/crawling concerns now live behind shared fetchers (`WebFetcher`, `RssFetcher`, `SitemapFetcher`) so adapters focus on source-specific parsing and mapping.
-
-
-## Scope update: infrastructure, not insight product
-
-Shiyi's product boundary is:
-
-```text
-Shiyi = Capture + Normalize + Neutral Preprocess + Distribution
-Briefly / AI Insight / Demand Radar = Domain Enrichment + Ranking + Product Output
-```
-
-For P0, Shiyi should focus on capture, raw artifacts, normalized/canonical artifacts, event records, and idempotency. Neutral annotation should remain lightweight and product-neutral. Business-specific enrichment such as trend analysis, opportunity scoring, ranking, or weekly-report selection belongs to downstream products.
+See [`architecture.md`](architecture.md) and [`specs/scope-sdd.md`](specs/scope-sdd.md).

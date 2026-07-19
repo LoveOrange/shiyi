@@ -11,7 +11,7 @@ from shiyi.adapters.hacker_news import (
     HACKER_NEWS_TOP_STORIES_URL,
     hacker_news_topstories_adapter,
 )
-from shiyi.domain.models import CaptureWindow, HtmlPayload, InternalItem
+from shiyi.domain.models import CaptureWindow, HtmlPayload, Source, SourceItem
 from shiyi.fetchers.fake import FakeWebFetcher
 
 FIXTURE_ROOT = Path(__file__).parents[1] / "fixtures" / "hacker-news"
@@ -24,21 +24,18 @@ def test_hacker_news_topstory_raw_payload_maps_to_valid_internal_item() -> None:
         web_fetcher=_fixture_fetcher(),
     )
 
-    [item] = asyncio.run(_collect_items(adapter.discover()))
+    [item] = asyncio.run(_collect_items(adapter.capture(_source())))
 
-    assert InternalItem.model_validate(item.model_dump(mode="json")) == item
-    assert item.id == "hacker-news:44123456"
-    assert item.source.kind == "hacker-news"
-    assert str(item.source.uri) == "https://news.ycombinator.com/item?id=44123456"
-    assert item.captured_at == FETCHED_AT
-    assert item.occurred_at == datetime(2026, 5, 13, 15, 20, tzinfo=UTC)
-    assert item.provenance.adapter_name == "hacker-news-topstories-api"
-    assert item.provenance.source_item_id == "44123456"
-    assert item.idempotency_key == "hacker-news:44123456"
+    assert SourceItem.model_validate(item.model_dump(mode="json")) == item
+    assert item.source_id == "hacker-news"
+    assert item.source_item_id == "44123456"
+    assert str(item.canonical_url) == "https://news.ycombinator.com/item?id=44123456"
+    assert item.collected_at == FETCHED_AT
+    assert item.published_at == datetime(2026, 5, 13, 15, 20, tzinfo=UTC)
     assert item.metadata == {
         "title": "Show HN: Agentic code review traces for AI teams",
         "link": "https://example.com/agentic-code-review-traces",
-        "content_depth": "complete",
+        "is_complete": True,
         "upstream_id": "44123456",
         "canonical_discussion_url": "https://news.ycombinator.com/item?id=44123456",
         "external_target_url": "https://example.com/agentic-code-review-traces",
@@ -76,9 +73,9 @@ def test_hacker_news_window_filter_runs_after_required_time_and_before_emit() ->
         ),
     )
 
-    items = asyncio.run(_collect_items(adapter.discover()))
+    items = asyncio.run(_collect_items(adapter.capture(_source())))
 
-    assert [item.idempotency_key for item in items] == ["hacker-news:44123456"]
+    assert [item.source_item_id for item in items] == ["44123456"]
 
 
 def test_hacker_news_dead_deleted_or_non_story_items_fail_closed_without_emit() -> None:
@@ -98,7 +95,7 @@ def test_hacker_news_dead_deleted_or_non_story_items_fail_closed_without_emit() 
         web_fetcher=FakeWebFetcher(pages, fetched_at=FETCHED_AT),
     )
 
-    assert asyncio.run(_collect_items(adapter.discover())) == []
+    assert asyncio.run(_collect_items(adapter.capture(_source()))) == []
 
 
 def test_hacker_news_missing_required_fields_fail_clearly() -> None:
@@ -113,7 +110,7 @@ def test_hacker_news_missing_required_fields_fail_clearly() -> None:
     )
 
     with pytest.raises(ValueError, match="HN item 44123456 missing required text field title"):
-        asyncio.run(_collect_items(adapter.discover()))
+        asyncio.run(_collect_items(adapter.capture(_source())))
 
 
 def test_hacker_news_topstories_shape_fails_closed() -> None:
@@ -125,7 +122,7 @@ def test_hacker_news_topstories_shape_fails_closed() -> None:
     )
 
     with pytest.raises(ValueError, match="topstories response"):
-        asyncio.run(_collect_items(adapter.discover()))
+        asyncio.run(_collect_items(adapter.capture(_source())))
 
 
 def _fixture_fetcher() -> FakeWebFetcher:
@@ -142,9 +139,18 @@ def _fixture_item() -> str:
     return (FIXTURE_ROOT / "raw" / "44123456.json").read_text()
 
 
-async def _collect_items(iterator: AsyncIterator[InternalItem]) -> list[InternalItem]:
+async def _collect_items(iterator: AsyncIterator[SourceItem]) -> list[SourceItem]:
     return [item async for item in iterator]
 
 
-def _dump_for_leak_check(item: InternalItem) -> set[str]:
+def _dump_for_leak_check(item: SourceItem) -> set[str]:
     return set(json.dumps(item.model_dump(mode="json"), sort_keys=True).split('"'))
+
+
+def _source() -> Source:
+    return Source(
+        id="hacker-news",
+        adapter="hacker-news-topstories-api",
+        target=HACKER_NEWS_TOP_STORIES_URL,
+        options={"content_kind": "forum_thread"},
+    )

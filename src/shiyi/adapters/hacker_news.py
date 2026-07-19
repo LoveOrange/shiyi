@@ -13,10 +13,8 @@ from typing import Any
 from shiyi.domain.models import (
     CaptureWindow,
     HtmlPayload,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
-    payload_content_hash,
+    Source,
+    SourceItem,
 )
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import WebFetcher
@@ -66,9 +64,9 @@ class HackerNewsTopStoriesAdapter:
         """Stable adapter name."""
         return "hacker-news-topstories-api"
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch top-story IDs, then fetch and emit source-ready story metadata."""
-        topstories = await self._fetch_topstory_ids()
+        topstories = await self._fetch_topstory_ids(source.target)
         emitted = 0
         for rank, item_id in enumerate(topstories, start=1):
             fetched_story = await self._fetch_story_payload(item_id)
@@ -83,13 +81,13 @@ class HackerNewsTopStoriesAdapter:
             )
             if story is None or not self._window.includes(story.occurred_at):
                 continue
-            yield _internal_item(story=story, adapter_name=self.name, adapter_version=self.version)
+            yield _source_item(story=story, source=source)
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
                 break
 
-    async def _fetch_topstory_ids(self) -> tuple[int, ...]:
-        result = await self._web_fetcher.fetch(HACKER_NEWS_TOP_STORIES_URL)
+    async def _fetch_topstory_ids(self, target: str) -> tuple[int, ...]:
+        result = await self._web_fetcher.fetch(target)
         decoded = json.loads(result.content)
         if not isinstance(decoded, list) or not all(isinstance(item, int) for item in decoded):
             msg = "HN topstories response must be a JSON array of integer item IDs"
@@ -151,32 +149,23 @@ def _story_from_payload(
     )
 
 
-def _internal_item(
-    *, story: HackerNewsStory, adapter_name: str, adapter_version: str
-) -> InternalItem:
+def _source_item(*, story: HackerNewsStory, source: Source) -> SourceItem:
     payload = HtmlPayload(
         html=_story_html(story),
         url=story.canonical_discussion_url,
     )
-    item_id = f"{HACKER_NEWS_SOURCE_KIND}:{story.item_id}"
-    return InternalItem(
-        id=item_id,
-        source=SourceIdentity(kind=HACKER_NEWS_SOURCE_KIND, uri=story.canonical_discussion_url),
-        captured_at=story.captured_at,
-        occurred_at=story.occurred_at,
+    return SourceItem(
+        source_id=source.id,
+        source_item_id=str(story.item_id),
+        kind=_content_kind(source),
+        canonical_url=story.canonical_discussion_url,
+        collected_at=story.captured_at,
+        published_at=story.occurred_at,
         payload=payload,
-        content_hash=payload_content_hash(payload),
-        provenance=Provenance(
-            adapter_name=adapter_name,
-            adapter_version=adapter_version,
-            fetched_at=story.captured_at,
-            source_item_id=str(story.item_id),
-        ),
-        idempotency_key=item_id,
         metadata={
             "title": story.title,
             "link": story.external_target_url,
-            "content_depth": "complete",
+            "is_complete": True,
             "upstream_id": str(story.item_id),
             "canonical_discussion_url": story.canonical_discussion_url,
             "external_target_url": story.external_target_url,
@@ -187,6 +176,11 @@ def _internal_item(
             },
         },
     )
+
+
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "forum_thread")
+    return value if isinstance(value, str) and value else "forum_thread"
 
 
 def _story_html(story: HackerNewsStory) -> str:

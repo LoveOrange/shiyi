@@ -61,6 +61,7 @@ class RssEntry(BaseModel):
     title: str
     link: str | None
     html: str
+    summary_html: str = ""
     published_at: datetime | None
 
 

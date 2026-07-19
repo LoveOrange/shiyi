@@ -7,6 +7,7 @@
       "title": "Running Codex safely",
       "link": "https://openai.com/index/running-codex-safely/",
       "html": "<article><h1>Running Codex safely</h1><p>Safety evals and sandboxing for coding agents.</p></article>",
+      "summary_html": "<p>Safety evals and sandboxing for coding agents.</p>",
       "published_at": "2026-05-08T10:00:00Z"
     }
   ]

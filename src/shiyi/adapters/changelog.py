@@ -16,12 +16,9 @@ from selectolax.parser import HTMLParser, Node
 
 from shiyi.domain.models import (
     CaptureWindow,
-    ContentDepth,
-    InternalItem,
-    Provenance,
-    SourceIdentity,
+    Source,
+    SourceItem,
     TextPayload,
-    payload_content_hash,
 )
 from shiyi.fetchers.http import HttpWebFetcher
 from shiyi.ports.fetcher import FetcherError, FetchErrorKind, FetchResult, WebFetcher
@@ -68,6 +65,7 @@ class ArticleIndexEntry:
     occurred_at: datetime
     link: str
     fallback_body: str = ""
+    summary: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,8 +76,10 @@ class ArticleDetail:
     body: str
     link: str
     document_link: str | None = None
-    content_depth: ContentDepth = "complete"
+    complete: bool = True
     occurred_at: datetime | None = None
+    summary: str | None = None
+    authors: tuple[str, ...] = ()
 
 
 class ChangelogPageAdapter:
@@ -87,12 +87,10 @@ class ChangelogPageAdapter:
 
     version = "0.1.0"
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         name: str,
-        page_url: str,
-        source_kind: str,
         parser: ChangelogParser,
         web_fetcher: WebFetcher | None = None,
         limit: int | None = None,
@@ -100,8 +98,6 @@ class ChangelogPageAdapter:
     ) -> None:
         """Create a changelog-page adapter."""
         self._name = name
-        self._page_url = page_url
-        self._source_kind = source_kind
         self._parser = parser
         self._web_fetcher = web_fetcher or HttpWebFetcher()
         self._window = window or CaptureWindow(max_items=limit)
@@ -111,31 +107,24 @@ class ChangelogPageAdapter:
         """Stable adapter name."""
         return self._name
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch and parse the changelog page into internal items."""
-        result = await self._web_fetcher.fetch(self._page_url)
+        result = await self._web_fetcher.fetch(source.target)
         emitted = 0
         for entry in self._parser(result.content):
             if not self._window.includes(entry.occurred_at):
                 continue
-            link = entry.link or self._page_url
+            link = entry.link or source.target
             payload = _entry_payload(entry=entry, link=link)
-            item_id = f"{self._source_kind}:{entry.entry_id}"
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind=self._source_kind, uri=self._page_url),
-                captured_at=result.fetched_at,
-                occurred_at=entry.occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=entry.entry_id,
+                kind=_content_kind(source),
+                canonical_url=link,
+                collected_at=result.fetched_at,
+                published_at=entry.occurred_at,
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=result.fetched_at,
-                    source_item_id=entry.entry_id,
-                ),
-                idempotency_key=item_id,
-                metadata={"title": entry.title, "link": link, "content_depth": "complete"},
+                metadata={"title": entry.title, "link": link, "is_complete": True},
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
@@ -151,8 +140,6 @@ class OfficialArticleAdapter:
         self,
         *,
         name: str,
-        index_url: str,
-        source_kind: str,
         index_parser: ArticleIndexParser,
         detail_parser: Callable[[str, ArticleIndexEntry], ArticleDetail],
         web_fetcher: WebFetcher | None = None,
@@ -161,8 +148,6 @@ class OfficialArticleAdapter:
     ) -> None:
         """Create an official-article adapter."""
         self._name = name
-        self._index_url = index_url
-        self._source_kind = source_kind
         self._index_parser = index_parser
         self._detail_parser = detail_parser
         self._web_fetcher = web_fetcher or HttpWebFetcher()
@@ -173,48 +158,47 @@ class OfficialArticleAdapter:
         """Stable adapter name."""
         return self._name
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
         """Fetch the index, dereference official articles, and emit article items."""
-        index_result = await self._web_fetcher.fetch(self._index_url)
+        index_result = await self._web_fetcher.fetch(source.target)
         emitted = 0
         for entry in self._index_parser(index_result.content):
             if not self._window.includes(entry.occurred_at):
                 continue
-            detail_result = await self._fetch_detail(entry)
+            detail_result = await self._fetch_detail(entry, source=source)
             if detail_result is None:
                 continue
             detail = self._detail_parser(detail_result.content, entry)
             payload = _article_payload(entry=entry, detail=detail)
-            item_id = f"{self._source_kind}:{entry.entry_id}"
             occurred_at = detail.occurred_at or entry.occurred_at
-            yield InternalItem(
-                id=item_id,
-                source=SourceIdentity(kind=self._source_kind, uri=detail.link),
-                captured_at=detail_result.fetched_at,
-                occurred_at=occurred_at,
+            yield SourceItem(
+                source_id=source.id,
+                source_item_id=entry.entry_id,
+                kind=_content_kind(source),
+                canonical_url=detail.link,
+                collected_at=detail_result.fetched_at,
+                published_at=occurred_at,
+                summary=detail.summary or entry.summary,
                 payload=payload,
-                content_hash=payload_content_hash(payload),
-                provenance=Provenance(
-                    adapter_name=self.name,
-                    adapter_version=self.version,
-                    fetched_at=detail_result.fetched_at,
-                    source_item_id=entry.entry_id,
-                ),
-                idempotency_key=item_id,
                 metadata=_article_metadata(entry=entry, detail=detail),
             )
             emitted += 1
             if self._window.max_items is not None and emitted >= self._window.max_items:
                 break
 
-    async def _fetch_detail(self, entry: ArticleIndexEntry) -> FetchResult | None:
+    async def _fetch_detail(
+        self,
+        entry: ArticleIndexEntry,
+        *,
+        source: Source,
+    ) -> FetchResult | None:
         try:
             detail = await self._web_fetcher.fetch(entry.link)
         except FetcherError as error:
             if error.kind is FetchErrorKind.HTTP_STATUS and error.status_code == HTTP_NOT_FOUND:
                 return None
             raise
-        if self._source_kind == "z-ai-blog":
+        if source.id == "z-ai-blog":
             asset_url = _z_ai_blog_asset_url(detail.content, base_url=entry.link)
             if asset_url:
                 asset = await self._web_fetcher.fetch(asset_url)
@@ -236,8 +220,6 @@ def deepseek_news_adapter(
     """Create the default DeepSeek official news adapter."""
     return OfficialArticleAdapter(
         name="deepseek-news-article",
-        index_url=DEEPSEEK_UPDATES_URL,
-        source_kind="deepseek-news",
         index_parser=parse_deepseek_news_index,
         detail_parser=parse_deepseek_news_detail,
         limit=limit,
@@ -255,8 +237,6 @@ def z_ai_blog_adapter(
     """Create the default Z.ai official blog adapter."""
     return OfficialArticleAdapter(
         name="z-ai-blog-article",
-        index_url=Z_AI_RELEASE_NOTES_URL,
-        source_kind="z-ai-blog",
         index_parser=parse_z_ai_blog_index,
         detail_parser=parse_z_ai_blog_detail,
         limit=limit,
@@ -294,8 +274,6 @@ def moonshot_kimi_changelog_adapter(
     """Create the default Moonshot/Kimi platform changelog adapter."""
     return ChangelogPageAdapter(
         name="moonshot-kimi-changelog-page",
-        page_url=MOONSHOT_KIMI_CHANGELOG_URL,
-        source_kind="moonshot-kimi-changelog",
         parser=parse_moonshot_kimi_changelog,
         limit=limit,
         window=window,
@@ -312,8 +290,6 @@ def gemini_api_changelog_adapter(
     """Create the default Gemini API changelog adapter."""
     return ChangelogPageAdapter(
         name="gemini-api-changelog-page",
-        page_url=GEMINI_API_CHANGELOG_URL,
-        source_kind="gemini-api-changelog",
         parser=parse_gemini_api_changelog,
         limit=limit,
         window=window,
@@ -330,8 +306,6 @@ def mistral_news_adapter(
     """Create the default Mistral official news adapter."""
     return OfficialArticleAdapter(
         name="mistral-news-article",
-        index_url=MISTRAL_NEWS_URL,
-        source_kind="mistral-news",
         index_parser=parse_mistral_news_index,
         detail_parser=parse_mistral_news_detail,
         limit=limit,
@@ -349,8 +323,6 @@ def cohere_blog_adapter(
     """Create the default Cohere official blog adapter."""
     return OfficialArticleAdapter(
         name="cohere-blog-article",
-        index_url=COHERE_BLOG_URL,
-        source_kind="cohere-blog",
         index_parser=parse_cohere_blog_index,
         detail_parser=parse_cohere_blog_detail,
         limit=limit,
@@ -368,8 +340,6 @@ def cursor_changelog_adapter(
     """Create the default Cursor official changelog adapter."""
     return ChangelogPageAdapter(
         name="cursor-changelog-page",
-        page_url=CURSOR_CHANGELOG_URL,
-        source_kind="cursor-changelog",
         parser=parse_cursor_changelog,
         limit=limit,
         window=window,
@@ -427,7 +397,7 @@ def parse_gemini_api_changelog(content: str) -> tuple[ChangelogEntry, ...]:
         if not body:
             continue
         occurred_at = _date_utc(_parse_month_day_year(raw_date))
-        title = _markdown_title_from_body(body) or f"Gemini API changelog {raw_date}"
+        title = f"Gemini API updates — {occurred_at.date().isoformat()}"
         anchor = occurred_at.strftime("%m-%d-%Y")
         entries.append(
             ChangelogEntry(
@@ -442,7 +412,7 @@ def parse_gemini_api_changelog(content: str) -> tuple[ChangelogEntry, ...]:
 
 
 def parse_mistral_news_index(content: str) -> tuple[ArticleIndexEntry, ...]:
-    """Parse Mistral's static Next.js news index as article discovery."""
+    """Parse Mistral's embedded data or rendered news cards as discovery."""
     decoded = _rsc_decoded_text(content)
     post_pattern = re.compile(
         r'\{"id":"(?P<id>[^"]+)","slug":"(?P<slug>[^"]+)","author":"[^"]*",'
@@ -462,15 +432,22 @@ def parse_mistral_news_index(content: str) -> tuple[ArticleIndexEntry, ...]:
         if not title or not raw_date:
             continue
         seen.add(slug)
+        description = _clean_text(_decode_js_string_fragment(match.group("description")))
         entries.append(
             ArticleIndexEntry(
                 entry_id=slug,
                 title=title,
                 occurred_at=_datetime_utc(raw_date),
                 link=urljoin(MISTRAL_NEWS_BASE_URL, f"/news/{slug}"),
-                fallback_body=_clean_text(_decode_js_string_fragment(match.group("description"))),
+                fallback_body=description,
+                summary=description or None,
             )
         )
+    for entry in _mistral_html_index_entries(content):
+        if entry.entry_id not in seen:
+            seen.add(entry.entry_id)
+            entries.append(entry)
+    entries.sort(key=lambda entry: entry.occurred_at, reverse=True)
     return tuple(entries)
 
 
@@ -486,7 +463,8 @@ def parse_mistral_news_detail(content: str, entry: ArticleIndexEntry) -> Article
         title=title,
         body=body or entry.fallback_body,
         link=entry.link,
-        content_depth=_article_content_depth(body=body, fallback_body=entry.fallback_body),
+        complete=bool(body.strip()),
+        summary=_meta_content(content, "description") or entry.summary,
     )
 
 
@@ -526,16 +504,37 @@ def parse_cohere_blog_index(content: str) -> tuple[ArticleIndexEntry, ...]:
                     link=urljoin(COHERE_BLOG_BASE_URL, f"/blog/{slug}"),
                 )
             )
+    for entry in _cohere_html_index_entries(content):
+        if entry.entry_id not in seen:
+            seen.add(entry.entry_id)
+            entries.append(entry)
     entries.sort(key=lambda entry: entry.occurred_at, reverse=True)
     return tuple(entries)
 
 
 def parse_cohere_blog_detail(content: str, entry: ArticleIndexEntry) -> ArticleDetail:
-    """Parse a Cohere official blog detail page from embedded Ghost/RSC data."""
+    """Parse a Cohere detail page from embedded data or rendered article HTML."""
+    parser = HTMLParser(content)
     title = _clean_text(
-        _ghost_blog_field(content, "title") or _first_heading_text(content, "h1") or entry.title
+        _first_heading_text(content, "h1")
+        or _meta_content(content, "og:title")
+        or _ghost_blog_field(content, "title")
+        or entry.title
     )
-    body_html = _cohere_ghost_html(content)
+    title = re.sub(r"\s*\|\s*Cohere\s*$", "", title).strip()
+    rendered_body = max(
+        parser.css(".portable-text-breaks"),
+        key=lambda node: len(_clean_text(node.text(separator=" ", strip=True))),
+        default=None,
+    )
+    body_html = (
+        rendered_body.html
+        if rendered_body is not None and rendered_body.html is not None
+        else _cohere_ghost_html(content)
+    )
+    if not body_html:
+        article = parser.css_first("article")
+        body_html = article.html if article is not None and article.html is not None else ""
     body = "\n".join(
         _meaningful_lines(HTMLParser(body_html).text(separator="\n", strip=True).splitlines())
     )
@@ -544,8 +543,11 @@ def parse_cohere_blog_detail(content: str, entry: ArticleIndexEntry) -> ArticleD
         title=title,
         body=body,
         link=entry.link,
-        content_depth=_article_content_depth(body=body, fallback_body=entry.fallback_body),
+        complete=bool(body.strip()),
         occurred_at=_datetime_utc(published_at) if published_at else None,
+        summary=_first_selector_text(parser, ".blog-header-description")
+        or _meta_content(content, "description"),
+        authors=_cohere_authors(parser),
     )
 
 
@@ -553,18 +555,23 @@ def parse_deepseek_news_index(content: str) -> tuple[ArticleIndexEntry, ...]:
     """Parse DeepSeek changelog as a discovery index for official news pages."""
     blocks = _deepseek_update_blocks(content)
     entries: list[ArticleIndexEntry] = []
+    seen_links: set[str] = set()
     for date_value, block_html in blocks:
         title = _first_heading_text(block_html, "h3") or f"DeepSeek news {date_value}"
         body = "\n".join(_meaningful_lines(_html_main_text(block_html).splitlines()))
         link = _first_href(block_html, contains="/news/")
         if not link:
             continue
+        canonical_link = urljoin(DEEPSEEK_NEWS_BASE_URL, link)
+        if canonical_link in seen_links:
+            continue
+        seen_links.add(canonical_link)
         entries.append(
             ArticleIndexEntry(
                 entry_id=_slug_or_value(date_value, title),
                 title=title,
                 occurred_at=_date_utc(date_value),
-                link=urljoin(DEEPSEEK_NEWS_BASE_URL, link),
+                link=canonical_link,
                 fallback_body=body,
             )
         )
@@ -584,7 +591,7 @@ def parse_deepseek_news_detail(content: str, entry: ArticleIndexEntry) -> Articl
         title=title,
         body=body or entry.fallback_body,
         link=entry.link,
-        content_depth=_article_content_depth(body=body, fallback_body=entry.fallback_body),
+        complete=bool(body.strip()),
     )
 
 
@@ -626,7 +633,7 @@ def parse_z_ai_blog_detail(content: str, entry: ArticleIndexEntry) -> ArticleDet
         body=body or entry.fallback_body,
         link=entry.link,
         document_link=document_link,
-        content_depth=_article_content_depth(body=article_body, fallback_body=entry.fallback_body),
+        complete=bool(article_body.strip()),
     )
 
 
@@ -730,6 +737,92 @@ def _cohere_blog_sitemap_entries(content: str) -> tuple[ArticleIndexEntry, ...]:
     return tuple(entries)
 
 
+def _mistral_html_index_entries(content: str) -> tuple[ArticleIndexEntry, ...]:
+    entries: list[ArticleIndexEntry] = []
+    parser = HTMLParser(content)
+    for card in parser.css("a"):
+        classes = str(card.attributes.get("class") or "")
+        href = str(card.attributes.get("href") or "")
+        title_node = card.css_first("h2")
+        if "group/news" not in classes or not href or title_node is None:
+            continue
+        card_text = _clean_text(card.text(separator=" ", strip=True))
+        date_match = re.search(
+            r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b",
+            card_text,
+        )
+        if date_match is None:
+            continue
+        title = _clean_text(title_node.text(separator=" ", strip=True))
+        slug = urlparse(href).path.rstrip("/").rsplit("/", 1)[-1]
+        if not slug or not title:
+            continue
+        description = ""
+        for paragraph in card.css("p"):
+            candidate = _clean_text(paragraph.text(separator=" ", strip=True))
+            if (
+                len(candidate) > len(description)
+                and candidate != title
+                and candidate != date_match.group(0)
+                and not candidate.casefold().startswith("by ")
+            ):
+                description = candidate
+        entries.append(
+            ArticleIndexEntry(
+                entry_id=slug,
+                title=title,
+                occurred_at=_date_utc(_parse_display_date(date_match.group(0))),
+                link=urljoin(MISTRAL_NEWS_BASE_URL, href),
+                fallback_body=description,
+                summary=description or None,
+            )
+        )
+    return tuple(entries)
+
+
+def _cohere_html_index_entries(content: str) -> tuple[ArticleIndexEntry, ...]:
+    entries: list[ArticleIndexEntry] = []
+    parser = HTMLParser(content)
+    for card in parser.css("a"):
+        href = str(card.attributes.get("href") or "")
+        path = urlparse(href).path.rstrip("/")
+        if not path.startswith("/blog/") or path.startswith("/blog/tag/"):
+            continue
+        card_text = _clean_text(card.text(separator=" ", strip=True))
+        date_match = re.search(
+            r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}\b",
+            card_text,
+        )
+        if date_match is None:
+            continue
+        title_node = next(
+            (
+                node
+                for node in card.css("p")
+                if date_match.group(0) not in _clean_text(node.text(separator=" ", strip=True))
+                and "min read" not in _clean_text(node.text(separator=" ", strip=True)).casefold()
+            ),
+            None,
+        )
+        title = (
+            _clean_text(title_node.text(separator=" ", strip=True))
+            if title_node is not None
+            else ""
+        )
+        slug = path.rsplit("/", 1)[-1]
+        if not slug or not title:
+            continue
+        entries.append(
+            ArticleIndexEntry(
+                entry_id=slug,
+                title=title,
+                occurred_at=_date_utc(_parse_display_date(date_match.group(0))),
+                link=urljoin(COHERE_BLOG_BASE_URL, href),
+            )
+        )
+    return tuple(entries)
+
+
 def _cursor_article_body(article: Node, *, title: str) -> str:
     container = article.css_first(".prose") or article
     lines: list[str] = []
@@ -755,16 +848,14 @@ def _parse_month_day_year(value: str) -> str:
     return parsed.date().isoformat()
 
 
-def _markdown_title_from_body(body: str) -> str | None:
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("-"):
-            candidate = stripped.lstrip("- ").strip()
-            candidate = re.sub(r"[`*_]+", "", candidate).strip()
-            return candidate.rstrip(".") or None
-        if stripped:
-            return stripped
-    return None
+def _parse_display_date(value: str) -> str:
+    for date_format in ("%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(value, date_format).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
+    msg = f"unsupported display date: {value}"
+    raise ValueError(msg)
 
 
 def _datetime_utc(value: str) -> datetime:
@@ -969,24 +1060,23 @@ def _article_payload(*, entry: ArticleIndexEntry, detail: ArticleDetail) -> Text
     return TextPayload(text="\n".join(metadata_lines).strip())
 
 
-def _article_metadata(*, entry: ArticleIndexEntry, detail: ArticleDetail) -> dict[str, str]:
+def _article_metadata(*, entry: ArticleIndexEntry, detail: ArticleDetail) -> dict[str, object]:
     metadata = {
         "title": detail.title,
         "link": detail.link,
         "index_title": entry.title,
-        "content_depth": detail.content_depth,
+        "is_complete": detail.complete,
     }
     if detail.document_link:
         metadata["document_link"] = detail.document_link
+    if detail.authors:
+        metadata["creators"] = detail.authors
     return metadata
 
 
-def _article_content_depth(*, body: str, fallback_body: str) -> ContentDepth:
-    if body.strip():
-        return "complete"
-    if fallback_body.strip():
-        return "summary_only"
-    return "partial"
+def _content_kind(source: Source) -> str:
+    value = source.options.get("content_kind", "article")
+    return value if isinstance(value, str) and value else "article"
 
 
 def _body_without_duplicate_title(*, title: str, body: str) -> str:
@@ -1007,8 +1097,30 @@ def _deepseek_update_blocks(content: str) -> list[tuple[str, str]]:
     blocks: list[tuple[str, str]] = []
     for index, match in enumerate(matches):
         end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        blocks.append((match.group(1), content[match.start() : end]))
+        block = content[match.start() : end]
+        for marker in ('<nav class="pagination-nav', '<footer class="footer'):
+            marker_index = block.find(marker)
+            if marker_index >= 0:
+                block = block[:marker_index]
+        blocks.append((match.group(1), block))
     return blocks
+
+
+def _first_selector_text(parser: HTMLParser, selector: str) -> str | None:
+    node = parser.css_first(selector)
+    if node is None:
+        return None
+    text = _clean_text(node.text(separator=" ", strip=True))
+    return text or None
+
+
+def _cohere_authors(parser: HTMLParser) -> tuple[str, ...]:
+    names: list[str] = []
+    for node in parser.css("[rel='author'], .blog-header-author"):
+        name = _clean_text(node.text(separator=" ", strip=True))
+        if name:
+            names.append(name)
+    return tuple(dict.fromkeys(names))
 
 
 def _first_heading_text(html: str, selector: str) -> str | None:

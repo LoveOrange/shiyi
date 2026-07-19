@@ -9,7 +9,7 @@ from shiyi.adapters.anthropic import (
     AnthropicNewsAdapter,
     anthropic_news_adapter,
 )
-from shiyi.domain.models import CaptureWindow, InternalItem
+from shiyi.domain.models import CaptureWindow, Source, SourceItem
 from shiyi.ports.fetcher import FetchResult
 
 
@@ -51,9 +51,11 @@ def test_anthropic_news_adapter_fetches_index_and_article_pages() -> None:
       <a href="https://www.anthropic.com/news/project-glasswing">Project Glasswing</a>
     </body></html>
     """
-    article_html = (
-        "<html><head><title>Claude Design</title></head><body><h1>Claude Design</h1></body></html>"
-    )
+    article_html = """
+    <html><head><title>Claude Design</title>
+      <meta name="description" content="A source description.">
+    </head><body><h1>Claude Design</h1></body></html>
+    """
     with respx.mock:
         respx.get(ANTHROPIC_NEWS_URL).mock(return_value=httpx.Response(200, text=index_html))
         respx.get("https://www.anthropic.com/news/claude-design-anthropic-labs").mock(
@@ -63,8 +65,9 @@ def test_anthropic_news_adapter_fetches_index_and_article_pages() -> None:
 
     assert len(events) == 1
     event = events[0]
-    assert event.idempotency_key == "anthropic-news:claude-design-anthropic-labs"
+    assert event.source_item_id == "claude-design-anthropic-labs"
     assert event.metadata["title"] == "Claude Design"
+    assert event.summary == "A source description."
     assert event.payload.type == "html"
 
 
@@ -79,7 +82,7 @@ def test_anthropic_news_adapter_filters_by_article_date_window() -> None:
 
     events = asyncio.run(_collect_events(adapter))
 
-    assert [event.idempotency_key for event in events] == ["anthropic-news:inside"]
+    assert [event.source_item_id for event in events] == ["inside"]
 
 
 def test_anthropic_news_adapter_filters_by_visible_article_date() -> None:
@@ -98,13 +101,13 @@ def test_anthropic_news_adapter_filters_by_visible_article_date() -> None:
 
     events = asyncio.run(_collect_events(adapter))
 
-    assert [event.idempotency_key for event in events] == ["anthropic-news:inside"]
-    assert events[0].occurred_at == datetime(2026, 5, 12, tzinfo=UTC)
+    assert [event.source_item_id for event in events] == ["inside"]
+    assert events[0].published_at == datetime(2026, 5, 12, tzinfo=UTC)
 
 
-async def _collect_anthropic_events(*, limit: int) -> list[InternalItem]:
+async def _collect_anthropic_events(*, limit: int) -> list[SourceItem]:
     adapter = anthropic_news_adapter(limit=limit)
-    return [event async for event in adapter.discover()]
+    return [event async for event in adapter.capture(_source())]
 
 
 def _article(title: str, published: str) -> str:
@@ -116,5 +119,14 @@ def _article(title: str, published: str) -> str:
     """
 
 
-async def _collect_events(adapter: AnthropicNewsAdapter) -> list[InternalItem]:
-    return [event async for event in adapter.discover()]
+async def _collect_events(adapter: AnthropicNewsAdapter) -> list[SourceItem]:
+    return [event async for event in adapter.capture(_source())]
+
+
+def _source() -> Source:
+    return Source(
+        id="anthropic-news",
+        adapter="anthropic-news-index",
+        target=ANTHROPIC_NEWS_URL,
+        options={"content_kind": "article"},
+    )

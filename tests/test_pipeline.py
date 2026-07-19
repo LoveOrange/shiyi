@@ -1,236 +1,252 @@
 import asyncio
-import hashlib
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from shiyi import (
-    AIProvider,
-    ArtifactRead,
-    ArtifactRef,
-    ArtifactStore,
-    ArtifactWrite,
-    CapturePipeline,
-    ClassifyTask,
-    EnrichmentResult,
-    EventRecord,
-    EventRecordStore,
+    AIContentFields,
+    CaptureConfig,
+    CaptureRunner,
+    CaptureRunSummary,
+    ContentItem,
     HtmlPayload,
-    InternalItem,
-    ModelIdentity,
-    Provenance,
-    SourceIdentity,
-    SummarizeTask,
-    payload_content_hash,
+    MarkdownContentProcessor,
+    MemoryContentItemStore,
+    Source,
+    SourceItem,
 )
-from shiyi.domain.models import EnrichmentTask
+
+NOW = datetime(2026, 7, 19, tzinfo=UTC)
+EXPECTED_SOURCE_COUNT = 2
 
 
-class FakeAdapter:
-    name = "fake"
-    version = "0.1.0"
+class SharedXAdapter:
+    name = "x"
+    version = "1"
 
-    async def discover(self) -> AsyncIterator[InternalItem]:
-        payload = HtmlPayload(html="<article>hello</article>")
-        yield InternalItem(
-            id="evt_1",
-            source=SourceIdentity(kind="test"),
-            captured_at=datetime(2026, 5, 12, tzinfo=UTC),
-            occurred_at=datetime(2026, 5, 12, tzinfo=UTC),
-            payload=payload,
-            content_hash=payload_content_hash(payload),
-            provenance=Provenance(
-                adapter_name=self.name,
-                adapter_version=self.version,
-                fetched_at=datetime(2026, 5, 12, tzinfo=UTC),
-            ),
-            idempotency_key="test:evt_1",
-        )
-
-
-class FakeAIProvider:
-    name = "fake-ai"
-
-    async def run(self, task: EnrichmentTask, event: InternalItem) -> EnrichmentResult:
-        return EnrichmentResult(
-            task_type=task.type,
-            output={"event_id": event.id},
-            model=ModelIdentity(provider=self.name, name="fake-model"),
-        )
-
-
-class FakeArtifactStore:
-    name = "fake-artifacts"
-
-    def __init__(self) -> None:
-        self.artifacts: dict[str, ArtifactRead] = {}
-
-    async def put(self, artifact: ArtifactWrite) -> ArtifactRef:
-        digest = hashlib.sha256(artifact.content).hexdigest()
-        ref = ArtifactRef(
-            uri=f"memory://{artifact.kind}/{digest}",
-            kind=artifact.kind,
-            media_type=artifact.media_type,
-            size_bytes=len(artifact.content),
-            sha256=digest,
-        )
-        self.artifacts[ref.uri] = ArtifactRead(ref=ref, content=artifact.content)
-        return ref
-
-    async def get(self, ref: ArtifactRef) -> ArtifactRead:
-        return self.artifacts[ref.uri]
-
-    async def exists(self, ref: ArtifactRef) -> bool:
-        return ref.uri in self.artifacts
-
-
-class FakeEventRecordStore:
-    name = "fake-event-records"
-
-    def __init__(self) -> None:
-        self.records: dict[str, EventRecord] = {}
-        self.enrichment_count = 0
-        self.mark_enriched_count = 0
-
-    async def find_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
-        return self.records.get(idempotency_key)
-
-    async def save_event(
+    def __init__(
         self,
-        event: InternalItem,
         *,
-        raw_artifact: ArtifactRef | None,
-        normalized_artifact: ArtifactRef | None,
-    ) -> EventRecord:
-        record = EventRecord(
-            event_id=event.id,
-            idempotency_key=event.idempotency_key,
-            status="persisted",
-            raw_artifact=raw_artifact,
-            normalized_artifact=normalized_artifact,
+        fail_source: str | None = None,
+        source_summary: str | None = None,
+    ) -> None:
+        self.sources: list[str] = []
+        self._fail_source = fail_source
+        self.source_summary = source_summary
+
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
+        self.sources.append(source.id)
+        if source.id == self._fail_source:
+            message = "source unavailable"
+            raise RuntimeError(message)
+        yield _source_item(source, summary=self.source_summary)
+
+
+class SummaryAI:
+    def __init__(self) -> None:
+        self.items: list[ContentItem] = []
+
+    async def process(self, _item: ContentItem) -> AIContentFields:
+        self.items.append(_item)
+        return AIContentFields(
+            language="zh",
+            summary="中立摘要",
+            summary_language="zh",
+            categories=("AI", "AI"),
+            tags=("model",),
         )
-        self.records[event.idempotency_key] = record
-        return record
 
-    async def save_enrichment(
-        self,
-        event: InternalItem,
-        result: EnrichmentResult,
-        artifact: ArtifactRef,
-    ) -> EventRecord:
-        del result, artifact
-        self.enrichment_count += 1
-        return self.records[event.idempotency_key]
 
-    async def save_failure(
-        self,
-        event: InternalItem,
-        *,
-        raw_artifact: ArtifactRef | None,
-        normalized_artifact: ArtifactRef | None,
-        error: str,
-    ) -> EventRecord:
-        record = EventRecord(
-            event_id=event.id,
-            idempotency_key=event.idempotency_key,
-            status="failed",
-            raw_artifact=raw_artifact,
-            normalized_artifact=normalized_artifact,
-            last_error=error,
+class FailingAI:
+    async def process(self, _item: object) -> AIContentFields:
+        message = "model unavailable"
+        raise RuntimeError(message)
+
+
+def test_runner_starts_from_config_and_shares_one_adapter_across_sources() -> None:
+    adapter = SharedXAdapter()
+    store = MemoryContentItemStore()
+    runner = _runner(
+        sources=(_source("x:openai", "openai"), _source("x:sama", "sama")),
+        adapter=adapter,
+        store=store,
+    )
+
+    result = _run(runner)
+
+    assert result.processed == EXPECTED_SOURCE_COUNT
+    assert result.failed == 0
+    assert adapter.sources == ["x:openai", "x:sama"]
+    assert {item.source_id for item in store.items.values()} == {"x:openai", "x:sama"}
+
+
+def test_repeated_run_upserts_one_id_and_skips_unchanged_content() -> None:
+    adapter = SharedXAdapter()
+    store = MemoryContentItemStore()
+    runner = _runner(sources=(_source("x:openai", "openai"),), adapter=adapter, store=store)
+
+    first = _run(runner)
+    second = _run(runner)
+
+    assert first.processed == 1
+    assert second.skipped == 1
+    assert len(store.items) == 1
+
+
+def test_ai_failure_keeps_deterministic_content_durable() -> None:
+    store = MemoryContentItemStore()
+    runner = _runner(
+        sources=(_source("x:openai", "openai"),),
+        adapter=SharedXAdapter(),
+        store=store,
+        ai=FailingAI(),
+    )
+
+    result = _run(runner)
+    [item] = store.items.values()
+
+    assert result.processed == 1
+    assert result.ai_failed == 1
+    assert result.failed == 0
+    assert item.content == "# openai update\n"
+    assert item.summary is None
+    assert item.ready_at == NOW
+
+
+def test_ai_can_only_merge_neutral_fields_and_cannot_replace_source_language() -> None:
+    store = MemoryContentItemStore()
+    runner = _runner(
+        sources=(_source("x:openai", "openai"),),
+        adapter=SharedXAdapter(),
+        store=store,
+        ai=SummaryAI(),
+    )
+
+    _run(runner)
+    [item] = store.items.values()
+
+    assert item.source_id == "x:openai"
+    assert item.language == "en"
+    assert item.summary == "中立摘要"
+    assert item.categories == ("AI",)
+    assert item.tags == ("model",)
+
+
+def test_source_summary_is_visible_to_ai_and_cannot_be_replaced() -> None:
+    store = MemoryContentItemStore()
+    ai = SummaryAI()
+    runner = _runner(
+        sources=(_source("x:openai", "openai"),),
+        adapter=SharedXAdapter(source_summary="Official source summary"),
+        store=store,
+        ai=ai,
+    )
+
+    _run(runner)
+    [item] = store.items.values()
+
+    assert len(ai.items) == 1
+    assert ai.items[0].summary == "Official source summary"
+    assert item.summary == "Official source summary"
+    assert item.summary_language is None
+
+
+def test_new_source_summary_updates_unchanged_content() -> None:
+    adapter = SharedXAdapter()
+    store = MemoryContentItemStore()
+    runner = _runner(
+        sources=(_source("x:openai", "openai"),),
+        adapter=adapter,
+        store=store,
+    )
+
+    first = _run(runner)
+    adapter.source_summary = "New official summary"
+    second = _run(runner)
+    [item] = store.items.values()
+
+    assert first.processed == 1
+    assert second.processed == 1
+    assert item.summary == "New official summary"
+
+
+def test_new_source_summary_drops_language_from_old_ai_summary() -> None:
+    adapter = SharedXAdapter()
+    store = MemoryContentItemStore()
+    source = _source("x:openai", "openai")
+    _run(
+        _runner(
+            sources=(source,),
+            adapter=adapter,
+            store=store,
+            ai=SummaryAI(),
         )
-        self.records[event.idempotency_key] = record
-        return record
+    )
+    adapter.source_summary = "Official source summary"
 
-    async def mark_enriched(self, event: InternalItem) -> EventRecord:
-        self.mark_enriched_count += 1
-        existing = self.records[event.idempotency_key]
-        record = EventRecord(
-            event_id=event.id,
-            idempotency_key=event.idempotency_key,
-            status="enriched",
-            raw_artifact=existing.raw_artifact,
-            normalized_artifact=existing.normalized_artifact,
-        )
-        self.records[event.idempotency_key] = record
-        return record
+    _run(_runner(sources=(source,), adapter=adapter, store=store))
+    [item] = store.items.values()
+
+    assert item.summary == "Official source summary"
+    assert item.summary_language is None
 
 
-def test_pipeline_runs_adapter_ai_and_stores() -> None:
-    artifact_store = FakeArtifactStore()
-    event_record_store = FakeEventRecordStore()
-    pipeline = CapturePipeline(
-        adapter=FakeAdapter(),
-        ai_provider=FakeAIProvider(),
-        artifact_store=artifact_store,
-        event_record_store=event_record_store,
-        enrichment_tasks=[SummarizeTask(max_tokens=100)],
+def test_one_source_failure_does_not_block_later_sources() -> None:
+    adapter = SharedXAdapter(fail_source="x:bad")
+    store = MemoryContentItemStore()
+    runner = _runner(
+        sources=(_source("x:bad", "bad"), _source("x:openai", "openai")),
+        adapter=adapter,
+        store=store,
     )
 
-    summary = asyncio.run(pipeline.run_once())
+    result = _run(runner)
 
-    assert summary.processed == 1
-    assert summary.skipped == 0
-    assert summary.failed == 0
-    expected_artifact_count = 2
-    assert len(artifact_store.artifacts) == expected_artifact_count
-    assert event_record_store.enrichment_count == 1
-    assert event_record_store.mark_enriched_count == 1
-    assert event_record_store.records["test:evt_1"].status == "enriched"
+    assert result.failed == 1
+    assert result.processed == 1
+    assert [item.source_id for item in store.items.values()] == ["x:openai"]
 
 
-def test_pipeline_marks_enriched_only_after_all_tasks_succeed() -> None:
-    artifact_store = FakeArtifactStore()
-    event_record_store = FakeEventRecordStore()
-    pipeline = CapturePipeline(
-        adapter=FakeAdapter(),
-        ai_provider=FakeAIProvider(),
-        artifact_store=artifact_store,
-        event_record_store=event_record_store,
-        enrichment_tasks=[
-            SummarizeTask(max_tokens=100),
-            ClassifyTask(labels=("research", "product")),
-        ],
+def _runner(
+    *,
+    sources: tuple[Source, ...],
+    adapter: SharedXAdapter,
+    store: MemoryContentItemStore,
+    ai: SummaryAI | FailingAI | None = None,
+) -> CaptureRunner:
+    return CaptureRunner(
+        config=CaptureConfig(sources=sources),
+        adapters=(adapter,),
+        processor=MarkdownContentProcessor(clock=lambda: NOW),
+        content_store=store,
+        ai_processor=ai,
+        clock=lambda: NOW,
     )
 
-    summary = asyncio.run(pipeline.run_once())
 
-    expected_task_count = 2
-
-    assert summary.processed == 1
-    assert event_record_store.enrichment_count == expected_task_count
-    assert event_record_store.mark_enriched_count == 1
-    assert event_record_store.records["test:evt_1"].status == "enriched"
-
-
-def test_pipeline_skips_already_enriched_event() -> None:
-    artifact_store = FakeArtifactStore()
-    event_record_store = FakeEventRecordStore()
-    event_record_store.records["test:evt_1"] = EventRecord(
-        event_id="evt_1",
-        idempotency_key="test:evt_1",
-        status="enriched",
-    )
-    pipeline = CapturePipeline(
-        adapter=FakeAdapter(),
-        ai_provider=FakeAIProvider(),
-        artifact_store=artifact_store,
-        event_record_store=event_record_store,
-        enrichment_tasks=[SummarizeTask(max_tokens=100)],
+def _source(source_id: str, target: str) -> Source:
+    return Source(
+        id=source_id,
+        adapter="x",
+        target=target,
+        options={"content_kind": "social_post"},
     )
 
-    summary = asyncio.run(pipeline.run_once())
 
-    assert summary.processed == 0
-    assert summary.skipped == 1
-    assert artifact_store.artifacts == {}
+def _source_item(source: Source, *, summary: str | None = None) -> SourceItem:
+    return SourceItem(
+        source_id=source.id,
+        source_item_id="42",
+        kind="social_post",
+        canonical_url=f"https://x.com/{source.target}/status/42",
+        collected_at=NOW,
+        published_at=NOW,
+        summary=summary,
+        payload=HtmlPayload(
+            html=f"<article><h1>{source.target} update</h1></article>",
+        ),
+        metadata={"title": f"{source.target} update", "language": "en"},
+    )
 
 
-def test_fake_implementations_match_ports() -> None:
-    adapter_name = FakeAdapter().name
-    ai_provider: AIProvider = FakeAIProvider()
-    artifact_store: ArtifactStore = FakeArtifactStore()
-    event_record_store: EventRecordStore = FakeEventRecordStore()
-
-    assert adapter_name == "fake"
-    assert ai_provider.name == "fake-ai"
-    assert artifact_store.name == "fake-artifacts"
-    assert event_record_store.name == "fake-event-records"
+def _run(runner: CaptureRunner) -> CaptureRunSummary:
+    return asyncio.run(runner.run_once())

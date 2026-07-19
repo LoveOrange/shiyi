@@ -1,337 +1,53 @@
+import asyncio
 import json
-import sqlite3
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-from _pytest.capture import CaptureFixture
-from _pytest.monkeypatch import MonkeyPatch
+from shiyi import MemoryContentItemStore, Source, SourceItem, TextPayload
+from shiyi.cli import _build_parser, run_capture
 
-from shiyi.cli import (
-    CaptureSummary,
-    _capture_summary,
-    _format_summary,
-    list_events,
-    main,
-)
-from shiyi.domain.models import SourceIdentity
-from shiyi.enrichments.hacker_news_external import ExternalTargetEnrichmentSummary
-from shiyi.export import ExportedItem
-from shiyi.sources import SourceName
-
-EXPECTED_HN_EXTERNAL_PROCESSED = 2
+NOW = datetime(2026, 7, 19, tzinfo=UTC)
 
 
-def test_format_summary_outputs_json_line() -> None:
-    expected_processed = 2
-    expected_enrichments = 4
-    summary = CaptureSummary(
-        source="openai",
-        workspace=".shiyi/openai",
-        processed=expected_processed,
-        total_events=2,
-        enriched_events=2,
-        enrichments=expected_enrichments,
-        artifacts=8,
-    )
+class OpenAIFakeAdapter:
+    name = "openai-news-rss"
+    version = "test"
 
-    payload = json.loads(_format_summary(summary))
-
-    assert payload["source"] == "openai"
-    assert payload["processed"] == expected_processed
-    assert payload["enrichments"] == expected_enrichments
-
-
-def test_capture_summary_reads_sqlite_and_artifact_counts(tmp_path: Path) -> None:
-    expected_total_events = 2
-    expected_enrichments = 2
-    artifacts_root = tmp_path / "artifacts" / "raw" / "ab"
-    artifacts_root.mkdir(parents=True)
-    (artifacts_root / "abc").write_text("hello")
-    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
-        connection.executescript(
-            """
-            CREATE TABLE events (status TEXT NOT NULL);
-            CREATE TABLE enrichments (id INTEGER PRIMARY KEY AUTOINCREMENT);
-            INSERT INTO events (status) VALUES ('enriched'), ('persisted');
-            INSERT INTO enrichments DEFAULT VALUES;
-            INSERT INTO enrichments DEFAULT VALUES;
-            """
+    async def capture(self, source: Source) -> AsyncIterator[SourceItem]:
+        yield SourceItem(
+            source_id=source.id,
+            source_item_id="post-1",
+            kind="article",
+            canonical_url="https://openai.com/news/post-1",
+            collected_at=NOW,
+            published_at=NOW,
+            payload=TextPayload(text="Post title\n\nPost body"),
+            metadata={"title": "Post title", "is_complete": True},
         )
 
-    summary = _capture_summary(source="anthropic", workspace=tmp_path, processed=1)
 
-    assert summary.total_events == expected_total_events
-    assert summary.enriched_events == 1
-    assert summary.enrichments == expected_enrichments
-    assert summary.artifacts == 1
+def test_capture_parser_accepts_multiple_sources() -> None:
+    args = _build_parser().parse_args(["capture", "--source", "openai", "--source", "anthropic"])
+
+    assert args.source == ["openai", "anthropic"]
 
 
-def test_main_capture_prints_summary(
-    monkeypatch: MonkeyPatch,
-    capsys: CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    expected_artifacts = 3
+def test_run_capture_uses_configured_source_and_injected_canonical_store(tmp_path: Path) -> None:
+    store = MemoryContentItemStore()
 
-    async def fake_run_capture(  # noqa: PLR0913
-        *,
-        source: SourceName | str,
-        workspace: Path,
-        limit: int | None,
-        max_items: int | None = None,
-        since: object | None = None,
-        until: object | None = None,
-    ) -> CaptureSummary:
-        assert source == "openai"
-        assert workspace == tmp_path
-        assert limit is None
-        assert max_items == 1
-        assert since is not None
-        assert until is not None
-        return CaptureSummary(
-            source="openai",
-            workspace=str(workspace),
-            processed=1,
-            total_events=1,
-            enriched_events=1,
-            enrichments=2,
-            artifacts=expected_artifacts,
+    summary = asyncio.run(
+        run_capture(
+            sources=("openai",),
+            workspace=tmp_path,
+            content_store=store,
+            adapters=(OpenAIFakeAdapter(),),
         )
-
-    monkeypatch.setattr("shiyi.cli.run_capture", fake_run_capture)
-
-    main(
-        [
-            "capture",
-            "--source",
-            "openai",
-            "--workspace",
-            str(tmp_path),
-            "--max-items",
-            "1",
-            "--since",
-            "2026-05-12",
-            "--until",
-            "2026-05-13",
-        ]
     )
 
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["processed"] == 1
-    assert payload["artifacts"] == expected_artifacts
-
-
-def test_list_events_reads_sqlite_rows(tmp_path: Path) -> None:
-    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
-        connection.executescript(
-            """
-            CREATE TABLE events (
-              event_id TEXT NOT NULL,
-              idempotency_key TEXT NOT NULL,
-              status TEXT NOT NULL,
-              raw_artifact_json TEXT,
-              normalized_artifact_json TEXT,
-              updated_at TEXT NOT NULL
-            );
-            INSERT INTO events (
-              event_id, idempotency_key, status, raw_artifact_json,
-              normalized_artifact_json, updated_at
-            ) VALUES (
-              'evt_1', 'source:evt_1', 'enriched', '{}', '{}', '2026-05-12T00:00:00Z'
-            );
-            """
-        )
-
-    events = list_events(workspace=tmp_path, limit=10)
-
-    assert len(events) == 1
-    assert events[0].event_id == "evt_1"
-    assert events[0].has_raw_artifact
-    assert events[0].has_normalized_artifact
-
-
-def test_main_list_prints_event_summaries(capsys: CaptureFixture[str], tmp_path: Path) -> None:
-    with sqlite3.connect(tmp_path / "event-records.sqlite") as connection:
-        connection.executescript(
-            """
-            CREATE TABLE events (
-              event_id TEXT NOT NULL,
-              idempotency_key TEXT NOT NULL,
-              status TEXT NOT NULL,
-              raw_artifact_json TEXT,
-              normalized_artifact_json TEXT,
-              updated_at TEXT NOT NULL
-            );
-            INSERT INTO events (
-              event_id, idempotency_key, status, raw_artifact_json,
-              normalized_artifact_json, updated_at
-            ) VALUES (
-              'evt_1', 'source:evt_1', 'enriched', '{}', NULL, '2026-05-12T00:00:00Z'
-            );
-            """
-        )
-
-    main(["list", "--workspace", str(tmp_path)])
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["event_id"] == "evt_1"
-    assert payload[0]["has_normalized_artifact"] is False
-
-
-def test_main_export_rejects_non_positive_limit(tmp_path: Path) -> None:
-    with pytest.raises(SystemExit):
-        main(["export", "--workspace", str(tmp_path), "--limit", "0"])
-
-
-def test_main_sources_prints_registry(capsys: CaptureFixture[str]) -> None:
-    main(["sources", "--include-backlog"])
-
-    payload = json.loads(capsys.readouterr().out)
-    names = {row["name"] for row in payload}
-    assert "microsoft-ai-blog" in names
-    assert "qwen-research" in names
-    microsoft = next(row for row in payload if row["name"] == "microsoft-ai-blog")
-    assert microsoft["status"] == "built-in"
-    assert microsoft["source_category"] == "official"
-    assert microsoft["source_type"] == "blog"
-    assert microsoft["fetcher_family"] == "rss"
-    assert microsoft["family"] == "rss"
-    assert microsoft["readiness_status"] == "ready"
-    assert microsoft["detail_capture_mode"] == "listing-only"
-    assert microsoft["content_completeness"] == "complete"
-    assert microsoft["default_content_depth"] == "complete"
-    assert microsoft["counts_as_official_source_ready"] is True
-    bytedance = next(row for row in payload if row["name"] == "bytedance-seed-blog")
-    assert bytedance["detail_capture_mode"] == "structured-api"
-    assert bytedance["source_type"] == "blog"
-    assert bytedance["fetcher_family"] == "ssr-detail"
-    assert bytedance["structured_api_gate"] == "ready"
-    assert bytedance["structured_api_blockers"] == []
-    qwen = next(row for row in payload if row["name"] == "qwen-research")
-    assert qwen["readiness_status"] == "deferred"
-    assert qwen["fetcher_family"] == "structured-api"
-    assert qwen["detail_capture_mode"] == "structured-api"
-    assert qwen["source_category"] == "official"
-    assert qwen["source_type"] == "research"
-    assert qwen["content_completeness"] is None
-    assert qwen["counts_as_official_source_ready"] is False
-    assert qwen["structured_api_gate"] == "blocked"
-    assert "bounded_fixtures" in qwen["structured_api_blockers"]
-    cursor = next(row for row in payload if row["name"] == "cursor-changelog")
-    assert cursor["status"] == "built-in"
-    assert cursor["fetcher_family"] == "changelog"
-    assert cursor["source_type"] == "changelog"
-    assert cursor["content_completeness"] == "complete"
-    assert cursor["counts_as_official_source_ready"] is True
-    hacker_news = next(row for row in payload if row["name"] == "hacker-news")
-    assert hacker_news["status"] == "built-in"
-    assert hacker_news["source_category"] == "community"
-    assert hacker_news["fetcher_family"] == "structured-api"
-    assert hacker_news["structured_api_gate"] == "ready"
-    assert hacker_news["counts_as_official_source_ready"] is False
-    kiro = next(row for row in payload if row["name"] == "kiro-changelog")
-    assert kiro["status"] == "deferred"
-    assert kiro["fetcher_family"] == "rss-detail"
-    assert kiro["source_type"] == "changelog"
-
-
-def test_main_export_prints_normalized_items(
-    monkeypatch: MonkeyPatch,
-    capsys: CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    def fake_export_items(**kwargs: object) -> list[ExportedItem]:
-        assert kwargs["workspace"] == tmp_path
-        assert kwargs["since"] is not None
-        assert kwargs["until"] is not None
-        assert kwargs["sources"] == ("blog",)
-        assert kwargs["limit"] == 1
-        assert kwargs["source_ready_only"] is True
-        return [
-            ExportedItem(
-                event_id="evt_1",
-                idempotency_key="blog:evt_1",
-                status="enriched",
-                source=SourceIdentity(kind="blog"),
-                captured_at="2026-05-12T00:00:00+00:00",
-                content_hash="abc",
-                adapter_name="test",
-                adapter_version="0.1.0",
-                content_depth="complete",
-                source_ready=True,
-                normalized_artifact_uri="normalized/ab/abc",
-                normalized_media_type="text/markdown",
-                normalized_content="# Hello\n",
-            )
-        ]
-
-    monkeypatch.setattr("shiyi.cli.export_items", fake_export_items)
-
-    main(
-        [
-            "export",
-            "--workspace",
-            str(tmp_path),
-            "--since",
-            "2026-05-12",
-            "--until",
-            "2026-05-13",
-            "--source",
-            "blog",
-            "--limit",
-            "1",
-            "--source-ready-only",
-        ]
-    )
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["event_id"] == "evt_1"
-    assert payload[0]["content_depth"] == "complete"
-    assert payload[0]["content_completeness"] == "complete"
-    assert payload[0]["source_ready"] is True
-    assert payload[0]["normalized_content"] == "# Hello\n"
-
-
-def test_main_enrich_hn_external_targets_prints_summary(
-    monkeypatch: MonkeyPatch,
-    capsys: CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    async def fake_enrich_hacker_news_external_targets(
-        **kwargs: object,
-    ) -> ExternalTargetEnrichmentSummary:
-        assert kwargs["workspace"] == tmp_path
-        assert kwargs["limit"] == EXPECTED_HN_EXTERNAL_PROCESSED
-        assert kwargs["overwrite"] is True
-        return ExternalTargetEnrichmentSummary(
-            source="hacker-news",
-            workspace=str(tmp_path),
-            processed=EXPECTED_HN_EXTERNAL_PROCESSED,
-            enriched=1,
-            skipped=0,
-            failed=1,
-            artifacts=EXPECTED_HN_EXTERNAL_PROCESSED,
-            errors=("hacker-news:2: timeout",),
-        )
-
-    monkeypatch.setattr(
-        "shiyi.cli.enrich_hacker_news_external_targets",
-        fake_enrich_hacker_news_external_targets,
-    )
-
-    main(
-        [
-            "enrich-hn-external-targets",
-            "--workspace",
-            str(tmp_path),
-            "--limit",
-            str(EXPECTED_HN_EXTERNAL_PROCESSED),
-            "--overwrite",
-        ]
-    )
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["source"] == "hacker-news"
-    assert payload["processed"] == EXPECTED_HN_EXTERNAL_PROCESSED
-    assert payload["enriched"] == 1
-    assert payload["failed"] == 1
+    assert summary.processed == 1
+    assert summary.sources == ("openai",)
+    [item] = store.items.values()
+    assert item.source_id == "openai-news"
+    assert item.title == "Post title"
+    assert json.loads(item.model_dump_json())["creators"] == []

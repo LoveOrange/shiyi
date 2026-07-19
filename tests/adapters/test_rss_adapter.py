@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 import httpx
 import respx
 
-from shiyi.adapters.rss import RssFeedAdapter, openai_news_adapter
-from shiyi.domain.models import CaptureWindow, InternalItem
+from shiyi.adapters.rss import RssFeedAdapter, microsoft_ai_blog_adapter, openai_news_adapter
+from shiyi.domain.models import CaptureWindow, Source, SourceItem
 from shiyi.ports.fetcher import RssEntry, RssFeed
 
 
@@ -60,8 +60,10 @@ def test_openai_news_adapter_parses_feed_entries() -> None:
 
     assert len(events) == 1
     event = events[0]
-    assert event.idempotency_key == "openai-news:post-1"
+    assert event.source_item_id == "https://openai.com/index/running-codex-safely"
     assert event.metadata["title"] == "Running Codex safely"
+    assert event.metadata["is_complete"] is True
+    assert event.summary == "Safety post"
     assert event.payload.type == "html"
 
 
@@ -76,13 +78,40 @@ def test_openai_news_adapter_filters_by_capture_window() -> None:
 
     events = asyncio.run(_collect_events(adapter))
 
-    assert [event.idempotency_key for event in events] == ["openai-news:in-window"]
+    assert [event.source_item_id for event in events] == ["https://openai.com/inside"]
 
 
-async def _collect_openai_events() -> list[InternalItem]:
+def test_microsoft_feed_uses_canonical_link_when_guid_changes() -> None:
+    adapter = microsoft_ai_blog_adapter(rss_fetcher=FakeRssFetcher(), limit=1)
+    source = Source(
+        id="microsoft-ai-blog",
+        adapter=adapter.name,
+        target="https://example.com/feed",
+        options={"content_kind": "article"},
+    )
+
+    [event] = asyncio.run(_collect_events_for_source(adapter, source))
+
+    assert event.source_item_id == "https://openai.com/old"
+
+
+async def _collect_openai_events() -> list[SourceItem]:
     adapter = openai_news_adapter()
-    return [event async for event in adapter.discover()]
+    return [event async for event in adapter.capture(_source())]
 
 
-async def _collect_events(adapter: RssFeedAdapter) -> list[InternalItem]:
-    return [event async for event in adapter.discover()]
+async def _collect_events(adapter: RssFeedAdapter) -> list[SourceItem]:
+    return [event async for event in adapter.capture(_source())]
+
+
+async def _collect_events_for_source(adapter: RssFeedAdapter, source: Source) -> list[SourceItem]:
+    return [event async for event in adapter.capture(source)]
+
+
+def _source() -> Source:
+    return Source(
+        id="openai-news",
+        adapter="openai-news-rss",
+        target="https://openai.com/news/rss.xml",
+        options={"content_kind": "article"},
+    )

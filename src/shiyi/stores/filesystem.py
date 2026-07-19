@@ -1,52 +1,53 @@
-"""Filesystem-backed artifact store."""
+"""Filesystem-backed content-addressed Blob storage."""
 
 from __future__ import annotations
 
-import hashlib
+from hashlib import sha256
 from pathlib import Path
 
-from shiyi.domain.models import ArtifactRead, ArtifactRef, ArtifactWrite
+from shiyi.domain.models import BlobRef
 
 
-class FileSystemArtifactStore:
-    """Stores artifacts on the local filesystem using content-addressed paths."""
+class FileSystemBlobStore:
+    """Stores raw, large, or cold bytes by SHA-256."""
 
-    name = "filesystem-artifact-store"
+    name = "filesystem"
 
     def __init__(self, root: Path) -> None:
-        """Create a store rooted at the given directory."""
+        """Create a Blob store rooted at the given directory."""
         self._root = root
 
-    async def put(self, artifact: ArtifactWrite) -> ArtifactRef:
-        """Persist an artifact and return its content-addressed reference."""
-        digest = hashlib.sha256(artifact.content).hexdigest()
-        relative_path = Path(artifact.kind) / digest[:2] / digest
+    async def put(self, content: bytes, *, media_type: str) -> BlobRef:
+        """Persist bytes once and return their content-addressed reference."""
+        digest = sha256(content).hexdigest()
+        relative_path = Path(digest[:2]) / digest
         path = self._root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
-            path.write_bytes(artifact.content)
-
-        return ArtifactRef(
-            uri=relative_path.as_posix(),
-            kind=artifact.kind,
-            media_type=artifact.media_type,
-            size_bytes=len(artifact.content),
+            path.write_bytes(content)
+        return BlobRef(
+            store=self.name,
+            key=relative_path.as_posix(),
             sha256=digest,
+            media_type=media_type,
+            size=len(content),
         )
 
-    async def get(self, ref: ArtifactRef) -> ArtifactRead:
-        """Read an artifact by reference."""
-        path = self._resolve(ref)
-        return ArtifactRead(ref=ref, content=path.read_bytes())
+    async def get(self, ref: BlobRef) -> bytes:
+        """Read Blob bytes after validating the referenced store."""
+        return self._resolve(ref).read_bytes()
 
-    async def exists(self, ref: ArtifactRef) -> bool:
-        """Return whether an artifact exists."""
+    async def exists(self, ref: BlobRef) -> bool:
+        """Return whether a Blob exists."""
         return self._resolve(ref).exists()
 
-    def _resolve(self, ref: ArtifactRef) -> Path:
-        path = (self._root / ref.uri).resolve()
+    def _resolve(self, ref: BlobRef) -> Path:
+        if ref.store != self.name:
+            msg = f"BlobRef belongs to {ref.store!r}, not {self.name!r}"
+            raise ValueError(msg)
+        path = (self._root / ref.key).resolve()
         root = self._root.resolve()
         if not path.is_relative_to(root):
-            msg = f"artifact reference escapes store root: {ref.uri}"
+            msg = f"Blob reference escapes store root: {ref.key}"
             raise ValueError(msg)
         return path
