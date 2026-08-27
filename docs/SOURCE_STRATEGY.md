@@ -1,12 +1,14 @@
 # Shiyi Sources
 
-- Last updated: 2026-08-24
+- Last updated: 2026-08-27
 - Scope: sources captured by Shiyi for Briefly
 - Priority: stable Briefly inputs before open-source breadth
 
-This is the single source-management document. It defines the source boundary,
-records the current and planned sources, and keeps the immediate implementation
-backlog and admission criteria.
+This document defines the source boundary, admission policy, current built-in
+sources, and the immediate AI-source maintenance queue. The broader Briefly
+portfolio is maintained in [`SOURCE_EXPANSION_BACKLOG.md`](SOURCE_EXPANSION_BACKLOG.md),
+which is the single planning list for cross-Category candidate IDs, priorities,
+targets, and rollout waves.
 
 - `[x]` means the source exists in the current built-in registry.
 - `[ ]` means the source is planned or still requires admission work.
@@ -15,6 +17,9 @@ backlog and admission criteria.
 - Community sources are radar and supporting evidence. A community claim must
   be corroborated by a traceable primary source before Briefly presents it as a
   factual Event claim.
+- A row in the expansion backlog is planning metadata, not a runtime `Source`.
+  Only admitted sources may enter `BUILTIN_SOURCES` or a production
+  `CaptureConfig`.
 
 ## Source model
 
