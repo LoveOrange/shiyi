@@ -46,6 +46,7 @@ class FetchResult(BaseModel):
     url: HttpUrl
     status_code: int
     content: str
+    body: bytes | None = None
     content_type: str | None = None
     fetched_at: datetime
     from_cache: bool = False

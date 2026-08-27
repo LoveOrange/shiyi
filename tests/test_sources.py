@@ -43,3 +43,19 @@ def test_source_summaries_do_not_expose_planning_or_downstream_models() -> None:
     assert "opportunity" not in dumped
     assert "admission" not in dumped
     assert "backlog" not in dumped
+
+
+def test_harness_release_sources_are_registered_as_release_notes() -> None:
+    names = (
+        "openclaw-releases",
+        "hermes-agent-releases",
+        "deepseek-harness-releases",
+        "codex-releases",
+        "claude-code-releases",
+        "google-antigravity-changelog",
+    )
+
+    config = build_capture_config(names)
+
+    assert [source.id for source in config.sources] == list(names)
+    assert all(source.options["content_kind"] == "release_note" for source in config.sources)

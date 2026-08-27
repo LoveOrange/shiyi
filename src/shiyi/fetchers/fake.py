@@ -57,7 +57,13 @@ class FakeWebFetcher:
             )
         if isinstance(value, FetchResult):
             return value
-        return FetchResult(url=url, status_code=200, content=value, fetched_at=self._fetched_at)
+        return FetchResult(
+            url=url,
+            status_code=200,
+            content=value,
+            body=value.encode(),
+            fetched_at=self._fetched_at,
+        )
 
 
 class FakeRssFetcher:

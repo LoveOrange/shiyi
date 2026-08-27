@@ -8,7 +8,7 @@
 Goal: replace the event/artifact/enrichment model with the accepted source-to-content boundary.
 
 - `CaptureConfig`, `Source`, `SourceItem`, `ContentItem`, and `BlobRef` contracts;
-- `CaptureRunner`, `SourceAdapter`, `ContentProcessor`, `ContentItemStore`, and `BlobStore` ports;
+- `CaptureRunner`, `SourceAdapter`, `ContentProcessor`, `ContentItemStore`, and `BlobStore` capture/storage boundaries;
 - deterministic identity and idempotent upsert behavior;
 - MongoDB canonical store and filesystem Blob store;
 - architecture, scope, storage, AI, and test specifications aligned.
@@ -29,6 +29,8 @@ Goal: prove stable production data delivery for the selected initial sources.
 Goal: add value without making AI part of capture correctness.
 
 - one structured summary/language/categories/tags request;
+- `AIProviderACL` plus the provider-neutral `AIProvider` port;
+- a bounded ChatGPT-authenticated Codex CLI provider for the cost-conscious MVP;
 - configured summary language;
 - deterministic validation and field limits;
 - retry and failure telemetry;

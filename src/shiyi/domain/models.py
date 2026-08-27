@@ -120,7 +120,30 @@ class SourceItem(StrictModel):
     published_at: datetime | None = None
     summary: str | None = None
     payload: CapturePayload
+    raw_content: bytes | None = Field(default=None, repr=False)
+    raw_media_type: NonEmptyString | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def raw_content_has_media_type(self) -> SourceItem:
+        """Require explicit media provenance when an adapter preserves separate raw bytes."""
+        if (self.raw_content is None) != (self.raw_media_type is None):
+            msg = "SourceItem raw_content and raw_media_type must be provided together"
+            raise ValueError(msg)
+        if self.raw_content == b"":
+            msg = "SourceItem raw_content must not be empty"
+            raise ValueError(msg)
+        return self
+
+
+def source_item_raw_bytes(item: SourceItem) -> bytes:
+    """Return separately preserved source bytes or the canonicalization payload bytes."""
+    return item.raw_content if item.raw_content is not None else payload_bytes(item.payload)
+
+
+def source_item_raw_media_type(item: SourceItem) -> str:
+    """Return the media type paired with the bytes retained by the Blob store."""
+    return item.raw_media_type or payload_media_type(item.payload)
 
 
 class BlobRef(StrictModel):
@@ -162,7 +185,7 @@ class ContentItem(StrictModel):
 
 
 class AIContentFields(StrictModel):
-    """Optional neutral fields proposed by an AI processor."""
+    """Optional neutral fields validated through the AI Provider ACL."""
 
     language: str | None = None
     summary: str | None = None

@@ -21,6 +21,8 @@ Tests protect the Briefly-facing source-to-content contract without coupling cor
 - emits valid `SourceItem` only;
 - stable `source_id` and `source_item_id`;
 - canonical detail content where the source provides it;
+- HTML, Markdown, and text-extractable PDF direct documents stay inside one
+  adapter boundary, and mismatched media types fail closed;
 - source DTO fields do not leak across the boundary;
 - date window and item limits are deterministic.
 
@@ -39,9 +41,19 @@ Tests protect the Briefly-facing source-to-content contract without coupling cor
 - one source failure does not block another;
 - repeated content upserts one id;
 - identical raw bytes produce one content-addressed Blob;
-- deterministic output is persisted before optional AI output;
-- AI failure preserves deterministic content;
-- AI cannot overwrite source-owned fields.
+- binary-to-Markdown capture retains the acquired binary bytes, not the derived
+  text, behind the resulting `BlobRef`;
+- capture performs no AI call.
+
+### AI Provider ACL tests
+
+- only ready records with an empty summary are selected;
+- a batch uses one provider-neutral structured request;
+- existing source summaries never call a provider;
+- duplicate, missing, or unexpected provider result ids are rejected;
+- allowed fields are bounded and merged without replacing source-owned fields;
+- provider failure leaves deterministic content unchanged and naturally retryable;
+- Codex CLI refuses non-ChatGPT login and receives no MongoDB configuration.
 
 ### Store tests
 

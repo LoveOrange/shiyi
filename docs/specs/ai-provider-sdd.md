@@ -1,68 +1,109 @@
-# Optional AI Processor SDD
+# AI Provider ACL SDD
 
 - Status: Accepted
 - Owner: Shiyi contributors
 - Last updated: 2026-07-19
-- Scope: neutral, optional preprocessing of a deterministic `ContentItem`
+- Scope: optional neutral enrichment after deterministic capture
 
 ## 1. Decision
 
-AI is optional preprocessing inside Shiyi. Capture, identity, normalization, hashing, deduplication, readiness policy, and persistence remain deterministic.
+Every external AI integration goes through `AIProviderACL`. `CaptureRunner` never calls an AI provider and never depends on AI success. The only MVP AI entry is the bounded post-capture `AIEnrichmentRunner`.
 
-The Briefly-first MVP uses one structured request/response boundary instead of a generic task system.
+```text
+ContentItemStore
+-> AIEnrichmentRunner
+-> AIProviderACL
+-> AIProvider
+-> provider implementation
+```
 
-## 2. Allowed output
+This is an anti-corruption layer, not a generic AI framework:
 
-The processor may propose only:
+- `AIEnrichmentRunner` selects ready `ContentItem` records whose `summary` is empty;
+- `AIProviderACL` maps canonical content into a narrow structured prompt and validates provider JSON;
+- `AIProvider` exposes only a provider-neutral structured completion operation;
+- implementations such as `CodexCLIProvider` own authentication and invocation details;
+- deterministic merge code remains the only component allowed to update `ContentItem`.
 
-- language when not already known;
-- neutral summary when the item has no summary;
-- summary language;
-- an optional configured-language title;
+## 2. Contracts
+
+```python
+@dataclass(frozen=True)
+class AIProviderRequest:
+    prompt: str
+    output_schema: dict[str, Any]
+
+
+class AIProvider(Protocol):
+    name: str
+
+    async def complete(self, request: AIProviderRequest) -> dict[str, Any]: ...
+
+
+class AIProviderACL:
+    async def process_many(
+        self,
+        items: Sequence[ContentItem],
+    ) -> dict[str, AIContentFields]: ...
+```
+
+Provider SDK objects, model names, command-line output, token metadata, and authentication details stop at the provider implementation. They never enter `ContentItem` or the Briefly contract.
+
+## 3. Allowed output
+
+The ACL may return only:
+
+- original content language when not already known;
+- a neutral summary when the item has no summary;
+- configured summary language;
 - simple categories;
 - simple tags.
 
 It must not produce Signal, Trend, Opportunity, ranking, credibility, recommendation, or editorial fields.
 
-## 3. Contract
+Provider output is untrusted. The ACL requires exactly one result for every requested `ContentItem.id`, rejects duplicate or unexpected IDs, constrains summary and label sizes, and validates the full JSON object. Deterministic code then bounds, deduplicates, and merges the allowed fields without replacing source facts.
 
-```python
-class AIContentFields(BaseModel):
-    language: str | None = None
-    summary: str | None = None
-    summary_language: str | None = None
-    translated_title: str | None = None
-    categories: tuple[str, ...] = ()
-    tags: tuple[str, ...] = ()
+## 4. Summary and state rule
 
+`ContentItem.summary` is the only enrichment gate.
 
-class AIProcessor(Protocol):
-    async def process(self, item: ContentItem) -> AIContentFields: ...
+- A non-empty source summary skips AI completely.
+- A successful AI summary makes the item ineligible for later enrichment runs.
+- A failure leaves `summary` empty, so a later bounded run naturally retries it.
+- No AI status, origin, task, job, or artifact ledger is persisted.
+
+The command reads a small newest-first batch and sends that batch in one provider request. The default is five records with at most 20,000 content characters per record. These limits reduce subscription usage and bound provider context.
+
+## 5. Codex CLI provider
+
+`CodexCLIProvider` is the MVP provider for a trusted local machine. It uses the officially supported [`codex exec` non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode) with an output JSON Schema.
+
+Before enrichment it runs `codex login status` and requires ChatGPT authentication. It refuses API-key authentication to avoid accidental usage-based billing. The completion run:
+
+- is ephemeral;
+- ignores user config and execution rules;
+- disables web search;
+- uses a dedicated read-only permission profile limited to runtime files and the empty temporary workspace;
+- disables network access for model-generated commands;
+- inherits no shell environment variables;
+- receives only selected content fields on standard input;
+- never receives the MongoDB URI or Shiyi infrastructure configuration.
+
+Codex's own authenticated service connection still works; the network restriction applies to model-generated tools. OpenAI documents ChatGPT login as subscription access and API-key login as usage-based access in [Codex authentication](https://learn.chatgpt.com/docs/auth).
+
+Run a deliberately bounded batch:
+
+```bash
+uv run shiyi enrich \
+  --provider codex-cli \
+  --summary-language zh \
+  --limit 5
 ```
 
-Provider identity and token/cost usage may be logged as operational telemetry. They are not part of the canonical `ContentItem` product contract unless a concrete audit requirement appears.
+The provider is a local MVP bridge, not a public or multi-tenant inference service. A scheduler may invoke it only on a trusted host with a dedicated Codex login and within subscription limits.
 
-## 4. Merge rules
+## 6. Future providers
 
-Deterministic code validates provider output and owns the merge.
+A later OpenAI API or local-model implementation replaces only `AIProvider`. It reuses the same ACL, output validation, summary gate, deterministic merge, MongoDB query, and `ContentItem` contract.
 
-- AI cannot overwrite ids, provenance, URL, source facts, timestamps, creators, original content, content hash, metrics, or Blob references.
-- Empty, invalid, or over-limit fields are rejected.
-- Categories and tags are bounded and deduplicated.
-- Existing valid source/deterministic language wins over an AI guess.
-- Existing non-empty summary wins. The processor does not request or generate another summary when `ContentItem.summary` is non-empty.
-- Failure preserves the deterministic `ContentItem` and is reported in the run summary.
-
-## 5. Language policy
-
-Preserve normalized content in its original language. Do not translate every full document during MVP.
-
-When Briefly requires a common reading language, configure the summary language and optionally a translated title. Record both `language` and `summary_language` explicitly.
-
-## 6. MVP non-goals
-
-- classify/extract/summarize task variants;
-- model-specific domain objects in the canonical content schema;
-- enrichment artifact ledgers;
-- agent loops or arbitrary prompt execution;
-- AI as a prerequisite for durable capture.
+Do not add a provider registry, generic task engine, prompt database, retry ledger, or model-specific domain fields until a concrete Briefly requirement needs them.

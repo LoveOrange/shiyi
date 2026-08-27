@@ -30,3 +30,7 @@ class ContentItemStore(Protocol):
     ) -> list[ContentItem]:
         """List ready items for local inspection or consumer export."""
         ...
+
+    async def list_missing_summary(self, *, limit: int = 20) -> list[ContentItem]:
+        """List ready items whose summary is empty for optional AI backfill."""
+        ...

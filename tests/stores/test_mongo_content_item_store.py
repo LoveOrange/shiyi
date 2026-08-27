@@ -28,6 +28,7 @@ class FakeCollection:
     def __init__(self) -> None:
         self.documents: dict[str, dict[str, Any]] = {}
         self.indexes: list[tuple[object, dict[str, object]]] = []
+        self.queries: list[dict[str, object]] = []
 
     async def find_one(self, query: Mapping[str, object]) -> dict[str, Any] | None:
         return self.documents.get(str(query["_id"]))
@@ -42,7 +43,8 @@ class FakeCollection:
         assert upsert is True
         self.documents[str(query["_id"])] = dict(document)
 
-    def find(self, _query: Mapping[str, object]) -> FakeCursor:
+    def find(self, query: Mapping[str, object]) -> FakeCursor:
+        self.queries.append(dict(query))
         return FakeCursor(list(self.documents.values()))
 
     async def create_index(self, keys: object, **options: object) -> None:
@@ -113,6 +115,27 @@ def test_mongo_indexes_keep_categories_and_tags_separate() -> None:
     ]
     assert len(canonical_indexes) == 1
     assert canonical_indexes[0][1]["unique"] is True
+
+
+def test_mongo_store_selects_ready_items_with_missing_summary() -> None:
+    client = FakeClient()
+    store = _store(client)
+    item = _item()
+    asyncio.run(store.upsert(item))
+
+    loaded = asyncio.run(store.list_missing_summary(limit=5))
+
+    assert loaded == [item]
+    assert client.collection.queries == [
+        {
+            "ready_at": {"$ne": None},
+            "$or": [
+                {"summary": {"$exists": False}},
+                {"summary": None},
+                {"summary": ""},
+            ],
+        }
+    ]
 
 
 def _store(client: FakeClient) -> MongoContentItemStore:

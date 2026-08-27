@@ -1,5 +1,6 @@
 """Shiyi public API."""
 
+from shiyi.ai import AIProviderACL, CodexCLIProvider
 from shiyi.domain.models import (
     AIContentFields,
     BinaryPayload,
@@ -15,11 +16,14 @@ from shiyi.domain.models import (
     payload_bytes,
     payload_content_hash,
     payload_media_type,
+    source_item_raw_bytes,
+    source_item_raw_media_type,
 )
 from shiyi.export import export_items
 from shiyi.normalizers.html import MarkdownContentProcessor
+from shiyi.pipeline.ai_enrichment import AIEnrichmentRunner, AIEnrichmentSummary
 from shiyi.pipeline.runner import CaptureRunError, CaptureRunner, CaptureRunSummary
-from shiyi.ports.ai_processor import AIProcessor
+from shiyi.ports.ai_provider import AIProvider, AIProviderRequest
 from shiyi.ports.blob_store import BlobStore
 from shiyi.ports.content_item_store import ContentItemStore
 from shiyi.ports.content_processor import ContentProcessor
@@ -43,7 +47,11 @@ __all__ = [
     "BUILTIN_SOURCES",
     "BUILTIN_SOURCE_NAMES",
     "AIContentFields",
-    "AIProcessor",
+    "AIEnrichmentRunner",
+    "AIEnrichmentSummary",
+    "AIProvider",
+    "AIProviderACL",
+    "AIProviderRequest",
     "BinaryPayload",
     "BlobRef",
     "BlobStore",
@@ -53,6 +61,7 @@ __all__ = [
     "CaptureRunSummary",
     "CaptureRunner",
     "CaptureWindow",
+    "CodexCLIProvider",
     "ContentItem",
     "ContentItemStore",
     "ContentProcessor",
@@ -75,5 +84,7 @@ __all__ = [
     "payload_bytes",
     "payload_content_hash",
     "payload_media_type",
+    "source_item_raw_bytes",
+    "source_item_raw_media_type",
     "source_summaries",
 ]

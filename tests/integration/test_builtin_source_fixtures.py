@@ -17,6 +17,7 @@ from shiyi import (
     Source,
     SourceAdapter,
 )
+from shiyi.adapters.antigravity import ANTIGRAVITY_CHANGELOG_URL, antigravity_changelog_adapter
 from shiyi.adapters.bytedance_seed import bytedance_seed_blog_adapter
 from shiyi.adapters.changelog import (
     cohere_blog_adapter,
@@ -24,9 +25,18 @@ from shiyi.adapters.changelog import (
     deepseek_news_adapter,
     gemini_api_changelog_adapter,
     mistral_news_adapter,
-    moonshot_kimi_changelog_adapter,
     z_ai_blog_adapter,
 )
+from shiyi.adapters.cn_official import (
+    bigmodel_releases_adapter,
+    kimi_code_changelog_adapter,
+    kimi_research_adapter,
+    minimax_api_updates_adapter,
+    minimax_model_releases_adapter,
+    qwen_code_blog_adapter,
+    qwen_model_releases_adapter,
+)
+from shiyi.adapters.github_releases import github_releases_adapter, github_releases_api_url
 from shiyi.adapters.rss import (
     github_copilot_changelog_adapter,
     google_research_blog_adapter,
@@ -116,6 +126,30 @@ RSS_CASES = (
 
 WEB_CASES = (
     WebCase(
+        source_id="deepseek-harness-releases",
+        target=github_releases_api_url("deepseek-ai/deepseek-harness"),
+        pages={
+            github_releases_api_url("deepseek-ai/deepseek-harness"): (
+                FIXTURE_ROOT / "deepseek-harness-releases" / "raw" / "releases.json"
+            ).read_text()
+        },
+        build=lambda fetcher: github_releases_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Files API for image uploads",
+        content_kind="release_note",
+    ),
+    WebCase(
+        source_id="google-antigravity-changelog",
+        target=ANTIGRAVITY_CHANGELOG_URL,
+        pages={
+            ANTIGRAVITY_CHANGELOG_URL: (
+                FIXTURE_ROOT / "google-antigravity-changelog" / "raw" / "changelog.html"
+            ).read_text()
+        },
+        build=lambda fetcher: antigravity_changelog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="browser-based Remote Control",
+        content_kind="release_note",
+    ),
+    WebCase(
         source_id="deepseek-news",
         target="https://api-docs.deepseek.com/updates",
         pages={
@@ -147,15 +181,91 @@ WEB_CASES = (
         expected_excerpt="key variable",
     ),
     WebCase(
-        source_id="moonshot-kimi-changelog",
-        target="https://platform.kimi.com/blog/posts/changelog",
+        source_id="kimi-research",
+        target="https://www.kimi.com/en/blog/",
         pages={
-            "https://platform.kimi.com/blog/posts/changelog": (
-                FIXTURE_ROOT / "moonshot-kimi-changelog" / "raw" / "changelog.html"
+            "https://www.kimi.com/en/blog/": (
+                FIXTURE_ROOT / "kimi-research" / "raw" / "index.html"
+            ).read_text(),
+            "https://www.kimi.com/blog/kimi-k3": (
+                FIXTURE_ROOT / "kimi-research" / "raw" / "kimi-k3.html"
+            ).read_text(),
+        },
+        build=lambda fetcher: kimi_research_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="repository-scale software engineering",
+    ),
+    WebCase(
+        source_id="kimi-code-changelog",
+        target="https://www.kimi.com/code/docs/kimi-code/whats-new.html",
+        pages={
+            "https://www.kimi.com/code/docs/kimi-code/whats-new.html": (
+                FIXTURE_ROOT / "kimi-code-changelog" / "raw" / "changelog.html"
             ).read_text()
         },
-        build=lambda fetcher: moonshot_kimi_changelog_adapter(limit=1, web_fetcher=fetcher),
-        expected_excerpt="Kimi",
+        build=lambda fetcher: kimi_code_changelog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Agent 自动发现",
+        content_kind="release_note",
+    ),
+    WebCase(
+        source_id="qwen-model-releases",
+        target="https://docs.qwencloud.com/changelog/models.md",
+        pages={
+            "https://docs.qwencloud.com/changelog/models.md": (
+                FIXTURE_ROOT / "qwen-model-releases" / "raw" / "models.md"
+            ).read_text()
+        },
+        build=lambda fetcher: qwen_model_releases_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="one-million-token context",
+        content_kind="release_note",
+    ),
+    WebCase(
+        source_id="qwen-code-blog",
+        target="https://qwenlm.github.io/qwen-code-docs/en/blog/",
+        pages={
+            "https://qwenlm.github.io/qwen-code-docs/en/blog/": (
+                FIXTURE_ROOT / "qwen-code-blog" / "raw" / "index.html"
+            ).read_text(),
+            "https://qwenlm.github.io/qwen-code-docs/en/blog/updates/weekly-update-2026-07-30/": (
+                FIXTURE_ROOT / "qwen-code-blog" / "raw" / "weekly-update.html"
+            ).read_text(),
+        },
+        build=lambda fetcher: qwen_code_blog_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="Background agents stay resident",
+    ),
+    WebCase(
+        source_id="zhipu-bigmodel-releases",
+        target="https://docs.bigmodel.cn/cn/update/new-releases.md",
+        pages={
+            "https://docs.bigmodel.cn/cn/update/new-releases.md": (
+                FIXTURE_ROOT / "zhipu-bigmodel-releases" / "raw" / "new-releases.md"
+            ).read_text()
+        },
+        build=lambda fetcher: bigmodel_releases_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="复杂软件工程",
+        content_kind="release_note",
+    ),
+    WebCase(
+        source_id="minimax-model-releases",
+        target="https://platform.minimaxi.com/docs/release-notes/models.md",
+        pages={
+            "https://platform.minimaxi.com/docs/release-notes/models.md": (
+                FIXTURE_ROOT / "minimax-model-releases" / "raw" / "models.md"
+            ).read_text()
+        },
+        build=lambda fetcher: minimax_model_releases_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="工具调用",
+        content_kind="release_note",
+    ),
+    WebCase(
+        source_id="minimax-api-updates",
+        target="https://platform.minimaxi.com/docs/release-notes/apis.md",
+        pages={
+            "https://platform.minimaxi.com/docs/release-notes/apis.md": (
+                FIXTURE_ROOT / "minimax-api-updates" / "raw" / "apis.md"
+            ).read_text()
+        },
+        build=lambda fetcher: minimax_api_updates_adapter(limit=1, web_fetcher=fetcher),
+        expected_excerpt="多个工具定义",
         content_kind="release_note",
     ),
     WebCase(

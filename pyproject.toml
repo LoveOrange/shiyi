@@ -21,6 +21,7 @@ dependencies = [
   "defusedxml>=0.7.1",
   "feedparser>=6.0.12",
   "markdownify>=1.2.2",
+  "pypdf>=6.1,<7.0",
   "pymongo>=4.17,<5.0",
   "pydantic>=2.12,<3.0",
   "selectolax>=0.4.8",

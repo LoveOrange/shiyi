@@ -8,6 +8,8 @@ Shiyi is information collection and canonicalization infrastructure. It collects
 
 The current product objective is to provide a stable data input for Briefly. Briefly launches only after Shiyi can supply data reliably. Open-source breadth, third-party extension ergonomics, and a large adapter ecosystem are later goals and must not slow the Briefly-first MVP.
 
+`BRIEFLY_INTEGRATION.md` is the root-level cross-project consumer contract. Keep it synchronized whenever `ContentItem`, readiness, incremental synchronization, or the Briefly-facing storage boundary changes.
+
 Shiyi may eventually collect news, blogs, videos, social posts, forum threads, repositories, and other public information. It does not interpret those records as business or editorial insights.
 
 ## Scope
@@ -23,7 +25,7 @@ The domain terms mean:
 - `Source`: one independently identifiable collection target with a stable id, adapter kind, target, and checkpoint boundary. Multiple X accounts are separate `Source` entries in one `CaptureConfig` and share the same X adapter implementation.
 - `SourceAdapter`: the component that performs source-specific network acquisition. It isolates authentication, pagination, rate limits, checkpoints, and source payload shapes. Implementations may be named `XCaptureAdapter`, `RedditCaptureAdapter`, or `RssCaptureAdapter`.
 - `SourceItem`: a transient, source-facing item emitted by an adapter. It preserves source identity, acquired raw content, and an optional source-provided summary needed for processing.
-- `ContentProcessor`: deterministic normalization plus optional reusable AI preprocessing.
+- `ContentProcessor`: deterministic normalization only.
 - `ContentItem`: the canonical, persisted, source-neutral contract consumed by Briefly and future downstream products.
 - `ContentItemStore`: the durable query boundary for canonical items.
 - `BlobRef` / `BlobStore`: optional storage for raw, oversized, or cold content outside the canonical document.
@@ -37,7 +39,7 @@ Shiyi is responsible for:
 - preserving provenance, canonical URL, source-native identity, timestamps, content kind, and original language;
 - retaining source-provided attribution as an optional `creators: string[]` field; `Creator` is not a separate MVP model and missing creators must not block readiness;
 - normalizing textual content into a consistent format, Markdown by default;
-- optionally detecting language and producing a neutral summary, simple categories/tags, or a configured-language summary/translated title;
+- optionally detecting language and producing a neutral summary or simple categories/tags after capture through the AI Provider ACL;
 - persisting canonical content idempotently and retaining raw or large payloads by reference when needed;
 - exposing a stable read contract for Briefly.
 
@@ -71,7 +73,7 @@ For the MVP:
 
 Deterministic code owns configuration loading, source selection, adapter resolution, collection, validation, identity, canonical URL handling, field mapping, content conversion, hashing, deduplication, persistence, retries, and checkpoints.
 
-AI may own only optional language normalization, summarization, and simple semantic labels. An adapter-provided non-empty summary is authoritative: AI must not summarize that item again or replace it. AI failure must not prevent capture or overwrite source facts. AI output must remain neutral and reusable by consumers other than Briefly.
+AI may own only optional language normalization, summarization, and simple semantic labels. `CaptureRunner` remains deterministic; optional AI runs afterward through `AIEnrichmentRunner -> AIProviderACL -> AIProvider`. Provider implementations must not receive storage credentials or leak provider-specific objects into the domain. An adapter-provided non-empty summary is authoritative: AI must not summarize that item again or replace it. AI failure must not prevent capture or overwrite source facts. AI output must remain neutral and reusable by consumers other than Briefly.
 
 ## Design Principles
 

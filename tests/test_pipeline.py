@@ -3,11 +3,9 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from shiyi import (
-    AIContentFields,
     CaptureConfig,
     CaptureRunner,
     CaptureRunSummary,
-    ContentItem,
     HtmlPayload,
     MarkdownContentProcessor,
     MemoryContentItemStore,
@@ -41,27 +39,6 @@ class SharedXAdapter:
         yield _source_item(source, summary=self.source_summary)
 
 
-class SummaryAI:
-    def __init__(self) -> None:
-        self.items: list[ContentItem] = []
-
-    async def process(self, _item: ContentItem) -> AIContentFields:
-        self.items.append(_item)
-        return AIContentFields(
-            language="zh",
-            summary="中立摘要",
-            summary_language="zh",
-            categories=("AI", "AI"),
-            tags=("model",),
-        )
-
-
-class FailingAI:
-    async def process(self, _item: object) -> AIContentFields:
-        message = "model unavailable"
-        raise RuntimeError(message)
-
-
 def test_runner_starts_from_config_and_shares_one_adapter_across_sources() -> None:
     adapter = SharedXAdapter()
     store = MemoryContentItemStore()
@@ -92,60 +69,17 @@ def test_repeated_run_upserts_one_id_and_skips_unchanged_content() -> None:
     assert len(store.items) == 1
 
 
-def test_ai_failure_keeps_deterministic_content_durable() -> None:
+def test_source_summary_is_promoted_without_ai() -> None:
     store = MemoryContentItemStore()
-    runner = _runner(
-        sources=(_source("x:openai", "openai"),),
-        adapter=SharedXAdapter(),
-        store=store,
-        ai=FailingAI(),
-    )
-
-    result = _run(runner)
-    [item] = store.items.values()
-
-    assert result.processed == 1
-    assert result.ai_failed == 1
-    assert result.failed == 0
-    assert item.content == "# openai update\n"
-    assert item.summary is None
-    assert item.ready_at == NOW
-
-
-def test_ai_can_only_merge_neutral_fields_and_cannot_replace_source_language() -> None:
-    store = MemoryContentItemStore()
-    runner = _runner(
-        sources=(_source("x:openai", "openai"),),
-        adapter=SharedXAdapter(),
-        store=store,
-        ai=SummaryAI(),
-    )
-
-    _run(runner)
-    [item] = store.items.values()
-
-    assert item.source_id == "x:openai"
-    assert item.language == "en"
-    assert item.summary == "中立摘要"
-    assert item.categories == ("AI",)
-    assert item.tags == ("model",)
-
-
-def test_source_summary_is_visible_to_ai_and_cannot_be_replaced() -> None:
-    store = MemoryContentItemStore()
-    ai = SummaryAI()
     runner = _runner(
         sources=(_source("x:openai", "openai"),),
         adapter=SharedXAdapter(source_summary="Official source summary"),
         store=store,
-        ai=ai,
     )
 
     _run(runner)
     [item] = store.items.values()
 
-    assert len(ai.items) == 1
-    assert ai.items[0].summary == "Official source summary"
     assert item.summary == "Official source summary"
     assert item.summary_language is None
 
@@ -173,12 +107,13 @@ def test_new_source_summary_drops_language_from_old_ai_summary() -> None:
     adapter = SharedXAdapter()
     store = MemoryContentItemStore()
     source = _source("x:openai", "openai")
-    _run(
-        _runner(
-            sources=(source,),
-            adapter=adapter,
-            store=store,
-            ai=SummaryAI(),
+    _run(_runner(sources=(source,), adapter=adapter, store=store))
+    [captured] = store.items.values()
+    asyncio.run(
+        store.upsert(
+            captured.model_copy(
+                update={"summary": "AI summary", "summary_language": "zh"},
+            )
         )
     )
     adapter.source_summary = "Official source summary"
@@ -211,14 +146,12 @@ def _runner(
     sources: tuple[Source, ...],
     adapter: SharedXAdapter,
     store: MemoryContentItemStore,
-    ai: SummaryAI | FailingAI | None = None,
 ) -> CaptureRunner:
     return CaptureRunner(
         config=CaptureConfig(sources=sources),
         adapters=(adapter,),
         processor=MarkdownContentProcessor(clock=lambda: NOW),
         content_store=store,
-        ai_processor=ai,
         clock=lambda: NOW,
     )
 

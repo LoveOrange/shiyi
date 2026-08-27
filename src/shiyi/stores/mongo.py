@@ -87,6 +87,24 @@ class MongoContentItemStore:
         documents = await cursor.to_list(length=limit)
         return [_content_item_from_document(document) for document in documents]
 
+    async def list_missing_summary(self, *, limit: int = 20) -> list[ContentItem]:
+        """List newest ready canonical items that still need a summary."""
+        if limit <= 0:
+            return []
+        query: dict[str, Any] = {
+            "ready_at": {"$ne": None},
+            "$or": [
+                {"summary": {"$exists": False}},
+                {"summary": None},
+                {"summary": ""},
+            ],
+        }
+        cursor = self._collection.find(query).sort(
+            [("published_at", DESCENDING), ("_id", ASCENDING)]
+        )
+        documents = await cursor.to_list(length=limit)
+        return [_content_item_from_document(document) for document in documents]
+
     async def ensure_indexes(self) -> None:
         """Create the initial Briefly query indexes."""
         await self._collection.create_index(

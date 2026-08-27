@@ -48,3 +48,20 @@ class MemoryContentItemStore:
             )
         )
         return items[: max(limit, 0)]
+
+    async def list_missing_summary(self, *, limit: int = 20) -> list[ContentItem]:
+        """List newest ready items without a non-empty summary."""
+        if limit <= 0:
+            return []
+        items = [
+            item
+            for item in self.items.values()
+            if item.ready_at is not None and not (item.summary and item.summary.strip())
+        ]
+        items.sort(
+            key=lambda item: (
+                -(item.published_at or item.collected_at).timestamp(),
+                item.id,
+            )
+        )
+        return items[:limit]

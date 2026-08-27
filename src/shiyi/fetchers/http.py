@@ -56,10 +56,12 @@ class HttpWebFetcher:
         fetched_at = datetime.now(UTC)
         raw_cache_path = self._raw_cache_path(source=source, raw_key=raw_key)
         if raw_cache_path is not None and raw_cache_path.exists():
+            body = raw_cache_path.read_bytes()
             return FetchResult(
                 url=url,
                 status_code=200,
-                content=raw_cache_path.read_text(),
+                content=body.decode(errors="replace"),
+                body=body,
                 content_type=None,
                 fetched_at=fetched_at,
                 from_cache=True,
@@ -68,13 +70,15 @@ class HttpWebFetcher:
 
         response = await self._get(url, source=source)
         content = response.text
+        body = response.content
         if raw_cache_path is not None:
             raw_cache_path.parent.mkdir(parents=True, exist_ok=True)
-            raw_cache_path.write_text(content)
+            raw_cache_path.write_bytes(body)
         return FetchResult(
             url=str(response.url),
             status_code=response.status_code,
             content=content,
+            body=body,
             content_type=response.headers.get("content-type"),
             fetched_at=fetched_at,
             raw_cache_path=raw_cache_path,

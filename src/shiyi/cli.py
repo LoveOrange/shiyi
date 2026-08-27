@@ -15,8 +15,10 @@ from typing import cast
 
 from pydantic import BaseModel
 
+from shiyi.ai import AIProviderACL, CodexCLIProvider
 from shiyi.domain.models import CaptureWindow, ContentItem
 from shiyi.normalizers.html import MarkdownContentProcessor
+from shiyi.pipeline.ai_enrichment import AIEnrichmentRunner, AIEnrichmentSummary
 from shiyi.pipeline.runner import CaptureRunner, CaptureRunSummary
 from shiyi.ports.content_item_store import ContentItemStore
 from shiyi.ports.source_adapter import SourceAdapter
@@ -43,7 +45,6 @@ class CaptureSummary:
     processed: int
     skipped: int
     failed: int
-    ai_failed: int
     blobs: int
     errors: tuple[str, ...]
 
@@ -54,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "capture":
-        summary = asyncio.run(
+        capture_summary = asyncio.run(
             run_capture(
                 sources=tuple(args.source),
                 workspace=args.workspace,
@@ -64,9 +65,25 @@ def main(argv: Sequence[str] | None = None) -> None:
                 max_items=args.max_items,
                 since=args.since,
                 until=args.until,
+                operator_snapshot_manifest=args.operator_snapshot_manifest,
             )
         )
-        sys.stdout.write(_format_json(summary))
+        sys.stdout.write(_format_json(capture_summary))
+    elif args.command == "enrich":
+        enrichment_summary = asyncio.run(
+            run_ai_enrichment(
+                provider=args.provider,
+                mongo_uri=args.mongo_uri,
+                database=args.database,
+                collection=args.collection,
+                limit=args.limit,
+                summary_language=args.summary_language,
+                max_content_chars=args.max_content_chars,
+                codex_executable=args.codex_executable,
+                codex_timeout=args.codex_timeout,
+            )
+        )
+        sys.stdout.write(_format_json(enrichment_summary))
     elif args.command in {"list", "export"}:
         items = asyncio.run(
             list_content_items(
@@ -100,6 +117,15 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--max-items", type=_positive_int, default=5)
     capture.add_argument("--since", type=_parse_datetime_arg, default=None)
     capture.add_argument("--until", type=_parse_datetime_arg, default=None)
+    capture.add_argument(
+        "--operator-snapshot-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Explicit hash-verified operator snapshot manifest; exact mapped URLs use "
+            "snapshots and all other URLs retain ordinary acquisition"
+        ),
+    )
     _add_mongo_arguments(capture)
 
     for command in ("list", "export"):
@@ -109,6 +135,18 @@ def _build_parser() -> argparse.ArgumentParser:
         read.add_argument("--since", type=_parse_datetime_arg, default=None)
         read.add_argument("--until", type=_parse_datetime_arg, default=None)
         _add_mongo_arguments(read)
+
+    enrich = subcommands.add_parser(
+        "enrich",
+        help="Backfill missing summaries through an explicit AI provider",
+    )
+    enrich.add_argument("--provider", choices=("codex-cli",), required=True)
+    enrich.add_argument("--limit", type=_positive_int, default=5)
+    enrich.add_argument("--summary-language", default="zh")
+    enrich.add_argument("--max-content-chars", type=_positive_int, default=20_000)
+    enrich.add_argument("--codex-executable", default="codex")
+    enrich.add_argument("--codex-timeout", type=_positive_float, default=300.0)
+    _add_mongo_arguments(enrich)
 
     subcommands.add_parser("sources", help="List built-in configured sources")
     return parser
@@ -135,6 +173,7 @@ async def run_capture(  # noqa: PLR0913
     until: datetime | None = None,
     content_store: ContentItemStore | None = None,
     adapters: Sequence[SourceAdapter] | None = None,
+    operator_snapshot_manifest: Path | None = None,
 ) -> CaptureSummary:
     """Run one configured capture and return a compact outcome."""
     workspace.mkdir(parents=True, exist_ok=True)
@@ -147,6 +186,7 @@ async def run_capture(  # noqa: PLR0913
             config,
             window=window,
             raw_cache_root=workspace / "raw-cache",
+            operator_snapshot_manifest=operator_snapshot_manifest,
         )
     )
 
@@ -200,6 +240,46 @@ async def list_content_items(  # noqa: PLR0913
         await store.close()
 
 
+async def run_ai_enrichment(  # noqa: PLR0913
+    *,
+    provider: str,
+    mongo_uri: str = DEFAULT_MONGO_URI,
+    database: str = "shiyi",
+    collection: str = "content_items",
+    limit: int = 5,
+    summary_language: str = "zh",
+    max_content_chars: int = 20_000,
+    codex_executable: str = "codex",
+    codex_timeout: float = 300.0,
+    content_store: ContentItemStore | None = None,
+    acl: AIProviderACL | None = None,
+) -> AIEnrichmentSummary:
+    """Backfill missing summaries through a provider ACL without adding workflow state."""
+    if provider != "codex-cli":
+        msg = f"unsupported AI provider: {provider}"
+        raise ValueError(msg)
+    resolved_acl = acl or AIProviderACL(
+        CodexCLIProvider(
+            executable=codex_executable,
+            timeout_seconds=codex_timeout,
+        ),
+        summary_language=summary_language,
+        max_content_chars=max_content_chars,
+    )
+    owned_store = content_store is None
+    store = content_store or MongoContentItemStore.from_uri(
+        mongo_uri,
+        database=database,
+        collection=collection,
+    )
+    runner = AIEnrichmentRunner(content_store=store, acl=resolved_acl)
+    try:
+        return await runner.run(limit=limit)
+    finally:
+        if owned_store:
+            await cast(MongoContentItemStore, store).close()
+
+
 def _capture_summary(
     *,
     configured_sources: Sequence[SourceName | str],
@@ -212,7 +292,6 @@ def _capture_summary(
         processed=result.processed,
         skipped=result.skipped,
         failed=result.failed,
-        ai_failed=result.ai_failed,
         blobs=result.blobs,
         errors=tuple(
             f"{error.source_id}/{error.source_item_id or '-'} {error.stage}: {error.message}"
@@ -237,6 +316,14 @@ def _parse_datetime_arg(value: str) -> datetime:
 
 def _positive_int(value: str) -> int:
     parsed = int(value)
+    if parsed <= 0:
+        msg = "value must be greater than zero"
+        raise argparse.ArgumentTypeError(msg)
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
     if parsed <= 0:
         msg = "value must be greater than zero"
         raise argparse.ArgumentTypeError(msg)

@@ -1,6 +1,6 @@
 # Shiyi Extension Points
 
-Shiyi keeps four required ports and one optional AI port during the Briefly-first MVP.
+Shiyi keeps four required capture/storage ports and one optional provider-neutral AI port during the Briefly-first MVP.
 
 ## SourceAdapter
 
@@ -51,14 +51,18 @@ class BlobStore(Protocol):
 
 Filesystem storage is the initial implementation. COS can implement the same content-addressed contract later.
 
-## AIProcessor
+## AIProvider and ACL
 
 ```python
-class AIProcessor(Protocol):
-    async def process(self, item: ContentItem) -> AIContentFields: ...
+class AIProvider(Protocol):
+    name: str
+
+    async def complete(self, request: AIProviderRequest) -> dict[str, Any]: ...
 ```
 
-AI is optional and limited to language, summary, summary language, categories, and tags. Deterministic code owns validation and merging.
+`AIProviderACL` is the only bridge from `ContentItem` to this port. It owns prompt construction, the non-empty-summary gate, strict structured-output validation, and mapping back to `AIContentFields`. `AIEnrichmentRunner` owns bounded post-capture selection and deterministic persistence.
+
+`CodexCLIProvider` is the first implementation. Future API or local-model integrations implement `AIProvider`; they do not receive `ContentItem` directly and do not change the Briefly contract.
 
 ## MVP guardrail
 

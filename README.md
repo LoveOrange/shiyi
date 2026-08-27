@@ -15,15 +15,19 @@ flowchart LR
     ADAPTER --> SOURCE_ITEM["SourceItem"]
     SOURCE_ITEM --> PROCESSOR["ContentProcessor"]
     PROCESSOR --> CONTENT_ITEM["ContentItem"]
-    CONTENT_ITEM -. "optional neutral AI" .-> AI["AI Processor"]
-    CONTENT_ITEM --> MERGE["Validate and merge"]
-    AI --> MERGE
-    MERGE --> STORE[("MongoDB")]
+    CONTENT_ITEM --> STORE[("MongoDB")]
+    STORE -. "summary is empty" .-> ENRICH["AIEnrichmentRunner"]
+    ENRICH --> ACL["AIProviderACL"]
+    ACL <-->|"request / structured JSON"| PROVIDER["AIProvider"]
+    PROVIDER <-->|"codex exec"| CODEX["Codex CLI / subscribed model"]
+    ACL --> MERGE["Validate and merge"]
+    MERGE --> STORE
     SOURCE_ITEM --> BLOB[("Filesystem -> COS Blobs")]
     STORE --> BRIEFLY["Briefly"]
 ```
 
 The full model and component diagrams live in [`docs/architecture.md`](docs/architecture.md).
+Briefly should integrate through the root-level [`BRIEFLY_INTEGRATION.md`](BRIEFLY_INTEGRATION.md) consumer contract.
 
 ## Core language
 
@@ -57,6 +61,36 @@ uv run shiyi capture \
   --workspace .shiyi
 ```
 
+Direct public documents reuse the same pipeline. The adapter converts HTML,
+Markdown, and text-extractable PDFs to canonical Markdown; when conversion is
+needed, it retains the original response bytes in Blob storage:
+
+```bash
+uv run shiyi capture \
+  --source openai-gpt-live-system-card \
+  --source openai-content-provenance \
+  --source deepmind-synthid \
+  --workspace .shiyi
+```
+
+For a bounded source that an ordinary client cannot retrieve but an operator can
+review in the official rendered page, capture may receive an explicit snapshot
+manifest. Every entry maps one exact public URL to a relative local file and its
+SHA-256 digest; a mismatch fails the source, while unmapped URLs keep their
+ordinary acquisition path:
+
+```bash
+uv run shiyi capture \
+  --source openai-gpt-live-engineering \
+  --source openai-gpt-live-launch \
+  --source openai-content-verification \
+  --operator-snapshot-manifest .shiyi/operator-snapshots/2026-08-16/manifest.json \
+  --workspace .shiyi
+```
+
+The manifest must retain `contentReviewRequired: true`. Snapshot import proves
+provenance and content sufficiency only; it is not downstream editorial approval.
+
 List configured built-ins:
 
 ```bash
@@ -70,7 +104,16 @@ uv run shiyi list --limit 20
 uv run shiyi export --source anthropic-news --limit 20
 ```
 
-MongoDB defaults to `mongodb://localhost:27017`, database `shiyi`, and collection `content_items`. Raw payload Blobs are stored below `.shiyi/blobs` using content-addressed SHA-256 keys.
+Optionally backfill a small batch of missing summaries with the local ChatGPT-authenticated Codex CLI:
+
+```bash
+codex login
+uv run shiyi enrich --provider codex-cli --summary-language zh --limit 5
+```
+
+The command refuses API-key Codex authentication, does not receive MongoDB credentials in its model input, and leaves capture usable when AI is unavailable.
+
+MongoDB defaults to `mongodb://localhost:27017`, database `shiyi`, and collection `content_items`. Raw payload Blobs are stored below `.shiyi/blobs` using content-addressed SHA-256 keys. A PDF without extractable text fails capture instead of becoming a misleading ready document.
 
 ## ContentItem
 
@@ -78,9 +121,11 @@ MongoDB defaults to `mongodb://localhost:27017`, database `shiyi`, and collectio
 
 `ContentItem.id` is the deterministic upsert identity. There is no separate event ledger or duplicate idempotency key.
 
-## AI boundary
+## AI Provider ACL
 
-AI is optional. It may propose neutral language, summary, categories, and tags. Adapters capture an upstream summary when the source supplies one; a non-empty summary skips AI summarization and always wins during deterministic merging. AI cannot overwrite source facts, and AI failure cannot lose captured deterministic content.
+AI is optional and runs after deterministic capture. `AIProviderACL` is the only domain-to-provider bridge; current Codex CLI and future API/local implementations sit behind the same `AIProvider` port. The ACL may propose only neutral language, summary, categories, and tags, validates structured output, and never lets AI overwrite source facts. Adapters capture an upstream summary when the source supplies one, and a non-empty summary skips AI entirely.
+
+See [`docs/specs/ai-provider-sdd.md`](docs/specs/ai-provider-sdd.md) for the accepted boundary and Codex CLI security constraints.
 
 ## Development
 

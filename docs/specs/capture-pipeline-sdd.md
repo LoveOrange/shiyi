@@ -18,7 +18,7 @@ Input:
 - adapter implementations keyed by source adapter kind;
 - one deterministic `ContentProcessor`;
 - one `ContentItemStore`;
-- optional `BlobStore` and optional neutral AI processor.
+- optional `BlobStore`.
 
 Output:
 
@@ -63,11 +63,12 @@ For every enabled `Source` in configuration order:
 1. Resolve exactly one adapter from `Source.adapter`.
 2. Invoke `adapter.capture(source)`.
 3. Validate each `SourceItem` and ensure it belongs to the requested source.
-4. Persist raw bytes through `BlobStore` when raw retention is enabled.
+4. Persist raw bytes through `BlobStore` when raw retention is enabled. Use the
+   adapter-preserved `SourceItem.raw_content` and `raw_media_type` when present;
+   otherwise use the emitted payload bytes and media type.
 5. Convert the source item to a canonical `ContentItem` using deterministic processing, promoting any non-empty source-provided summary.
 6. Upsert deterministic content using `ContentItem.id`.
-7. If AI is configured, request neutral fields, validate allowed fields, merge them, and upsert the same id.
-8. Record the outcome in the in-memory run summary.
+7. Record the outcome in the in-memory run summary.
 
 One item failure does not stop later items or sources. An unresolved adapter fails that source and does not fall back to another implementation.
 
@@ -92,24 +93,25 @@ The deterministic processor validates the required `ContentItem` fields. `ready_
 
 Creators and optional AI fields are not globally required. If a specific Briefly deployment requires a summary, that requirement belongs to the configured readiness policy, not the base domain model.
 
-AI failure leaves deterministic content durable and produces a diagnosable run error. It must not erase an existing summary or source facts.
+AI availability is irrelevant to capture readiness because `CaptureRunner` never invokes AI.
 
-## 7. AI merge policy
+## 7. Post-capture AI boundary
 
-Allowed optional AI output fields are:
+Optional AI enrichment runs separately through `AIEnrichmentRunner -> AIProviderACL -> AIProvider`. The full contract lives in [`ai-provider-sdd.md`](ai-provider-sdd.md).
+
+Allowed optional output fields are:
 
 - `language` when source/deterministic detection did not provide one;
 - `summary`, only when the `ContentItem` does not already have one;
 - `summary_language`;
-- configured-language title in an explicitly named optional field;
 - `categories`;
 - `tags`.
 
 AI may not modify ids, source provenance, canonical URL, creators, published time, collected time, original content, content hash, objective metrics, or Blob references.
 
-`ContentItem.summary` is also the only summary gate. If it is non-empty, the AI processor must skip summarization, and deterministic merge logic preserves the existing value. No summary status or origin model is added for the MVP.
+`ContentItem.summary` is the only summary gate. If it is non-empty, the enrichment query does not select the item. No summary status or origin model is added for the MVP.
 
-The runner does not expose classify/extract/summarize task variants. One structured neutral preprocessing request is enough for the MVP.
+The ACL does not expose classify/extract/summarize task variants. One structured neutral enrichment request is enough for the MVP.
 
 ## 8. Errors and run summary
 
@@ -126,9 +128,7 @@ Stages are limited to:
 - capture;
 - raw Blob persistence;
 - deterministic processing;
-- ContentItem upsert;
-- optional AI preprocessing;
-- AI merge/upsert.
+- ContentItem upsert.
 
 Retries belong to the adapter for source I/O or to the store implementation for transient storage errors. The runner does not hide infinite retries.
 
@@ -141,8 +141,10 @@ Required contract tests cover:
 3. source-specific DTOs stop inside the adapter;
 4. deterministic repeated runs upsert one item id;
 5. identical raw bytes produce one Blob reference;
-6. one source failure does not block another source;
-7. missing creators remain valid;
-8. AI disabled and AI failure both preserve deterministic content;
-9. AI cannot overwrite source-owned fields;
-10. Briefly-ready queries return only `ready_at != null` documents.
+6. transformed binary documents retain their original bytes while canonical
+   content remains Markdown;
+7. one source failure does not block another source;
+8. missing creators remain valid;
+9. Briefly-ready queries return only `ready_at != null` documents.
+
+AI ACL, provider, and enrichment-runner tests belong to the separate post-capture boundary and must prove that provider failure leaves the captured document unchanged.

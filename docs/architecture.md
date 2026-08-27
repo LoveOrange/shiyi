@@ -54,6 +54,17 @@ Scheduler / CLI
 -> ContentItemStore
 ```
 
+Optional AI is a separate post-capture flow:
+
+```text
+Scheduler / CLI
+-> AIEnrichmentRunner
+-> ContentItemStore.list_missing_summary()
+-> AIProviderACL
+-> AIProvider
+-> deterministic validation and upsert
+```
+
 ### CaptureConfig
 
 `CaptureConfig` declaratively defines what to collect. It contains enabled `Source` entries and target-specific options; it performs no network work.
@@ -83,14 +94,25 @@ This keeps scheduling configuration unified while preserving independent identit
 2. asks the adapter to capture that source target;
 3. validates each emitted `SourceItem`;
 4. normalizes it into a canonical `ContentItem`;
-5. persists deterministic output idempotently;
-6. optionally runs neutral AI preprocessing and upserts the same item id.
+5. persists deterministic output idempotently.
+
+`CaptureRunner` does not call AI. This ensures subscription limits, authentication failures, or provider failures cannot delay or invalidate capture.
 
 ### SourceAdapter
 
 `SourceAdapter` performs the real source-specific acquisition. Implementations such as `XCaptureAdapter`, `RedditCaptureAdapter`, and `RssCaptureAdapter` own API/HTTP behavior, authentication, pagination, rate limits, payload parsing, and checkpoint progress.
 
 An adapter receives a `Source`; it does not decide which sources should run.
+
+A bounded operator snapshot is an acquisition exception, not a second ingest
+pipeline. The CLI may inject one explicit manifest that maps exact public URLs
+to relative local files, acquisition timestamps, media types, and SHA-256
+digests. The fetcher verifies the digest at read time and delegates every
+unmapped URL to ordinary acquisition. The resulting bytes still pass through
+the selected `SourceAdapter`, `SourceItem`, `ContentProcessor`, Blob store, and
+canonical `ContentItemStore`. The manifest must preserve a visible
+`contentReviewRequired` gate; using a snapshot never implies downstream
+editorial approval.
 
 ## 4. Domain model
 
@@ -120,6 +142,8 @@ classDiagram
         +string canonical_url
         +string summary?
         +CapturePayload payload
+        +bytes raw_content?
+        +string raw_media_type?
         +datetime collected_at
         +object metadata
     }
@@ -203,12 +227,15 @@ flowchart LR
             SOURCE_ITEM["SourceItem"]
             PROCESSOR["ContentProcessor: fields, Markdown, ID, hash"]
             CONTENT_ITEM["ContentItem"]
+            ENRICHER["AIEnrichmentRunner: selects summary == empty"]
+            AI_ACL["AIProviderACL: map request and validate output"]
+            CODEX_PROVIDER["CodexCLIProvider: isolated subprocess adapter"]
             MERGER["Validate and merge allowed AI fields"]
             READINESS["Ready policy and idempotent upsert"]
         end
 
         subgraph AI["LLM - optional"]
-            AI_PROCESSOR["AI Processor: missing summary, language, simple labels"]
+            CODEX_MODEL["Codex subscribed model: summary, language, simple labels"]
         end
 
         subgraph STORAGE["Storage"]
@@ -224,14 +251,17 @@ flowchart LR
         SOURCE_ITEM --> PROCESSOR
         PROCESSOR --> CONTENT_ITEM
 
-        SOURCE_ITEM -- "raw content" --> BLOB
+        SOURCE_ITEM -- "preserved response bytes or payload bytes" --> BLOB
         BLOB -- "BlobRef" --> CONTENT_ITEM
 
         CONTENT_ITEM -- "deterministic result" --> READINESS
-        CONTENT_ITEM -. "only fill missing optional fields" .-> AI_PROCESSOR
-        AI_PROCESSOR --> MERGER
-        MERGER --> READINESS
         READINESS --> MONGO
+        MONGO -. "bounded missing-summary query" .-> ENRICHER
+        ENRICHER --> AI_ACL
+        AI_ACL <-->|"AIProvider request / structured JSON"| CODEX_PROVIDER
+        CODEX_PROVIDER <-->|"ephemeral codex exec"| CODEX_MODEL
+        AI_ACL --> MERGER
+        MERGER -- "same ContentItem id" --> MONGO
     end
 
     subgraph EXTERNAL["External sources"]
@@ -248,6 +278,8 @@ flowchart LR
 
     SCHEDULER --> RUNNER
     CLI --> RUNNER
+    SCHEDULER -. "optional enrichment" .-> ENRICHER
+    CLI -. "explicit enrich command" .-> ENRICHER
 
     ADAPTER <-->|"API / HTTP"| X
     ADAPTER <-->|"API / HTTP"| REDDIT
@@ -267,21 +299,27 @@ Deterministic code owns:
 - validation and source fact mapping;
 - canonical URL handling and Markdown conversion;
 - identity, hashing, deduplication, and checkpoints;
+- missing-summary selection and batching;
+- provider request construction and provider-result schema validation;
 - AI output validation, allowed-field merging, readiness, and persistence.
 
 AI is optional and may produce only neutral reusable fields:
 
-- language normalization or a configured-language title;
+- original-language detection;
 - neutral summary and `summary_language`;
 - simple categories or tags.
 
-Adapters capture a source-provided summary into `SourceItem.summary`. Deterministic processing promotes it to `ContentItem.summary`; when that field is non-empty, AI must not summarize the item again and merge logic must preserve the source value. AI must not overwrite source facts. AI failure must not lose a captured item or prevent deterministic output from being persisted. Shiyi does not expose an open-ended task/extraction system during the MVP.
+Adapters capture a source-provided summary into `SourceItem.summary`. Deterministic processing promotes it to `ContentItem.summary`; when that field is non-empty, `AIEnrichmentRunner` does not select the item. AI must not overwrite source facts. AI failure leaves the deterministic MongoDB document unchanged and eligible for a later bounded retry because its summary remains empty.
+
+`AIProviderACL` is the only domain-to-provider boundary. It accepts canonical content, emits a narrow `AIProviderRequest`, rejects missing, duplicate, or unexpected result IDs, validates allowed fields, and maps the result back to `AIContentFields`. `CodexCLIProvider` owns CLI authentication, isolation, and structured subprocess execution. Future API or local-model implementations replace that provider without changing the runner, ACL, merge rules, or `ContentItem`.
+
+Shiyi does not expose an open-ended task/extraction system during the MVP.
 
 ## 7. Storage
 
 MongoDB is the canonical hot/query store for Briefly-facing `ContentItem` documents. Flexible arrays such as `categories`, `tags`, and `creators`, optional fields, and variable content length fit the document boundary.
 
-The filesystem is the initial Blob store. COS can later replace or supplement it for raw, oversized, or cold content. MongoDB retains the identity, provenance, query fields, summary, labels, metrics, and `BlobRef`; FS/COS retains the referenced bytes.
+The filesystem is the initial Blob store. COS can later replace or supplement it for raw, oversized, or cold content. MongoDB retains the identity, provenance, query fields, summary, labels, metrics, and `BlobRef`; FS/COS retains the referenced bytes. Most adapters use their emitted payload as the raw representation. An adapter that must transform a binary response, such as PDF-to-Markdown capture, supplies paired `SourceItem.raw_content` and `raw_media_type` so the Blob remains the acquired source rather than the derived text.
 
 Shiyi must not maintain SQLite event records, filesystem export documents, and MongoDB documents as competing canonical truths. Derived exports and raw blobs are not alternative `ContentItem` authorities.
 
@@ -307,9 +345,14 @@ class ContentItemStore(Protocol):
 
 class BlobStore(Protocol):
     async def put(self, content: bytes, *, media_type: str) -> BlobRef: ...
+
+
+class AIProvider(Protocol):
+    name: str
+    async def complete(self, request: AIProviderRequest) -> dict[str, Any]: ...
 ```
 
-An optional AI processor can be injected into `CaptureRunner`; it is not part of capture correctness.
+The first four ports serve deterministic capture and storage. `AIProvider` is optional and is reachable only through `AIProviderACL` after capture; it is not part of capture correctness.
 
 Do not add generic event ledgers, annotation artifact families, compatibility adapters, runtime plugin systems, or task graphs unless a concrete Briefly MVP requirement proves they are needed.
 

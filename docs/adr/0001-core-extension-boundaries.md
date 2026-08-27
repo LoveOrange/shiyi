@@ -27,13 +27,13 @@ Scheduler / CLI
 -> ContentItemStore
 ```
 
-Shiyi defines five extension boundaries:
+Shiyi defines four required capture/storage boundaries and one optional AI provider boundary:
 
 1. `SourceAdapter` performs source-specific network acquisition.
 2. `ContentProcessor` converts a `SourceItem` into the canonical `ContentItem` format.
 3. `ContentItemStore` persists and queries canonical items.
 4. `BlobStore` optionally retains raw, oversized, or cold bytes.
-5. `AIProcessor` optionally adds neutral language, summary, category, and tag fields.
+5. `AIProvider` performs one provider-neutral structured completion. `AIProviderACL` is the only caller and optionally adds neutral language, summary, category, and tag fields after deterministic capture.
 
 `CaptureRunner` owns orchestration, isolation between sources, deterministic identity,
 idempotent upserts, and failure reporting. `Source` is declarative configuration, not

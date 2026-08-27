@@ -8,6 +8,7 @@ from shiyi import MemoryContentItemStore, Source, SourceItem, TextPayload
 from shiyi.cli import _build_parser, run_capture
 
 NOW = datetime(2026, 7, 19, tzinfo=UTC)
+DEFAULT_ENRICH_LIMIT = 5
 
 
 class OpenAIFakeAdapter:
@@ -28,9 +29,30 @@ class OpenAIFakeAdapter:
 
 
 def test_capture_parser_accepts_multiple_sources() -> None:
-    args = _build_parser().parse_args(["capture", "--source", "openai", "--source", "anthropic"])
+    args = _build_parser().parse_args(
+        [
+            "capture",
+            "--source",
+            "openai",
+            "--source",
+            "anthropic",
+            "--operator-snapshot-manifest",
+            "snapshots/manifest.json",
+        ]
+    )
 
     assert args.source == ["openai", "anthropic"]
+    assert args.operator_snapshot_manifest == Path("snapshots/manifest.json")
+
+
+def test_enrich_parser_requires_an_explicit_provider() -> None:
+    args = _build_parser().parse_args(
+        ["enrich", "--provider", "codex-cli", "--summary-language", "zh"]
+    )
+
+    assert args.provider == "codex-cli"
+    assert args.limit == DEFAULT_ENRICH_LIMIT
+    assert args.summary_language == "zh"
 
 
 def test_run_capture_uses_configured_source_and_injected_canonical_store(tmp_path: Path) -> None:

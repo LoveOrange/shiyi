@@ -129,8 +129,12 @@ def _optional_string(value: object) -> str | None:
 
 def _extract_main_html(html: str) -> str:
     parser = HTMLParser(html)
-    for selector in ("article", "main", "body"):
-        node = parser.css_first(selector)
-        if node is not None and node.html is not None:
+    content_nodes = [*parser.css("article"), *parser.css("main")]
+    if content_nodes:
+        node = max(content_nodes, key=lambda candidate: len(candidate.text(strip=True)))
+        if node.html is not None:
             return node.html
+    body = parser.css_first("body")
+    if body is not None and body.html is not None:
+        return body.html
     return html

@@ -5,25 +5,19 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from shiyi.domain.models import (
-    AIContentFields,
     CaptureConfig,
     ContentItem,
     Source,
     SourceItem,
-    payload_bytes,
-    payload_media_type,
+    source_item_raw_bytes,
+    source_item_raw_media_type,
 )
-from shiyi.ports.ai_processor import AIProcessor
 from shiyi.ports.blob_store import BlobStore
 from shiyi.ports.content_item_store import ContentItemStore
 from shiyi.ports.content_processor import ContentProcessor
 from shiyi.ports.source_adapter import SourceAdapter
-
-MAX_LABELS = 32
-MAX_LABEL_LENGTH = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +37,6 @@ class CaptureRunSummary:
     processed: int
     skipped: int
     failed: int
-    ai_failed: int
     blobs: int
     errors: tuple[CaptureRunError, ...]
 
@@ -53,7 +46,6 @@ class _CaptureRunState:
     processed: int = 0
     skipped: int = 0
     failed: int = 0
-    ai_failed: int = 0
     blobs: int = 0
     errors: list[CaptureRunError] = field(default_factory=list)
     seen_item_ids: set[str] = field(default_factory=set)
@@ -64,7 +56,6 @@ class _CaptureRunState:
             processed=self.processed,
             skipped=self.skipped,
             failed=self.failed,
-            ai_failed=self.ai_failed,
             blobs=self.blobs,
             errors=tuple(self.errors),
         )
@@ -81,7 +72,6 @@ class CaptureRunner:
         processor: ContentProcessor,
         content_store: ContentItemStore,
         blob_store: BlobStore | None = None,
-        ai_processor: AIProcessor | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         """Create the composition root for one capture configuration."""
@@ -90,7 +80,6 @@ class CaptureRunner:
         self._processor = processor
         self._content_store = content_store
         self._blob_store = blob_store
-        self._ai_processor = ai_processor
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def run_once(self) -> CaptureRunSummary:
@@ -141,8 +130,8 @@ class CaptureRunner:
             if self._blob_store is not None:
                 stage = "blob_persistence"
                 raw_ref = await self._blob_store.put(
-                    payload_bytes(item.payload),
-                    media_type=payload_media_type(item.payload),
+                    source_item_raw_bytes(item),
+                    media_type=source_item_raw_media_type(item),
                 )
                 state.blobs += 1
 
@@ -159,55 +148,15 @@ class CaptureRunner:
                 current=content_item,
                 existing=existing,
             )
-            if (
-                existing is not None
-                and _same_durable_content(existing, deterministic_item)
-                and self._ai_processor is None
-            ):
+            if existing is not None and _same_durable_content(existing, deterministic_item):
                 state.skipped += 1
                 return
             stage = "content_upsert"
             await self._content_store.upsert(deterministic_item)
             state.processed += 1
-            await self._apply_ai(
-                source=source,
-                source_item=item,
-                content_item=deterministic_item,
-                state=state,
-            )
         except Exception as error:
             state.failed += 1
             state.errors.append(_error(source=source, item=item, stage=stage, error=error))
-
-    async def _apply_ai(
-        self,
-        *,
-        source: Source,
-        source_item: SourceItem,
-        content_item: ContentItem,
-        state: _CaptureRunState,
-    ) -> None:
-        if self._ai_processor is None:
-            return
-        try:
-            proposed_fields = await self._ai_processor.process(content_item)
-            fields = AIContentFields.model_validate(proposed_fields)
-            enriched_item = _merge_ai_fields(
-                item=content_item,
-                fields=fields,
-                updated_at=self._clock(),
-            )
-            await self._content_store.upsert(enriched_item)
-        except Exception as error:
-            state.ai_failed += 1
-            state.errors.append(
-                _error(
-                    source=source,
-                    item=source_item,
-                    stage="ai_processing",
-                    error=error,
-                )
-            )
 
 
 def _adapter_map(adapters: Sequence[SourceAdapter]) -> dict[str, SourceAdapter]:
@@ -249,43 +198,12 @@ def _preserve_existing_ai_fields(
     )
 
 
-def _merge_ai_fields(
-    *,
-    item: ContentItem,
-    fields: AIContentFields,
-    updated_at: datetime,
-) -> ContentItem:
-    source_summary = _clean_optional(item.summary)
-    update: dict[str, Any] = {
-        "language": item.language or _clean_optional(fields.language),
-        "summary": source_summary or _clean_optional(fields.summary),
-        "summary_language": (
-            item.summary_language
-            if source_summary is not None
-            else _clean_optional(fields.summary_language) or item.summary_language
-        ),
-        "categories": _labels(fields.categories) or item.categories,
-        "tags": _labels(fields.tags) or item.tags,
-        "updated_at": updated_at,
-    }
-    return ContentItem.model_validate({**item.model_dump(mode="python"), **update})
-
-
 def _same_durable_content(existing: ContentItem, current: ContentItem) -> bool:
     """Compare persisted product fields while ignoring run timestamps."""
     ignored = {"collected_at", "ready_at", "updated_at"}
     existing_fields = existing.model_dump(mode="python", exclude=ignored)
     current_fields = current.model_dump(mode="python", exclude=ignored)
     return existing_fields == current_fields and bool(existing.ready_at) is bool(current.ready_at)
-
-
-def _labels(values: Sequence[str]) -> tuple[str, ...]:
-    cleaned = (
-        value.strip()
-        for value in values[:MAX_LABELS]
-        if value.strip() and len(value.strip()) <= MAX_LABEL_LENGTH
-    )
-    return tuple(dict.fromkeys(cleaned))
 
 
 def _clean_optional(value: str | None) -> str | None:

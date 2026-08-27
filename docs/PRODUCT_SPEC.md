@@ -32,6 +32,16 @@ Scheduler / CLI
 
 Raw, oversized, or cold bytes are retained in filesystem storage initially and COS later through `BlobRef`.
 
+Optional AI enrichment is a separate post-capture flow:
+
+```text
+MongoDB missing summaries
+-> AIEnrichmentRunner
+-> AIProviderACL
+-> AIProvider
+-> validated ContentItem upsert
+```
+
 ## Functional requirements
 
 ### Configuration
@@ -57,6 +67,7 @@ Raw, oversized, or cold bytes are retained in filesystem storage initially and C
 ### AI
 
 - AI is optional and neutral.
+- AI runs after capture and every provider is isolated behind `AIProviderACL`.
 - Allowed fields are language, summary, summary language, categories, and tags.
 - AI cannot overwrite ids, provenance, source facts, URL, timestamps, content, metrics, or Blob references.
 - AI failure leaves deterministic output durable.
@@ -87,4 +98,4 @@ Raw, oversized, or cold bytes are retained in filesystem storage initially and C
 
 ## Acceptance
 
-The MVP is ready for Briefly when selected sources repeatedly produce complete, deduplicated `ContentItem` documents, AI outages do not lose captured data, and Briefly can incrementally read canonical records using only MongoDB fields.
+The MVP is ready for Briefly when selected sources repeatedly produce complete, deduplicated `ContentItem` documents, AI outages do not affect capture or lose data, and Briefly can incrementally read canonical records using only MongoDB fields.

@@ -53,6 +53,28 @@ def test_binary_payload_requires_a_dedicated_processor() -> None:
         asyncio.run(MarkdownContentProcessor().process(item, raw_ref=None))
 
 
+def test_processor_prefers_the_largest_semantic_content_container() -> None:
+    item = SourceItem(
+        source_id="reference",
+        source_item_id="page",
+        kind="reference",
+        collected_at=NOW,
+        payload=HtmlPayload(
+            html=(
+                "<body><article><h2>Related card</h2><p>Short.</p></article>"
+                "<main><h1>Reference</h1><p>The complete reference body has materially "
+                "more source text than the related card.</p></main></body>"
+            )
+        ),
+        metadata={"title": "Reference"},
+    )
+
+    content = asyncio.run(MarkdownContentProcessor(clock=lambda: NOW).process(item, raw_ref=None))
+
+    assert "complete reference body" in content.content
+    assert "Related card" not in content.content
+
+
 def test_incomplete_source_material_is_persistable_but_not_ready() -> None:
     item = SourceItem(
         source_id="openai-news",

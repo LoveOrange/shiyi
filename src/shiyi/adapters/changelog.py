@@ -27,7 +27,6 @@ DEEPSEEK_UPDATES_URL = "https://api-docs.deepseek.com/updates"
 DEEPSEEK_NEWS_BASE_URL = "https://api-docs.deepseek.com"
 Z_AI_BLOG_BASE_URL = "https://z.ai/blog/"
 Z_AI_RELEASE_NOTES_URL = "https://docs.z.ai/release-notes/new-released.md"
-MOONSHOT_KIMI_CHANGELOG_URL = "https://platform.kimi.com/blog/posts/changelog"
 GEMINI_API_CHANGELOG_URL = "https://ai.google.dev/gemini-api/docs/changelog.md.txt"
 GEMINI_API_CHANGELOG_CANONICAL_URL = "https://ai.google.dev/gemini-api/docs/changelog"
 MISTRAL_NEWS_URL = "https://mistral.ai/news"
@@ -263,22 +262,6 @@ def z_ai_release_notes_adapter(
 ) -> OfficialArticleAdapter:
     """Deprecated compatibility wrapper for the Z.ai official blog adapter."""
     return z_ai_blog_adapter(limit=limit, window=window, web_fetcher=web_fetcher)
-
-
-def moonshot_kimi_changelog_adapter(
-    *,
-    limit: int | None = None,
-    window: CaptureWindow | None = None,
-    web_fetcher: WebFetcher | None = None,
-) -> ChangelogPageAdapter:
-    """Create the default Moonshot/Kimi platform changelog adapter."""
-    return ChangelogPageAdapter(
-        name="moonshot-kimi-changelog-page",
-        parser=parse_moonshot_kimi_changelog,
-        limit=limit,
-        window=window,
-        web_fetcher=web_fetcher,
-    )
 
 
 def gemini_api_changelog_adapter(
@@ -682,31 +665,6 @@ def parse_z_ai_release_notes(content: str) -> tuple[ChangelogEntry, ...]:
                 occurred_at=_date_utc(date_value),
                 body=body,
                 link=Z_AI_RELEASE_NOTES_URL.removesuffix(".md"),
-            )
-        )
-    return tuple(entries)
-
-
-def parse_moonshot_kimi_changelog(content: str) -> tuple[ChangelogEntry, ...]:
-    """Parse the Kimi Open Platform static changelog page into dated entries."""
-    text = _html_main_text(content)
-    blocks = _split_by_marker(
-        text.splitlines(), pattern=re.compile(r"^(\d{4})年(\d{1,2})月(\d{1,2})日$")
-    )
-    entries: list[ChangelogEntry] = []
-    for raw_date, lines in blocks:
-        date_value = _normalize_chinese_date(raw_date)
-        body_lines = _meaningful_lines(lines)
-        if not body_lines:
-            continue
-        title = body_lines[0]
-        entries.append(
-            ChangelogEntry(
-                entry_id=date_value,
-                title=title,
-                occurred_at=_date_utc(date_value),
-                body="\n".join(body_lines),
-                link=f"{MOONSHOT_KIMI_CHANGELOG_URL}#{date_value}",
             )
         )
     return tuple(entries)
@@ -1233,14 +1191,6 @@ def _clean_text(value: str) -> str:
 def _date_utc(value: str) -> datetime:
     date_parts = datetime.fromisoformat(value).date()
     return datetime(date_parts.year, date_parts.month, date_parts.day, tzinfo=UTC)
-
-
-def _normalize_chinese_date(value: str) -> str:
-    match = re.fullmatch(r"(\d{4})年(\d{1,2})月(\d{1,2})日", value)
-    if match is None:
-        return value
-    year, month, day = (int(part) for part in match.groups())
-    return f"{year:04d}-{month:02d}-{day:02d}"
 
 
 def _slug_or_value(value: str, title: str) -> str:
